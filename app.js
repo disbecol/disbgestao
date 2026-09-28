@@ -2490,6 +2490,7 @@ function bindPullEvents(){
   $('pullHistBusca')?.addEventListener('input',renderPullHistory);
   $('tbodyPullHistory')?.addEventListener('click',onPullHistoryClick);
   $('pullMetricTabs')?.addEventListener('click',e=>{const b=e.target.closest('button[data-metric]');if(!b)return;if($('pullDashType')?.value==='TRANSFER'&&b.dataset.metric!=='CYCLE')return toast('Para Transferência, o indicador de tempo aplicável é o Ciclo Matriz → Filial → Matriz.','');pullMetric=b.dataset.metric;[...$('pullMetricTabs').querySelectorAll('button')].forEach(x=>x.classList.toggle('active',x===b));renderPullDashboard();});
+  $('view-puxada-dashboard')?.addEventListener('click',e=>{const panel=e.target.closest('[data-pull-panel-tab]');if(panel){setPullDashboardPanel(panel.dataset.pullPanelTab);return;}const arrival=e.target.closest('[data-pull-arrival-tab]');if(arrival)setPullArrivalPanel(arrival.dataset.pullArrivalTab);});
   $('btnPullDashAtualizar')?.addEventListener('click',()=>loadPullDashboard());
   ['pullDashYear','pullDashMonth','pullDashCarrier','pullDashFactory','pullDashDriver'].forEach(id=>$(id)?.addEventListener('change',renderPullDashboard));
   $('pullDashType')?.addEventListener('change',()=>{if($('pullDashType').value==='TRANSFER'){pullMetric='CYCLE';[...$('pullMetricTabs').querySelectorAll('button')].forEach(x=>x.classList.toggle('active',x.dataset.metric==='CYCLE'));}renderPullDashboard();});
@@ -2965,9 +2966,11 @@ function renderPullDashboard(){if(!hasPerm('PULL_DASHBOARD')||!$('pullDashYear')
 function renderPullDashboardCore(){
   const rows=filteredPullDashTrips();
   renderPullDashboardOverview(rows);
+  renderPullOverviewCharts(rows);
   renderPullArrivalHistogram(rows);
   const planner=pullMetric==='PLANNER';
   $('pullDashKpis').classList.toggle('hidden',planner);
+  $('pullAdherenceCard').classList.toggle('hidden',planner);
   $('pullPlannerWrap').classList.toggle('hidden',!planner);
   $('pullMetricBreakdowns').classList.toggle('hidden',planner);
   $('pullDashBarsCard').classList.toggle('hidden',planner);
@@ -2978,7 +2981,49 @@ function renderPullDashboardCore(){
   const within=target?vals.filter(x=>x.val<=target).length:0;
   const adh=vals.length&&target?within/vals.length*100:null;
   $('pullKpiTrips').textContent=vals.length;$('pullKpiAvg').textContent=fmtMinutes(avg);$('pullKpiTarget').textContent=fmtMinutes(target);$('pullKpiWithin').textContent=within;$('pullKpiAdherence').textContent=adh==null?'—':`${adh.toFixed(1).replace('.',',')}%`;$('pullKpiAdhTarget').textContent=adhTarget==null?'—':`${Number(adhTarget).toFixed(1).replace('.',',')}%`;$('pullKpiFactories').textContent=new Set(vals.map(x=>x.trip.factory)).size;$('pullKpiPlates').textContent=new Set(vals.map(x=>x.trip.plate)).size;
+  renderPullAdherenceChart(vals,target,adhTarget);
   renderPullBars(vals,target);renderPullBreakdowns(vals,target);
+}
+function setPullDashboardPanel(key){
+  const section=$('view-puxada-dashboard');
+  if(!section||!['overview','metrics','arrivals','marketplace'].includes(key))return;
+  section.querySelectorAll('[data-pull-panel]').forEach(panel=>{panel.hidden=panel.dataset.pullPanel!==key;});
+  section.querySelectorAll('[data-pull-panel-tab]').forEach(button=>{const active=button.dataset.pullPanelTab===key;button.classList.toggle('active',active);button.setAttribute('aria-current',active?'page':'false');});
+}
+function setPullArrivalPanel(key){
+  const section=$('view-puxada-dashboard');
+  if(!section||!['factory','final'].includes(key))return;
+  if(key==='factory'&&$('pullDashType')?.value==='TRANSFER')key='final';
+  section.querySelectorAll('[data-pull-arrival-panel]').forEach(panel=>{panel.hidden=panel.dataset.pullArrivalPanel!==key;});
+  section.querySelectorAll('[data-pull-arrival-tab]').forEach(button=>{const active=button.dataset.pullArrivalTab===key;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});
+}
+function pullDashboardDonut(id,parts,colors,label){
+  const el=$(id);if(!el)return;
+  const total=parts.reduce((sum,value)=>sum+value,0);
+  let angle=0;
+  el.style.background=total?`conic-gradient(${parts.map((value,index)=>{const start=angle;angle+=value/total*360;return `${colors[index]} ${start}deg ${angle}deg`;}).join(',')})`:'#e5edf4';
+  el.setAttribute('aria-label',label);
+}
+function renderPullOverviewCharts(rows){
+  const completed=rows.filter(t=>t.ended_at).length;
+  const progress=rows.filter(t=>!t.ended_at&&t.status==='IN_PROGRESS').length;
+  const other=Math.max(0,rows.length-completed-progress);
+  pullDashboardDonut('pullStatusDonut',[completed,progress,other],['#16956c','#3b82f6','#aab9c8'],`${rows.length} viagens: ${completed} concluídas, ${progress} em andamento e ${other} em outra situação`);
+  $('pullStatusRate').textContent=rows.length?`${Math.round(completed/rows.length*100)}%`:'0%';
+  $('pullStatusCompleted').textContent=completed;$('pullStatusProgress').textContent=progress;$('pullStatusOther').textContent=other;
+  const counts=new Map();rows.forEach(t=>{const name=String(t.factory||'Sem destino').trim()||'Sem destino';counts.set(name,(counts.get(name)||0)+1);});
+  const top=[...counts].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],'pt-BR')).slice(0,6),max=top[0]?.[1]||1;
+  const chart=$('pullDestinationChart');chart.className=top.length?'pull-destination-chart':'pull-destination-chart empty-state';
+  chart.innerHTML=top.length?top.map(([name,count])=>`<div class="pull-destination-row"><span title="${esc(name)}">${esc(name)}</span><div class="pull-destination-track" role="img" aria-label="${esc(name)}: ${count} viagens"><i style="width:${count/max*100}%"></i></div><strong>${count}</strong></div>`).join(''):'Sem viagens no filtro selecionado.';
+}
+function renderPullAdherenceChart(vals,target,adhTarget){
+  const hasTarget=Number.isFinite(target)&&target>0;
+  const within=hasTarget?vals.filter(x=>x.val<=target).length:0;
+  const over=hasTarget?vals.length-within:0;
+  pullDashboardDonut('pullAdherenceDonut',hasTarget?[within,over]:[],['#16956c','#ed9b45'],hasTarget?`${vals.length} viagens calculadas: ${within} dentro da meta e ${over} acima da meta`:'Meta de tempo não cadastrada para este indicador');
+  $('pullAdherenceRate').textContent=hasTarget&&vals.length?`${Math.round(within/vals.length*100)}%`:'—';
+  $('pullAdherenceWithin').textContent=hasTarget?within:'—';$('pullAdherenceOver').textContent=hasTarget?over:'—';
+  $('pullAdherenceNote').textContent=!hasTarget?'Cadastre uma meta de tempo para ver a aderência.':!vals.length?'Nenhuma viagem com tempo calculado no filtro.':adhTarget==null?'Meta de aderência não cadastrada.':`Meta de aderência: ${Number(adhTarget).toFixed(1).replace('.',',')}%.`;
 }
 function renderPullDashboardOverview(rows){
   if(!$('pullOverviewTrips'))return;
@@ -3011,7 +3056,16 @@ function renderPullArrivalHistogram(rows){
 }
 function pullTargetForMetric(metric){const g=pullGoals;if(!g)return null;return Number({TMV_OUT:g.tmv_out_target_minutes,FACTORY:g.factory_target_minutes,TMV_RETURN:g.tmv_return_target_minutes,UNIT:g.unit_target_minutes,CYCLE:g.cycle_target_minutes}[metric]||0)||null;}
 function pullAdherenceTargetForMetric(metric){const g=pullGoals;if(!g)return null;return Number({TMV_OUT:g.tmv_out_adherence,FACTORY:g.factory_adherence,TMV_RETURN:g.tmv_return_adherence,UNIT:g.unit_adherence,CYCLE:g.cycle_adherence}[metric]);}
-function renderPullBars(vals,target){const by=new Map();vals.forEach(x=>{const d=new Date(x.trip.started_at),k=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;if(!by.has(k))by.set(k,[]);by.get(k).push(x.val);});const arr=[...by].map(([k,v])=>({k,avg:v.reduce((a,b)=>a+b,0)/v.length}));$('pullDashChartTitle').textContent='Evolução por mês';if(!arr.length){$('pullDashBars').className='pull-bars empty-state';$('pullDashBars').textContent='Sem dados.';return;}const max=Math.max(...arr.map(x=>x.avg),target||0,1);$('pullDashBars').className='pull-bars';$('pullDashBars').innerHTML=arr.map(x=>`<div class="pull-bar-row"><span>${fmtMonthKey(x.k)}</span><div class="pull-bar-track"><i style="width:${Math.max(2,x.avg/max*100)}%" class="${target&&x.avg<=target?'ok':'bad'}"></i></div><strong>${fmtMinutes(x.avg)}</strong></div>`).join('');}
+function renderPullBars(vals,target){
+  const by=new Map();
+  vals.forEach(x=>{const d=new Date(x.trip.started_at),k=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;if(!by.has(k))by.set(k,[]);by.get(k).push(x.val);});
+  const arr=[...by].map(([k,v])=>({k,avg:v.reduce((a,b)=>a+b,0)/v.length})).sort((a,b)=>a.k.localeCompare(b.k));
+  $('pullDashChartTitle').textContent=target?`Evolução por mês · meta ${fmtMinutes(target)}`:'Evolução por mês · sem meta cadastrada';
+  if(!arr.length){$('pullDashBars').className='pull-bars empty-state';$('pullDashBars').textContent='Sem dados.';return;}
+  const max=Math.max(...arr.map(x=>x.avg),target||0,1);
+  $('pullDashBars').className='pull-bars';
+  $('pullDashBars').innerHTML=arr.map(x=>`<div class="pull-bar-row"><span>${fmtMonthKey(x.k)}</span><div class="pull-bar-track" role="img" aria-label="${fmtMonthKey(x.k)}: tempo médio ${fmtMinutes(x.avg)}"><i style="width:${Math.max(2,x.avg/max*100)}%" class="${!target?'neutral':x.avg<=target?'ok':'bad'}"></i></div><strong>${fmtMinutes(x.avg)}</strong></div>`).join('');
+}
 function renderPullBreakdowns(vals,target){const group=(title,keyFn)=>{const m=new Map();vals.forEach(x=>{let keys=keyFn(x.trip);if(!Array.isArray(keys))keys=[keys];keys.filter(Boolean).forEach(k=>{if(!m.has(k))m.set(k,[]);m.get(k).push(x.val);});});const rows=[...m].map(([k,a])=>{const avg=a.reduce((s,v)=>s+v,0)/a.length,within=target?a.filter(v=>v<=target).length:0,adh=target?a.length?within/a.length*100:0:null;return {k,avg,n:a.length,adh};}).sort((a,b)=>a.avg-b.avg);return `<div class="pull-break-card"><h3>${esc(title)}</h3><div class="table-wrap"><table><thead><tr><th>${esc(title)}</th><th>Viagens</th><th>Tempo médio</th><th>Aderência</th></tr></thead><tbody>${rows.length?rows.map(r=>`<tr><td>${esc(r.k)}</td><td>${r.n}</td><td>${fmtMinutes(r.avg)}</td><td>${r.adh==null?'—':`${r.adh.toFixed(1).replace('.',',')}%`}</td></tr>`).join(''):'<tr><td colspan="4">Sem dados</td></tr>'}</tbody></table></div></div>`;};$('pullDashBreakdownTables').innerHTML=group('Fábrica / destino',t=>t.factory)+group('Placa',t=>t.plate)+group('Motorista',t=>[t.driver1_name,t.driver2_name])+group('Dia',t=>fmtDate(t.started_at));}
 function renderPullPlanner(rows){const by=new Map();rows.forEach(t=>{const d=new Date(t.started_at),k=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;if(!by.has(k))by.set(k,[]);by.get(k).push(t);});const metrics=['TMV_OUT','FACTORY','TMV_RETURN','UNIT','CYCLE'];$('tbodyPullPlanner').innerHTML=[...by].map(([k,ts])=>{let cells='';metrics.forEach(metric=>{const vals=ts.map(t=>pullTripMetrics(t)[metric]).filter(v=>v!=null),avg=vals.length?vals.reduce((s,v)=>s+v,0)/vals.length:null,target=pullTargetForMetric(metric),adh=target&&vals.length?vals.filter(v=>v<=target).length/vals.length*100:null;cells+=`<td>${fmtMinutes(avg)}</td><td>${fmtMinutes(target)}</td><td>${adh==null?'—':adh.toFixed(1).replace('.',',')+'%'}</td>`;});return `<tr><td><strong>${fmtMonthKey(k)}</strong></td>${cells}</tr>`;}).join('')||'<tr><td colspan="16">Sem dados.</td></tr>';}
 
@@ -3334,7 +3388,23 @@ function renderMarketplaceReceiptHistogram(){
 }
 
 const renderPullDashboardCoreV119=renderPullDashboardCore;
-renderPullDashboardCore = function(){renderPullDashboardCoreV119();const rows=filteredPullDashTrips(),type=$('pullDashType')?.value||'';renderPullFinalArrivalHistogram(rows);renderMarketplaceReceiptHistogram();const factoryCard=$('pullArrivalHistogram')?.closest('.pull-arrival-card');if(factoryCard)factoryCard.classList.toggle('hidden',type==='TRANSFER');};
+function highlightPullHistogramPeaks(){
+  for(const id of ['pullArrivalHistogram','pullFinalArrivalHistogram','marketReceiptHistogram']){
+    const bins=[...($(id)?.querySelectorAll('.pull-hist-bin')||[])];
+    const max=Math.max(0,...bins.map(bin=>Number(bin.querySelector('strong')?.textContent||0)));
+    bins.forEach(bin=>bin.classList.toggle('peak',max>0&&Number(bin.querySelector('strong')?.textContent||0)===max));
+  }
+}
+renderPullDashboardCore = function(){
+  renderPullDashboardCoreV119();
+  const rows=filteredPullDashTrips(),type=$('pullDashType')?.value||'';
+  renderPullFinalArrivalHistogram(rows);renderMarketplaceReceiptHistogram();
+  const section=$('view-puxada-dashboard'),factoryTab=section?.querySelector('[data-pull-arrival-tab="factory"]');
+  if(factoryTab){factoryTab.disabled=type==='TRANSFER';factoryTab.title=type==='TRANSFER'?'Chegada à fábrica não se aplica à Transferência':'';}
+  section?.querySelectorAll('#pullMetricTabs button[data-metric]').forEach(button=>{button.disabled=type==='TRANSFER'&&button.dataset.metric!=='CYCLE';button.title=button.disabled?'Apenas o Ciclo se aplica à Transferência':'';});
+  if(type==='TRANSFER')setPullArrivalPanel('final');
+  highlightPullHistogramPeaks();
+};
 
 clearPullStepForm = function(){$('pullStepId').value='';$('pullStepName').value='';$('pullStepType').value='MAIN';$('pullStepFlow').value='PULL';$('pullStepCode').disabled=false;$('pullStepCode').value='';$('pullStepOrder').value=100;$('pullStepDuration').value='POINT';$('pullStepExecutor').value='1';$('pullStepGeofence').checked=false;$('pullStepDiscount').checked=false;$('pullStepActive').checked=true;updatePullStepExecutorUi();};
 renderPullSteps = function(){const all=[...pullConfigSteps].sort((a,b)=>a.step_type.localeCompare(b.step_type)||String(a.flow_type).localeCompare(String(b.flow_type))||a.sort_order-b.sort_order);$('tbodyPullSteps').innerHTML=all.map(s=>`<tr><td>${s.sort_order}</td><td><strong>${esc(s.name)}</strong></td><td>${s.step_type==='MAIN'?'Principal':'Ocorrência'}</td><td>${s.flow_type==='TRANSFER'?'Transferência':s.flow_type==='BOTH'?'Ambos':'Puxada'}</td><td>${s.step_type==='MAIN'?`<span class="status partial">Motorista ${Number(s.executor_driver)===2?'2':'1'}</span>`:'Motorista ativo'}</td><td><code>${esc(s.action_code)}</code></td><td>${s.requires_factory_geofence?'Auditoria de raio ':''}${s.duration_mode==='INTERVAL'?'Intervalo ':''}${s.suggest_tma_discount?'Sugere desconto':''}</td><td>${s.active?'<span class="status ok">Ativa</span>':'<span class="status bad">Inativa</span>'}</td><td><button class="mini-btn" data-step-edit="${s.id}">Editar</button></td></tr>`).join('');};
