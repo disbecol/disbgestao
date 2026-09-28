@@ -1,7 +1,7 @@
-const CACHE='disb-gestao-v1.7.1-static-cache-only';
+const CACHE='disb-gestao-v1.7.1-pull-map-solo';
 const IMAGE_CACHE=`${CACHE}-images`;
 const IMAGE_CACHE_LIMIT=200;
-const STATIC=['./','index.html','styles.css?v=1.7.1-review-unit-scope','app.js?v=1.7.1-review-unit-scope','config.js?v=1.7.0','manifest.webmanifest','assets/icon-192.png','assets/icon-512.png'];
+const STATIC=['./','index.html','styles.css?v=1.7.1-pull-map-solo','app.js?v=1.7.1-pull-map-solo','config.js?v=1.7.0','manifest.webmanifest','assets/icon-192.png','assets/icon-512.png'];
 const STATIC_URLS=new Set(STATIC.map(path=>new URL(path,self.registration.scope).href));
 const EXTERNAL_STATIC_URLS=new Set(['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2','https://unpkg.com/leaflet@1.9.4/dist/leaflet.css','https://unpkg.com/leaflet@1.9.4/dist/leaflet.js']);
 const IMAGE_PATHS=['assets/','imagens_produtos/'].map(path=>new URL(path,self.registration.scope).pathname);

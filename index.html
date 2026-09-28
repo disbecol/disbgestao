@@ -7,7 +7,7 @@
   <title>Disb Gestão</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=1.7.1-review-unit-scope">
+  <link rel="stylesheet" href="styles.css?v=1.7.1-pull-map-solo">
 </head>
 <body>
   <section id="loginScreen" class="login-screen">
@@ -482,7 +482,8 @@
               <div id="pullStartPullFields" class="grid grid-3">
                 <div class="field"><label>Origem da viagem *</label><select id="pullStartOrigin"><option value="">Selecione</option></select></div>
                 <div class="field"><label>Fábrica *</label><select id="pullStartFactory"><option value="">Selecione</option></select></div>
-                <div class="field"><label>Motorista 2 *</label><select id="pullStartDriver2"><option value="">Selecione</option></select></div>
+                <div class="field" id="pullStartDriver2Field"><label>Motorista 2 *</label><select id="pullStartDriver2"><option value="">Selecione</option></select></div>
+                <label class="pull-solo-choice"><input id="pullStartSolo" type="checkbox"><span><strong>Viagem sozinho</strong><small>Você registra todas as etapas e ocorrências, sem Motorista 2.</small></span></label>
               </div>
               <div id="pullStartTransferFields" class="transfer-start-summary hidden"><div><small>ORIGEM</small><strong>Matriz Caicó</strong></div><div><small>ROTA</small><strong>Matriz Caicó → Filial Pau dos Ferros → Matriz Caicó</strong></div><div><small>MOTORISTA</small><strong id="pullTransferDriver">—</strong></div></div>
               <div id="pullStartGps" class="gps-status">A localização será capturada ao iniciar.</div>
@@ -742,6 +743,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="config.js?v=1.7.0"></script>
-  <script src="app.js?v=1.7.1-review-unit-scope"></script>
+  <script src="app.js?v=1.7.1-pull-map-solo"></script>
 </body>
 </html>

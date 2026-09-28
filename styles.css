@@ -1070,3 +1070,21 @@ button[data-sales-delivered]:hover{
 .mat-catalog-feedback.hidden{display:none}
 .mat-catalog-feedback.success{border-color:#b9dfc8;background:#f0faf4;color:#16663f}
 .mat-catalog-feedback.error{border-color:#edc5c5;background:#fff4f4;color:#a92d2d}
+
+.pull-solo-choice{grid-column:1/-1;display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:1px solid #b9d7f3;border-radius:12px;background:#f2f8ff;color:#173d64;cursor:pointer}
+.pull-solo-choice input{width:18px;height:18px;margin:2px 0 0;accent-color:#1764d9}
+.pull-solo-choice span,.pull-solo-choice small{display:block}
+.pull-solo-choice strong{font-size:13px}
+.pull-solo-choice small{margin-top:3px;color:#5c7185;font-size:11px;line-height:1.4}
+.pull-map-legend{display:flex;flex-wrap:wrap;gap:7px 15px;margin:9px 0 12px;color:#4f6377;font-size:11px}
+.pull-map-legend span{display:inline-flex;align-items:center;gap:6px}
+.pull-map-legend i{display:inline-block;width:20px;height:0;border-top:4px solid #2563eb}
+.pull-map-legend .gap i{border-color:#94a3b8;border-top-style:dashed}
+.pull-map-legend .stage i,.pull-map-legend .occ i,.pull-map-legend .current i{width:10px;height:10px;border:0;border-radius:50%;background:#0877c9}
+.pull-map-legend .occ i{background:#d49800}
+.pull-map-legend .current i{background:#dc2626}
+.pull-occ-map-marker{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:#d49800;color:#fff;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.32);font-size:17px;font-weight:900}
+.pull-occ-map-marker.end{background:#8a6700}
+.pull-map-jump.occurrence{border-color:#ead18b;background:#fff9e8;color:#775600}
+.pull-map-jump.occurrence:hover{background:#fff0bd}
+.pull-timeline-map-actions{display:flex;gap:7px;flex-wrap:wrap}
