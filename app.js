@@ -2100,8 +2100,25 @@ function shortCityLabel(city){const parts=String(city||'').split(',').map(x=>x.t
 function renderDashboard(){
   const arr=filteredDashboard(),ok=arr.filter(x=>x.status==='OK').length,div=arr.filter(x=>x.status==='DIVERGENTE').length,noBase=arr.filter(x=>x.status==='SEM_BASE').length,pos=arr.reduce((s,x)=>s+(x.status==='DIVERGENTE'?x.pos:0),0),neg=arr.reduce((s,x)=>s+(x.status==='DIVERGENTE'?x.neg:0),0);
   $('kpiConferencias').textContent=arr.length;$('kpiSemDiferenca').textContent=ok;$('kpiDivergentes').textContent=div;$('kpiSemBase').textContent=noBase;$('kpiPositivo').textContent=money(pos);$('kpiNegativo').textContent=money(neg);
+  renderConferenceOutcome(ok,div,noBase);
   $('tbodyDashboard').innerHTML=arr.length?arr.map(x=>`<tr class="dashboard-row" data-key="${esc(x.key)}"><td>${fmtDate(x.display_date)}<strong>Mapa ${esc(x.map_number)}</strong><small>${x.status==='SEM_BASE'?'Sem data de rota na base':`Data da rota${x.conference_date&&x.conference_date!==x.display_date?` • conferido em ${fmtDate(x.conference_date)}`:''}`}</small></td><td title="${esc(x.city||'')}">${esc(shortCityLabel(x.city))}</td><td>${esc(x.driver||'—')}<small>${esc([x.helper1,x.helper2].filter(Boolean).join(' • ')||'—')}</small></td><td>${esc(x.conference?.checker_name||'—')}</td><td>${dashStatus(x.status)}</td><td>${x.status==='SEM_BASE'?'—':x.divCount}</td><td><button class="mini-btn" data-key="${esc(x.key)}">Detalhar</button></td></tr>`).join(''):'<tr><td colspan="7">Nenhuma conferência encontrada.</td></tr>';
   renderRanking(arr);
+}
+function renderConferenceOutcome(ok,div,noBase){
+  const total=ok+div+noBase;
+  const donut=$('confOutcomeDonut');
+  if(!donut)return;
+  const okEnd=total?ok/total*360:0;
+  const diffEnd=total?(ok+div)/total*360:0;
+  donut.style.background=total
+    ?`conic-gradient(#159765 0deg ${okEnd}deg,#e6a23b ${okEnd}deg ${diffEnd}deg,#91a3b8 ${diffEnd}deg 360deg)`
+    :'conic-gradient(#e5edf4 0deg 360deg)';
+  donut.setAttribute('aria-label',`${total} conferências: ${ok} sem diferença, ${div} com diferença e ${noBase} sem base MAPAS`);
+  $('confOutcomeRate').textContent=total?`${Math.round(ok/total*100)}%`:'0%';
+  for(const [key,value] of [['Ok',ok],['Diff',div],['NoBase',noBase]]){
+    $(`confOutcome${key}`).textContent=value;
+    $(`confOutcome${key}Bar`).style.width=total?`${value/total*100}%`:'0%';
+  }
 }
 function renderRanking(arr){const drivers=new Map(),helpers=new Map();arr.filter(x=>x.status==='DIVERGENTE').forEach(x=>{accRank(drivers,x.driver,x);const unique=new Set([x.helper1,x.helper2].map(s=>String(s||'').trim()).filter(Boolean));unique.forEach(h=>accRank(helpers,h,x));});renderRankTable('rankMotoristas',drivers);renderRankTable('rankAjudantes',helpers);}
 function accRank(map,name,row){name=String(name||'').trim();if(!name)return;const x=map.get(name)||{name,maps:new Set(),pos:0,neg:0};x.maps.add(row.key);x.pos+=row.pos;x.neg+=row.neg;map.set(name,x);}
