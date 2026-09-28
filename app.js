@@ -516,6 +516,7 @@ function bindBaseEvents(){
   $('btnSelecionarPendentes').addEventListener('click',toggleVisiblePendingSelection);
   $('btnImprimirTudo').addEventListener('click',()=>startPrint(filteredPending()));
   $('btnImprimirSelecionadas').addEventListener('click',()=>startPrint(pendingNris.filter(x=>selectedNris.has(x.id))));
+  $('btnExcluirSelecionados').addEventListener('click',removeSelectedNris);
   ['histNriBusca','histNriStatus','histNriUnidade','histNriDe','histNriAte'].forEach(id=>$(id).addEventListener(id==='histNriBusca'?'input':'change',renderNriHistory));
   $('btnAtualizarHistNri').addEventListener('click',loadNriHistory);
   $('tbodyHistNri').addEventListener('click',onNriHistoryClick);
@@ -1277,11 +1278,37 @@ async function showNriDamageDetail(r){
   }catch(e){toast(humanError(e),'error');}
 }
 function filteredPending(){const q=norm($('pendFiltro').value),u=$('pendUnidade').value;return pendingNris.filter(x=>(!u||x.unidade===u)&&(!q||norm([x.nri,x.codigoProduto,x.nomeProduto,x.lote,x.placa].join(' ')).includes(q)));}
-function renderPending(){const arr=filteredPending();$('tbodyPendentes').innerHTML=arr.length?arr.map(x=>{const hasDamage=nriDamageForRecord(x).length>0;return `<tr><td><input type="checkbox" data-check="${x.id}" ${selectedNris.has(x.id)?'checked':''}></td><td><strong>${esc(x.nri)}</strong><small>${esc(x.codigoProduto)} • ${esc(x.nomeProduto)}</small></td><td>${esc(x.lote)}<small>${x.validade?fmtDate(x.validade):'Sem Validade'}</small></td><td>${esc(x.unidade)}<small>${esc(x.placa)} • ${esc(x.motorista)}</small></td><td>${nriDamageSummaryHtml(x)}</td><td>${fmtNum(x.quantidade)}</td><td><div class="mini-actions"><button class="mini-btn" data-act="preview" data-id="${x.id}">Visualizar</button>${hasDamage?`<button class="mini-btn danger" data-act="damage" data-id="${x.id}">Ver avaria</button>`:''}<button class="mini-btn" data-act="print" data-id="${x.id}">Imprimir</button><button class="mini-btn danger" data-act="remove" data-id="${x.id}">Remover</button></div></td></tr>`;}).join(''):`<tr><td colspan="7">Nenhuma NRI pendente.</td></tr>`;}
-function onPendingCheck(e){if(!e.target.matches('input[data-check]'))return;e.target.checked?selectedNris.add(e.target.dataset.check):selectedNris.delete(e.target.dataset.check);}
+function renderPending(){const arr=filteredPending();$('tbodyPendentes').innerHTML=arr.length?arr.map(x=>{const hasDamage=nriDamageForRecord(x).length>0;return `<tr><td><input type="checkbox" data-check="${x.id}" ${selectedNris.has(x.id)?'checked':''}></td><td><strong>${esc(x.nri)}</strong><small>${esc(x.codigoProduto)} • ${esc(x.nomeProduto)}</small></td><td>${esc(x.lote)}<small>${x.validade?fmtDate(x.validade):'Sem Validade'}</small></td><td>${esc(x.unidade)}<small>${esc(x.placa)} • ${esc(x.motorista)}</small></td><td>${nriDamageSummaryHtml(x)}</td><td>${fmtNum(x.quantidade)}</td><td><div class="mini-actions"><button class="mini-btn" data-act="preview" data-id="${x.id}">Visualizar</button>${hasDamage?`<button class="mini-btn danger" data-act="damage" data-id="${x.id}">Ver avaria</button>`:''}<button class="mini-btn" data-act="print" data-id="${x.id}">Imprimir</button><button class="mini-btn danger" data-act="remove" data-id="${x.id}">Remover</button></div></td></tr>`;}).join(''):`<tr><td colspan="7">Nenhuma NRI pendente.</td></tr>`;updatePendingSelectionActions();}
+function updatePendingSelectionActions(){
+  const selected=pendingNris.filter(x=>selectedNris.has(x.id));
+  const visibleIds=new Set(filteredPending().map(x=>x.id));
+  const hidden=selected.filter(x=>!visibleIds.has(x.id)).length;
+  $('btnExcluirSelecionados').disabled=!selected.length;
+  $('pendSelectionStatus').textContent=`${selected.length} selecionada${selected.length===1?'':'s'}${hidden?` (${hidden} fora do filtro)`:''}`;
+}
+function onPendingCheck(e){if(!e.target.matches('input[data-check]'))return;e.target.checked?selectedNris.add(e.target.dataset.check):selectedNris.delete(e.target.dataset.check);updatePendingSelectionActions();}
 function onPendingClick(e){const b=e.target.closest('button[data-act]');if(!b)return;const r=pendingNris.find(x=>x.id===b.dataset.id);if(!r)return;if(b.dataset.act==='preview')showNriPreview(r);if(b.dataset.act==='damage')showNriDamageDetail(r);if(b.dataset.act==='print')startPrint([r]);if(b.dataset.act==='remove')removeNri(r);}
 function toggleVisiblePendingSelection(){const arr=filteredPending();const all=arr.length&&arr.every(x=>selectedNris.has(x.id));arr.forEach(x=>all?selectedNris.delete(x.id):selectedNris.add(x.id));renderPending();}
 async function removeNri(r){if(!confirm(`Remover ${r.nri} da fila?`))return;try{const {error}=await sb.rpc('remove_nris',{p_ids:[r.id]});if(error)throw error;toast('NRI removida da fila.','success');await loadPending(true);}catch(e){toast(humanError(e),'error');}}
+async function removeSelectedNris(){
+  const rows=pendingNris.filter(x=>selectedNris.has(x.id));
+  if(!rows.length)return toast('Selecione ao menos uma NRI pendente.','error');
+  const visibleIds=new Set(filteredPending().map(x=>x.id));
+  const hidden=rows.filter(x=>!visibleIds.has(x.id)).length;
+  const codes=rows.slice(0,5).map(x=>x.nri).join(', ')+(rows.length>5?'…':'');
+  const message=`Excluir ${rows.length} NRI${rows.length===1?'':'s'} selecionada${rows.length===1?'':'s'} da fila de impressões?\n${codes}${hidden?`\n${hidden} selecionada${hidden===1?' está':'s estão'} fora do filtro atual.`:''}\n\nAs NRIs permanecerão no histórico com status REMOVIDO.`;
+  if(!confirm(message))return;
+  const button=$('btnExcluirSelecionados');button.disabled=true;
+  try{
+    const {data,error}=await sb.rpc('remove_nris',{p_ids:rows.map(x=>x.id)});
+    if(error)throw error;
+    await loadPending(true);
+    const removed=Number(data)||0;
+    if(removed===rows.length)toast(`${removed} NRI${removed===1?' removida':'s removidas'} da fila.`, 'success');
+    else toast(`${removed} de ${rows.length} NRIs removidas. A lista foi atualizada para conferir as demais.`,removed?'':'error');
+  }catch(e){toast(humanError(e),'error');}
+  finally{updatePendingSelectionActions();}
+}
 function showNriPreview(r){openModal(`NRI ${r.nri}`,`${r.codigoProduto} • ${r.nomeProduto}`,htmlEtiqueta(r,false),[{label:'Imprimir',class:'primary',onClick:()=>{closeModal();startPrint([r],r.status==='IMPRESSO');}}]);setTimeout(()=>{const img=$('modalBody').querySelector('img[data-product]');if(img)setProductImage(img,r.codigoProduto);},10);}
 async function startPrint(records,reprint=false){if(!records?.length)return toast('Selecione ao menos uma NRI.','error');printOperation={records,reprint};const frame=$('printFrame');const doc=frame.contentWindow.document;doc.open();doc.write(printDocument(records));doc.close();await wait(90);frame.contentWindow.focus();frame.contentWindow.print();openModal('Confirmar impressão','O diálogo da impressora foi aberto.','<p>Confirme somente depois de verificar se a impressão realmente foi concluída.</p>',[{label:'Cancelar / não imprimiu',class:'secondary',onClick:()=>finishPrint('CANCELADO')},{label:'Impressão concluída',class:'primary',onClick:()=>finishPrint('IMPRESSO')}]);}
 async function finishPrint(result){if(!printOperation)return;const op=printOperation;printOperation=null;closeModal();if(result==='IMPRESSO'&&!op.reprint){const ids=new Set(op.records.map(x=>x.id));pendingNris=pendingNris.filter(x=>!ids.has(x.id));renderPending();$('badgePendentes').textContent=pendingNris.length;}try{const {error}=await sb.rpc('confirm_nri_print',{p_ids:op.records.map(x=>x.id),p_reprint:!!op.reprint,p_result:result});if(error)throw error;toast(result==='IMPRESSO'?'Impressão confirmada.':'Cancelamento registrado.',result==='IMPRESSO'?'success':'');}catch(e){toast(humanError(e),'error');loadPending(true);}}

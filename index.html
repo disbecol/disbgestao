@@ -237,7 +237,7 @@
         <div class="page-head"><div><div class="breadcrumb">Armazém / NRI</div><h1>Impressões pendentes</h1><p>Três etiquetas idênticas por NRI em uma folha A4.</p></div><span class="page-chip">IMPRESSÃO</span></div>
         <div class="card">
           <div class="filters grid grid-3"><div class="field"><label>Produto, NRI, lote ou placa</label><input id="pendFiltro" placeholder="Pesquisar..."></div><div class="field"><label>Unidade</label><select id="pendUnidade"><option value="">Todas</option></select></div><div class="actions end"><button id="btnSelecionarPendentes" class="btn secondary">Selecionar visíveis</button></div></div>
-          <div class="toolbar"><button id="btnImprimirTudo" class="btn primary">Imprimir tudo</button><button id="btnImprimirSelecionadas" class="btn secondary">Imprimir selecionadas</button></div>
+          <div class="toolbar"><button id="btnImprimirTudo" class="btn primary">Imprimir tudo</button><button id="btnImprimirSelecionadas" class="btn secondary">Imprimir selecionadas</button><button id="btnExcluirSelecionados" class="btn danger" type="button" disabled>Excluir selecionados</button><span id="pendSelectionStatus" class="counter" role="status" aria-live="polite">0 selecionadas</span></div>
           <div class="table-wrap"><table><thead><tr><th></th><th>NRI / Produto</th><th>Lote / Validade</th><th>Unidade / Transporte</th><th>Avaria</th><th>Quantidade</th><th>Ações</th></tr></thead><tbody id="tbodyPendentes"></tbody></table></div>
         </div>
       </section>
@@ -781,6 +781,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="config.js?v=1.7.0"></script>
-  <script src="app.js?v=1.7.1-pull-dashboard"></script>
+  <script src="app.js?v=1.7.1-nri-bulk-remove"></script>
 </body>
 </html>
