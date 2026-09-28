@@ -21,14 +21,15 @@ const PERMISSION_CATALOG = [
   ['Notificações','DAMAGE_NOTIFICATION','Notificação avaria'],
   ['Conferência','CONF_CREATE','Realizar conferência'],['Conferência','CONF_OWN_HISTORY','Minhas conferências'],['Conferência','CONF_HISTORY','Histórico completo'],['Conferência','CONF_DASHBOARD','Dashboard'],
   ['Contagem FEFO','FEFO_CREATE','Nova contagem'],['Contagem FEFO','FEFO_ACTIVE','Contagens em andamento'],['Contagem FEFO','FEFO_REPORT','Relatórios'],
+  ['Materiais','MATERIAL_INVENTORY','Contagem'],['Materiais','MATERIAL_STOCK_VIEW','Estoque'],['Materiais','MATERIAL_CATALOG','Cadastro de Materiais'],['Materiais','MATERIAL_MOVEMENT','Movimentação do estoque'],
   ['Puxada','PULL_TRIP','Viagem'],['Puxada','PULL_FAROL','Farol de andamento'],['Puxada','PULL_HISTORY','Histórico'],['Puxada','PULL_DASHBOARD','Dashboards'],['Puxada','PULL_GOALS','Metas'],['Puxada','PULL_CONFIG','Configurações'],['Puxada','PULL_TMA_ADJUST','Ajustar TMA'],
   ['Administração','ADMIN_USERS','Usuários e permissões'],['Administração','ADMIN_BASES','Bases / importação']
 ].map(([module,code,name],sort)=>({module,code,name,sort}));
 
 const ROLE_PERMISSION_DEFAULTS = {
   ADMIN:PERMISSION_CATALOG.filter(x=>x.code!=='DAMAGE_NOTIFICATION').map(x=>x.code),
-  COLABORADOR_ARMAZEM:['NRI_PENDING_VIEW','MARKETPLACE_RECEIVE','NRI_CREATE','NRI_PRINT','CONF_CREATE','CONF_OWN_HISTORY','FEFO_CREATE','FEFO_ACTIVE','FEFO_REPORT'],
-  CONFERENTE:['NRI_PENDING_VIEW','MARKETPLACE_RECEIVE','NRI_CREATE','NRI_PRINT','CONF_CREATE','CONF_OWN_HISTORY','FEFO_CREATE','FEFO_ACTIVE','FEFO_REPORT'],
+  COLABORADOR_ARMAZEM:['NRI_PENDING_VIEW','MARKETPLACE_RECEIVE','NRI_CREATE','NRI_PRINT','CONF_CREATE','CONF_OWN_HISTORY','FEFO_CREATE','FEFO_ACTIVE','FEFO_REPORT','MATERIAL_INVENTORY','MATERIAL_STOCK_VIEW','MATERIAL_CATALOG','MATERIAL_MOVEMENT'],
+  CONFERENTE:['NRI_PENDING_VIEW','MARKETPLACE_RECEIVE','NRI_CREATE','NRI_PRINT','CONF_CREATE','CONF_OWN_HISTORY','FEFO_CREATE','FEFO_ACTIVE','FEFO_REPORT','MATERIAL_INVENTORY','MATERIAL_STOCK_VIEW','MATERIAL_CATALOG','MATERIAL_MOVEMENT'],
   COLABORADOR_ENTREGA:['DELIVERY_DAMAGE_CREATE'],
   MOTORISTA_PUXADOR:['PULL_TRIP'],
   VENDEDOR:['SALES_DAMAGE_CREATE','SALES_DAMAGE_VIEW_OWN'],
@@ -140,6 +141,10 @@ const viewMeta = {
   'fefo-contagem':['Contagem FEFO','Produto, validade e posição'],
   'fefo-andamento':['Contagens em andamento','Retome uma contagem aberta'],
   'fefo-relatorios':['Relatórios FEFO','Histórico e exportação CSV'],
+  'materiais-contagem':['Contagem de Materiais','Inventário físico, diferenças e rastreabilidade'],
+  'materiais-estoque':['Estoque de Materiais','Saldos e identificadores por unidade'],
+  'materiais-cadastro':['Cadastro de Materiais','Materiais controlados no estoque do armazém'],
+  'materiais-movimentacoes':['Movimentações de Materiais','Entradas, saídas e ajustes de inventário'],
   'ativo-giro-contagem':['Ativo de Giro','Contagem diária com adições cumulativas'],
   'ativo-giro-historico':['Histórico de Ativo de Giro','Totais consolidados por contagem'],
   'nri-carretas':['Recebimentos pendentes','Puxada e Marketplace aguardando NRI'],
@@ -167,7 +172,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.0-native-track-validade34',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.1-materiais-final-v2',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -8202,8 +8207,769 @@ console.info(
   '[PUXADA MAPA] trajeto real + etapas habilitados'
 );
 
+// V1.7.1 - MATERIAIS / ARMAZEM
+// Estoque, cadastro, movimentacoes e inventario com identificadores unicos.
+// ============================================================================
 
-})();
+let materialsCatalogV171=[];
+let materialsStockV171=[];
+let materialsStockIdentifiersV171=[];
+let materialInventoryActiveV171=null;
+let materialInventoryItemsV171=[];
+let materialInventoryIdentifiersV171=[];
+let materialInventoryHistoryV171=[];
+let materialMovementRowsV171=[];
+let materialMovementIdentifierRowsV171=[];
+let materialMoveIdentifierDraftV171=[];
+let materialInventoryIdentifierDraftV171=[];
+let materialInventoryIdentifierItemV171=null;
+let materialEditIdV171=null;
+let materialEventsBoundV171=false;
+
+function canMaterialsV171(){
+  return hasAnyPerm('MATERIAL_INVENTORY,MATERIAL_STOCK_VIEW,MATERIAL_CATALOG,MATERIAL_MOVEMENT');
+}
+
+
+function materialCssEscapeV171(value){
+  const s=String(value||'');
+  if(globalThis.CSS&&typeof CSS.escape==='function')return CSS.escape(s);
+  return s.replace(/\\/g,'\\\\').replace(/"/g,'\\"');
+}
+
+function materialNormalizeIdentifierV171(value){
+  return String(value||'').trim().toUpperCase().replace(/\s+/g,'');
+}
+
+function materialFmtDateTimeV171(value){
+  if(!value)return '—';
+  try{return new Intl.DateTimeFormat('pt-BR',{timeZone:TZ,dateStyle:'short',timeStyle:'short'}).format(new Date(value));}
+  catch{return String(value);}
+}
+
+function materialFmtDateV171(value){
+  if(!value)return '—';
+  try{return new Intl.DateTimeFormat('pt-BR',{timeZone:TZ,dateStyle:'short'}).format(new Date(`${String(value).slice(0,10)}T12:00:00-03:00`));}
+  catch{return String(value);}
+}
+
+function materialNumberV171(value){
+  const n=Number(value);
+  return Number.isFinite(n)?Math.trunc(n):0;
+}
+
+function materialSignedV171(value){
+  const n=materialNumberV171(value);
+  return n>0?`+${n}`:String(n);
+}
+
+function materialWorksBadgeV171(value){
+  if(value===true)return '<span class="mat-badge ok">Funciona</span>';
+  if(value===false)return '<span class="mat-badge bad">Não funciona</span>';
+  return '<span class="mat-badge neutral">Não informado</span>';
+}
+
+function materialStatusBadgeV171(active){
+  return active?'<span class="mat-badge ok">Ativo</span>':'<span class="mat-badge neutral">Inativo</span>';
+}
+
+function materialMovementTypeV171(type){
+  const map={ENTRY:'Entrada',EXIT:'Saída',INVENTORY_ADJUSTMENT:'Ajuste de inventário'};
+  return map[String(type||'')]||String(type||'—');
+}
+
+function materialHumanErrorV171(error){
+  const message=String(error?.message||error||'Erro no módulo Materiais');
+  const direct={
+    FORBIDDEN:'Seu perfil não possui permissão para esta ação.',
+    UNAUTHORIZED:'Sua sessão expirou. Entre novamente.',
+    UNIDADE_INVALIDA:'A unidade atual não é válida para esta operação.',
+    MATERIAL_SEM_NOME:'Informe o nome do material.',
+    MATERIAL_NOME_DUPLICADO:'Já existe um material cadastrado com este nome.',
+    MATERIAL_NAO_ENCONTRADO:'Material não encontrado.',
+    MATERIAL_RASTREIO_NAO_PODE_SER_ALTERADO:'O controle por identificador não pode ser alterado porque este material já possui saldo ou histórico de identificadores.',
+    MATERIAL_INVENTARIO_SEM_MATERIAIS:'Cadastre ao menos um material ativo antes de iniciar o inventário.',
+    MATERIAL_INVENTARIO_NAO_ENCONTRADO:'Inventário não encontrado.',
+    MATERIAL_INVENTARIO_FINALIZADO:'Este inventário já foi finalizado ou cancelado.',
+    MATERIAL_IDENTIFICADOR_OBRIGATORIO:'Informe ao menos um identificador.',
+    MATERIAL_IDENTIFICADOR_DUPLICADO:'O mesmo identificador foi informado mais de uma vez.',
+    MATERIAL_IDENTIFICADOR_OUTRO_MATERIAL:'Um dos identificadores já pertence a outro material.',
+    MATERIAL_IDENTIFICADOR_OUTRA_UNIDADE:'Um dos identificadores já consta em estoque em outra unidade. Faça a regularização da saída/entrada entre as unidades antes de finalizar esta contagem.',
+    MATERIAL_IDENTIFICADOR_JA_EM_ESTOQUE:'Um dos identificadores informados já está em estoque.',
+    MATERIAL_IDENTIFICADOR_NAO_ENCONTRADO:'Um dos identificadores informados não está disponível neste estoque.',
+    MATERIAL_IDENTIFICADOR_FUNCIONAMENTO_OBRIGATORIO:'Responda “Freezer funciona?” para cada identificador.',
+    MATERIAL_QUANTIDADE_IDENTIFICADORES_DIVERGENTE:'A quantidade não confere com o número de identificadores informados.',
+    MATERIAL_ESTOQUE_INSUFICIENTE:'O estoque disponível é insuficiente para esta saída.',
+    MATERIAL_JUSTIFICATIVA_OBRIGATORIA:'Informe a justificativa da movimentação.'
+  };
+  const key=Object.keys(direct).find(k=>message.includes(k));
+  if(key)return direct[key];
+  if(message.includes('MATERIAL_INVENTARIO_ITEM_PENDENTE:'))return `Ainda falta informar a contagem de ${message.split('MATERIAL_INVENTARIO_ITEM_PENDENTE:')[1]||'um material'}.`;
+  if(message.includes('MATERIAL_INVENTARIO_JUSTIFICATIVA_OBRIGATORIA:'))return `Informe a justificativa da diferença em ${message.split('MATERIAL_INVENTARIO_JUSTIFICATIVA_OBRIGATORIA:')[1]||'um material'}.`;
+  if(message.includes('MATERIAL_ESTOQUE_ALTERADO_DURANTE_CONTAGEM:'))return `O estoque de ${message.split('MATERIAL_ESTOQUE_ALTERADO_DURANTE_CONTAGEM:')[1]||'um material'} mudou depois do início do inventário. Cancele esta contagem e inicie outra para preservar a rastreabilidade.`;
+  if(/relation .*material_/i.test(message)||/function .*material_/i.test(message))return 'O módulo Materiais ainda não foi criado no Supabase. Execute o SQL 35_v1_7_1_materiais.sql.';
+  return humanError(error);
+}
+
+function materialByIdV171(id){return materialsCatalogV171.find(x=>String(x.id)===String(id))||null;}
+function materialStockByIdV171(id){return materialsStockV171.find(x=>String(x.material_id)===String(id))||null;}
+function materialInventoryIdentifiersForItemV171(itemId){return materialInventoryIdentifiersV171.filter(x=>String(x.count_item_id)===String(itemId));}
+function materialMovementIdentifiersForV171(movementId){return materialMovementIdentifierRowsV171.filter(x=>String(x.movement_id)===String(movementId));}
+
+async function loadMaterialsCatalogV171(silent=false){
+  if(!sb||!canMaterialsV171())return;
+  try{
+    const {data,error}=await sb.from('materials').select('*').order('name');
+    if(error)throw error;
+    materialsCatalogV171=data||[];
+    renderMaterialCatalogV171();
+    fillMaterialSelectsV171();
+  }catch(e){if(!silent)toast(materialHumanErrorV171(e),'error');}
+}
+
+function fillMaterialSelectsV171(){
+  const options=materialsCatalogV171.filter(x=>x.active!==false).map(x=>`<option value="${esc(x.id)}">${esc(x.code)} • ${esc(x.name)}</option>`).join('');
+  const move=$('matMoveMaterial');
+  if(move){const old=move.value;move.innerHTML=`<option value="">Selecione...</option>${options}`;if([...move.options].some(o=>o.value===old))move.value=old;}
+  updateMaterialMovementModeV171();
+}
+
+function renderMaterialCatalogV171(){
+  const body=$('tbodyMaterialsCatalog');if(!body)return;
+  const q=String($('matCadSearch')?.value||'').trim().toLowerCase();
+  const status=String($('matCadStatus')?.value||'');
+  const rows=materialsCatalogV171.filter(m=>{
+    if(q&&!`${m.code} ${m.name} ${m.category||''}`.toLowerCase().includes(q))return false;
+    if(status==='ACTIVE'&&m.active===false)return false;
+    if(status==='INACTIVE'&&m.active!==false)return false;
+    return true;
+  });
+  body.innerHTML=rows.length?rows.map(m=>`<tr>
+    <td><strong>${esc(m.code)}</strong></td>
+    <td><strong>${esc(m.name)}</strong><small>${esc(m.notes||'')}</small></td>
+    <td>${esc(m.category||'—')}</td>
+    <td>${esc(m.stock_unit||'UNIDADE')}</td>
+    <td>${m.requires_identifier?'<span class="mat-badge info">Identificador individual</span>':'<span class="mat-badge neutral">Quantidade</span>'}</td>
+    <td>${materialNumberV171(m.minimum_stock)}</td>
+    <td>${materialStatusBadgeV171(m.active!==false)}</td>
+    <td><button type="button" class="btn secondary compact" data-mat-edit="${esc(m.id)}">Editar</button></td>
+  </tr>`).join(''):'<tr><td colspan="8"><div class="empty-state">Nenhum material encontrado.</div></td></tr>';
+}
+
+function clearMaterialFormV171(){
+  materialEditIdV171=null;
+  if($('matCadId'))$('matCadId').value='';
+  if($('matCadNome'))$('matCadNome').value='';
+  if($('matCadCategoria'))$('matCadCategoria').value='';
+  if($('matCadUnidade'))$('matCadUnidade').value='UNIDADE';
+  if($('matCadMinimo'))$('matCadMinimo').value='0';
+  if($('matCadIdentificador'))$('matCadIdentificador').checked=false;
+  if($('matCadAtivo'))$('matCadAtivo').checked=true;
+  if($('matCadObs'))$('matCadObs').value='';
+  if($('matCadCodigo'))$('matCadCodigo').value='Gerado automaticamente';
+}
+
+function editMaterialV171(id){
+  const m=materialByIdV171(id);if(!m)return;
+  materialEditIdV171=m.id;
+  $('matCadId').value=m.id;
+  $('matCadCodigo').value=m.code||'';
+  $('matCadNome').value=m.name||'';
+  $('matCadCategoria').value=m.category||'';
+  $('matCadUnidade').value=m.stock_unit||'UNIDADE';
+  $('matCadMinimo').value=materialNumberV171(m.minimum_stock);
+  $('matCadIdentificador').checked=!!m.requires_identifier;
+  $('matCadAtivo').checked=m.active!==false;
+  $('matCadObs').value=m.notes||'';
+  $('matCadNome').focus();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+async function submitMaterialCatalogV171(e){
+  e.preventDefault();
+  if(!hasPerm('MATERIAL_CATALOG'))return toast('Seu perfil não possui permissão para cadastrar materiais.','error');
+  const btn=$('btnMatCadSalvar');
+  if(btn){btn.disabled=true;btn.textContent='Salvando…';}
+  try{
+    const args={
+      p_id:materialEditIdV171||null,
+      p_name:String($('matCadNome').value||'').trim(),
+      p_category:String($('matCadCategoria').value||'').trim(),
+      p_stock_unit:String($('matCadUnidade').value||'UNIDADE').trim().toUpperCase(),
+      p_requires_identifier:!!$('matCadIdentificador').checked,
+      p_minimum_stock:Math.max(0,materialNumberV171($('matCadMinimo').value)),
+      p_active:!!$('matCadAtivo').checked,
+      p_notes:String($('matCadObs').value||'').trim()
+    };
+    const {error}=await sb.rpc('save_material',args);if(error)throw error;
+    toast(materialEditIdV171?'Material atualizado.':'Material cadastrado.','success');
+    clearMaterialFormV171();
+    await loadMaterialsCatalogV171();
+  }catch(err){toast(materialHumanErrorV171(err),'error');}
+  finally{if(btn){btn.disabled=false;btn.textContent='Salvar material';}}
+}
+
+async function loadMaterialStockV171(silent=false){
+  if(!sb||!hasPerm('MATERIAL_STOCK_VIEW')||!activeUnit)return;
+  try{
+    await loadMaterialsCatalogV171(true);
+    const [stockRes,idRes]=await Promise.all([
+      sb.from('material_stock').select('*').eq('unit',activeUnit),
+      sb.from('material_identifiers').select('id,identifier_code,material_id,unit,in_stock,works,updated_at').eq('unit',activeUnit).eq('in_stock',true)
+    ]);
+    if(stockRes.error)throw stockRes.error;if(idRes.error)throw idRes.error;
+    materialsStockV171=stockRes.data||[];
+    materialsStockIdentifiersV171=idRes.data||[];
+    renderMaterialStockV171();
+  }catch(e){if(!silent)toast(materialHumanErrorV171(e),'error');}
+}
+
+function renderMaterialStockV171(){
+  const body=$('tbodyMaterialsStock');if(!body)return;
+  const active=materialsCatalogV171.filter(x=>x.active!==false);
+  const q=String($('matStockSearch')?.value||'').trim().toLowerCase();
+  const track=String($('matStockTracking')?.value||'');
+  const status=String($('matStockStatus')?.value||'');
+  let total=0,low=0,serialized=0,notWorking=0;
+  const rows=active.map(m=>{
+    const stock=materialStockByIdV171(m.id);const qty=materialNumberV171(stock?.quantity);total+=qty;
+    const min=materialNumberV171(m.minimum_stock);const isLow=min>0&&qty<=min;const isZero=qty===0;
+    if(isLow)low++;if(m.requires_identifier)serialized+=qty;
+    const ids=materialsStockIdentifiersV171.filter(x=>String(x.material_id)===String(m.id));
+    notWorking+=ids.filter(x=>x.works===false).length;
+    return {m,qty,min,isLow,isZero,ids};
+  }).filter(r=>{
+    if(q&&!`${r.m.code} ${r.m.name} ${r.m.category||''}`.toLowerCase().includes(q))return false;
+    if(track==='SERIAL'&&!r.m.requires_identifier)return false;
+    if(track==='QTY'&&r.m.requires_identifier)return false;
+    if(status==='LOW'&&!r.isLow)return false;
+    if(status==='ZERO'&&!r.isZero)return false;
+    if(status==='NORMAL'&&(r.isLow||r.isZero))return false;
+    return true;
+  });
+  if($('matKpiItems'))$('matKpiItems').textContent=active.length;
+  if($('matKpiUnits'))$('matKpiUnits').textContent=total;
+  if($('matKpiTracked'))$('matKpiTracked').textContent=serialized;
+  if($('matKpiNotWorking'))$('matKpiNotWorking').textContent=notWorking;
+  body.innerHTML=rows.length?rows.map(({m,qty,min,isLow,ids})=>`<tr>
+    <td><strong>${esc(m.code)}</strong><small>${esc(m.category||'')}</small></td>
+    <td><strong>${esc(m.name)}</strong><small>${m.requires_identifier?'Controle individual por etiqueta':'Controle por quantidade'}</small></td>
+    <td>${esc(m.stock_unit||'UNIDADE')}</td>
+    <td><strong class="mat-stock-number">${qty}</strong></td>
+    <td>${min}</td>
+    <td>${isLow?'<span class="mat-badge bad">Estoque baixo</span>':'<span class="mat-badge ok">Normal</span>'}</td>
+    <td>${m.requires_identifier?`<button type="button" class="btn secondary compact" data-mat-stock-ids="${esc(m.id)}">Identificadores (${ids.length})</button>`:'—'}</td>
+    <td class="mat-actions"><button type="button" class="btn secondary compact" data-mat-stock-move="${esc(m.id)}" data-type="ENTRY">Entrada</button><button type="button" class="btn secondary compact" data-mat-stock-move="${esc(m.id)}" data-type="EXIT">Saída</button></td>
+  </tr>`).join(''):'<tr><td colspan="8"><div class="empty-state">Nenhum material encontrado.</div></td></tr>';
+}
+
+async function openMaterialStockIdentifiersV171(materialId){
+  const m=materialByIdV171(materialId);if(!m)return;
+  try{
+    const {data,error}=await sb.from('material_identifiers').select('*').eq('unit',activeUnit).eq('material_id',materialId).eq('in_stock',true).order('identifier_code');
+    if(error)throw error;
+    const rows=data||[];
+    openModal(`Identificadores • ${m.name}`,`${activeUnit} • ${rows.length} em estoque`,rows.length?`<div class="table-wrap"><table><thead><tr><th>Identificador</th><th>Freezer funciona?</th><th>Atualizado</th></tr></thead><tbody>${rows.map(x=>`<tr><td><strong>${esc(x.identifier_code)}</strong></td><td>${materialWorksBadgeV171(x.works)}</td><td>${materialFmtDateTimeV171(x.updated_at)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty-state">Nenhum identificador em estoque.</div>',[{label:'Fechar',onClick:closeModal}]);
+  }catch(e){toast(materialHumanErrorV171(e),'error');}
+}
+
+function openMaterialMovementForV171(materialId,type){
+  openView('materiais-movimentacoes');
+  setTimeout(()=>{
+    if($('matMoveMaterial'))$('matMoveMaterial').value=materialId;
+    if($('matMoveType'))$('matMoveType').value=type;
+    materialMoveIdentifierDraftV171=[];
+    updateMaterialMovementModeV171();
+    renderMaterialMoveIdentifierDraftV171();
+    $('matMoveJustification')?.focus();
+  },0);
+}
+
+async function loadMaterialMovementsV171(silent=false){
+  if(!sb||!hasPerm('MATERIAL_MOVEMENT')||!activeUnit)return;
+  try{
+    await loadMaterialsCatalogV171(true);
+    const {data,error}=await sb.from('material_movements').select('*').eq('unit',activeUnit).order('created_at',{ascending:false}).limit(500);
+    if(error)throw error;
+    materialMovementRowsV171=data||[];
+    const ids=materialMovementRowsV171.map(x=>x.id);
+    if(ids.length){
+      const link=await sb.from('material_movement_identifiers').select('*').in('movement_id',ids);
+      if(link.error)throw link.error;materialMovementIdentifierRowsV171=link.data||[];
+    }else materialMovementIdentifierRowsV171=[];
+    renderMaterialMovementsV171();
+  }catch(e){if(!silent)toast(materialHumanErrorV171(e),'error');}
+}
+
+function renderMaterialMovementsV171(){
+  const body=$('tbodyMaterialMovements');if(!body)return;
+  const q=String($('matMoveSearch')?.value||'').trim().toLowerCase();
+  const type=String($('matMoveFilterType')?.value||'');
+  const mat=String($('matMoveFilterMaterial')?.value||'');
+  const select=$('matMoveFilterMaterial');
+  if(select){const old=select.value;select.innerHTML='<option value="">Todos</option>'+materialsCatalogV171.map(m=>`<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');if([...select.options].some(o=>o.value===old))select.value=old;}
+  const rows=materialMovementRowsV171.filter(r=>{
+    if(type&&r.movement_type!==type)return false;if(mat&&String(r.material_id)!==mat)return false;
+    if(q&&!`${r.material_code||''} ${r.material_name||''} ${r.justification||''} ${r.created_by_name||''}`.toLowerCase().includes(q))return false;return true;
+  });
+  body.innerHTML=rows.length?rows.map(r=>{const links=materialMovementIdentifiersForV171(r.id);return `<tr>
+    <td>${materialFmtDateTimeV171(r.created_at)}</td>
+    <td><span class="mat-badge ${r.movement_type==='ENTRY'?'ok':r.movement_type==='EXIT'?'bad':'info'}">${esc(materialMovementTypeV171(r.movement_type))}</span><small>${r.origin_type==='INVENTORY'?'Inventário':'Manual'}</small></td>
+    <td><strong>${esc(r.material_name||'')}</strong><small>${esc(r.material_code||'')}</small></td>
+    <td class="${materialNumberV171(r.quantity_delta)<0?'mat-negative':'mat-positive'}"><strong>${materialSignedV171(r.quantity_delta)}</strong></td>
+    <td>${materialNumberV171(r.balance_after)}</td>
+    <td>${esc(r.created_by_name||'—')}</td>
+    <td>${esc(r.justification||'—')}</td>
+    <td>${links.length?`<button type="button" class="btn secondary compact" data-mat-move-ids="${esc(r.id)}">Ver (${links.length})</button>`:'—'}</td>
+  </tr>`;}).join(''):'<tr><td colspan="8"><div class="empty-state">Nenhuma movimentação encontrada.</div></td></tr>';
+}
+
+function updateMaterialMovementModeV171(){
+  const m=materialByIdV171($('matMoveMaterial')?.value);
+  const tracked=!!m?.requires_identifier;
+  $('matMoveIdentifiersBox')?.classList.toggle('hidden',!tracked);
+  if($('matMoveQuantity')){
+    $('matMoveQuantity').readOnly=tracked;
+    if(tracked)$('matMoveQuantity').value=materialMoveIdentifierDraftV171.length;
+  }
+  const isEntry=$('matMoveType')?.value!=='EXIT';
+  $('matMoveWorksWrap')?.classList.toggle('hidden',!tracked||!isEntry);
+  if(!tracked&&materialMoveIdentifierDraftV171.length){materialMoveIdentifierDraftV171=[];renderMaterialMoveIdentifierDraftV171();}
+}
+
+function renderMaterialMoveIdentifierDraftV171(){
+  const box=$('matMoveIdentifierList');if(!box)return;
+  box.innerHTML=materialMoveIdentifierDraftV171.length?materialMoveIdentifierDraftV171.map((x,i)=>`<span class="mat-id-chip"><strong>${esc(x.code)}</strong>${x.works===true?' • Funciona':x.works===false?' • Não funciona':''}<button type="button" data-mat-move-id-remove="${i}" aria-label="Remover">×</button></span>`).join(''):'<span class="mat-empty-inline">Nenhum identificador adicionado.</span>';
+  if($('matMoveQuantity')&&materialByIdV171($('matMoveMaterial')?.value)?.requires_identifier)$('matMoveQuantity').value=materialMoveIdentifierDraftV171.length;
+}
+
+function addMaterialMoveIdentifierV171(){
+  const m=materialByIdV171($('matMoveMaterial')?.value);if(!m?.requires_identifier)return;
+  const code=materialNormalizeIdentifierV171($('matMoveIdentifier').value);if(!code)return toast('Informe o identificador.','error');
+  if(materialMoveIdentifierDraftV171.some(x=>x.code===code))return toast('Este identificador já foi adicionado.','error');
+  const entry=$('matMoveType').value!=='EXIT';
+  let works=null;
+  if(entry){const answer=$('matMoveWorks').value;if(answer!=='SIM'&&answer!=='NAO')return toast('Responda “Freezer funciona?”.','error');works=answer==='SIM';}
+  materialMoveIdentifierDraftV171.push({code,works});
+  $('matMoveIdentifier').value='';
+  renderMaterialMoveIdentifierDraftV171();
+  $('matMoveIdentifier').focus();
+}
+
+async function submitMaterialMovementV171(e){
+  e.preventDefault();
+  const materialId=$('matMoveMaterial').value;const m=materialByIdV171(materialId);if(!m)return toast('Selecione o material.','error');
+  const type=$('matMoveType').value;const justification=String($('matMoveJustification').value||'').trim();
+  const quantity=m.requires_identifier?materialMoveIdentifierDraftV171.length:Math.max(0,materialNumberV171($('matMoveQuantity').value));
+  if(quantity<=0)return toast(m.requires_identifier?'Adicione ao menos um identificador.':'Informe uma quantidade maior que zero.','error');
+  if(!justification)return toast('Informe a justificativa.','error');
+  const btn=$('btnMatMoveSave');if(btn){btn.disabled=true;btn.textContent='Registrando…';}
+  try{
+    const {error}=await sb.rpc('create_material_movement',{p_unit:activeUnit,p_material_id:materialId,p_type:type,p_quantity:quantity,p_justification:justification,p_identifiers:materialMoveIdentifierDraftV171});
+    if(error)throw error;
+    toast(type==='ENTRY'?'Entrada registrada.':'Saída registrada.','success');
+    materialMoveIdentifierDraftV171=[];
+    $('formMaterialMovement').reset();
+    $('matMoveType').value='ENTRY';
+    $('matMoveQuantity').value='';
+    renderMaterialMoveIdentifierDraftV171();
+    fillMaterialSelectsV171();
+    await Promise.all([loadMaterialMovementsV171(true),loadMaterialStockV171(true)]);
+  }catch(err){toast(materialHumanErrorV171(err),'error');}
+  finally{if(btn){btn.disabled=false;btn.textContent='Registrar movimentação';}}
+}
+
+function openMaterialMovementIdentifiersV171(movementId){
+  const move=materialMovementRowsV171.find(x=>String(x.id)===String(movementId));if(!move)return;
+  const rows=materialMovementIdentifiersForV171(movementId);
+  openModal(`Identificadores • ${move.material_name||''}`,`${materialMovementTypeV171(move.movement_type)} • ${materialFmtDateTimeV171(move.created_at)}`,rows.length?`<div class="table-wrap"><table><thead><tr><th>Identificador</th><th>Registro</th><th>Freezer funciona?</th></tr></thead><tbody>${rows.map(x=>`<tr><td><strong>${esc(x.identifier_code)}</strong></td><td>${esc(x.action||'—')}</td><td>${materialWorksBadgeV171(x.works)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty-state">Sem identificadores.</div>',[{label:'Fechar',onClick:closeModal}]);
+}
+
+async function loadMaterialInventoryV171(silent=false){
+  if(!sb||!hasPerm('MATERIAL_INVENTORY')||!activeUnit)return;
+  try{
+    await loadMaterialsCatalogV171(true);
+    const activeRes=await sb.from('material_inventory_counts').select('*').eq('unit',activeUnit).eq('status','IN_PROGRESS').order('started_at',{ascending:false}).limit(1).maybeSingle();
+    if(activeRes.error)throw activeRes.error;
+    materialInventoryActiveV171=activeRes.data||null;
+    if(materialInventoryActiveV171){
+      const [itemsRes,idsRes]=await Promise.all([
+        sb.from('material_inventory_items').select('*').eq('count_id',materialInventoryActiveV171.id).order('material_name'),
+        sb.from('material_inventory_identifiers').select('*').eq('count_id',materialInventoryActiveV171.id).order('identifier_code')
+      ]);
+      if(itemsRes.error)throw itemsRes.error;if(idsRes.error)throw idsRes.error;
+      materialInventoryItemsV171=itemsRes.data||[];materialInventoryIdentifiersV171=idsRes.data||[];
+    }else{materialInventoryItemsV171=[];materialInventoryIdentifiersV171=[];}
+    renderMaterialInventoryV171();
+    await loadMaterialInventoryHistoryV171(true);
+  }catch(e){if(!silent)toast(materialHumanErrorV171(e),'error');}
+}
+
+function renderMaterialInventoryV171(){
+  const empty=$('matInventoryEmpty');const active=$('matInventoryActive');if(!empty||!active)return;
+  empty.classList.toggle('hidden',!!materialInventoryActiveV171);active.classList.toggle('hidden',!materialInventoryActiveV171);
+  if(!materialInventoryActiveV171){
+    if($('matInvStartUnit'))$('matInvStartUnit').value=activeUnit||'';
+    if($('matInvStartUser'))$('matInvStartUser').value=profile?.name||'';
+    return;
+  }
+  $('matInvCode').textContent=materialInventoryActiveV171.count_code||'Inventário';
+  $('matInvSummary').textContent=`${activeUnit} • iniciado por ${materialInventoryActiveV171.counter_name||'—'} em ${materialFmtDateTimeV171(materialInventoryActiveV171.started_at)}`;
+  const body=$('tbodyMaterialInventory');
+  body.innerHTML=materialInventoryItemsV171.length?materialInventoryItemsV171.map(item=>{
+    const ids=materialInventoryIdentifiersForItemV171(item.id);const counted=item.counted_quantity;
+    const diff=counted===null||counted===undefined?null:materialNumberV171(counted)-materialNumberV171(item.system_quantity);
+    return `<tr data-mat-inv-row="${esc(item.id)}">
+      <td><strong>${esc(item.material_name)}</strong><small>${esc(item.material_code)}</small></td>
+      <td>${item.requires_identifier?'<span class="mat-badge info">Identificadores</span>':'<span class="mat-badge neutral">Quantidade</span>'}</td>
+      <td><strong>${materialNumberV171(item.system_quantity)}</strong></td>
+      <td>${item.requires_identifier?`<div class="mat-serial-count"><strong>${counted===null||counted===undefined?'—':materialNumberV171(counted)}</strong><button type="button" class="btn secondary compact" data-mat-inv-ids="${esc(item.id)}">Informar identificadores (${ids.length})</button></div>`:`<input class="mat-count-input" data-mat-inv-count="${esc(item.id)}" type="number" min="0" step="1" value="${counted===null||counted===undefined?'':materialNumberV171(counted)}" placeholder="Qtd.">`}</td>
+      <td><strong data-mat-inv-diff="${esc(item.id)}" class="${diff===null?'':diff===0?'mat-zero':diff>0?'mat-positive':'mat-negative'}">${diff===null?'—':materialSignedV171(diff)}</strong></td>
+      <td><textarea class="mat-just-input" data-mat-inv-just="${esc(item.id)}" rows="2" placeholder="Obrigatória se houver diferença">${esc(item.justification||'')}</textarea></td>
+      <td>${item.requires_identifier?'—':`<button type="button" class="btn secondary compact" data-mat-inv-save="${esc(item.id)}">Salvar</button>`}</td>
+    </tr>`;
+  }).join(''):'<tr><td colspan="7"><div class="empty-state">Nenhum material ativo no cadastro.</div></td></tr>';
+}
+
+function updateMaterialInventoryDifferenceV171(itemId){
+  const item=materialInventoryItemsV171.find(x=>String(x.id)===String(itemId));if(!item)return;
+  const input=document.querySelector(`[data-mat-inv-count="${materialCssEscapeV171(itemId)}"]`);const out=document.querySelector(`[data-mat-inv-diff="${materialCssEscapeV171(itemId)}"]`);if(!input||!out)return;
+  if(input.value===''){out.textContent='—';out.className='';return;}
+  const diff=Math.max(0,materialNumberV171(input.value))-materialNumberV171(item.system_quantity);out.textContent=materialSignedV171(diff);out.className=diff===0?'mat-zero':diff>0?'mat-positive':'mat-negative';
+}
+
+async function startMaterialInventoryV171(){
+  const btn=$('btnMatInvStart');if(btn){btn.disabled=true;btn.textContent='Iniciando…';}
+  try{
+    const {error}=await sb.rpc('start_material_inventory',{p_unit:activeUnit});if(error)throw error;
+    toast('Contagem de materiais iniciada.','success');await loadMaterialInventoryV171();
+  }catch(e){toast(materialHumanErrorV171(e),'error');}
+  finally{if(btn){btn.disabled=false;btn.textContent='Iniciar contagem';}}
+}
+
+async function saveMaterialInventoryItemV171(item,quiet=false){
+  if(!item||!materialInventoryActiveV171)return false;
+  const just=String(document.querySelector(`[data-mat-inv-just="${materialCssEscapeV171(item.id)}"]`)?.value||item.justification||'').trim();
+  let counted=null,identifiers=[];
+  if(item.requires_identifier){
+    if(item.counted_quantity===null||item.counted_quantity===undefined)return false;
+    identifiers=materialInventoryIdentifiersForItemV171(item.id).map(x=>({code:x.identifier_code,works:x.works}));counted=identifiers.length;
+  }else{
+    const input=document.querySelector(`[data-mat-inv-count="${materialCssEscapeV171(item.id)}"]`);if(!input||input.value==='')return false;counted=Math.max(0,materialNumberV171(input.value));
+  }
+  const {error}=await sb.rpc('save_material_inventory_item',{p_count_id:materialInventoryActiveV171.id,p_material_id:item.material_id,p_counted_quantity:counted,p_justification:just,p_identifiers:identifiers});
+  if(error)throw error;if(!quiet)toast('Contagem do material salva.','success');return true;
+}
+
+async function saveAllMaterialInventoryV171(){
+  for(const item of materialInventoryItemsV171){
+    await saveMaterialInventoryItemV171(item,true);
+  }
+}
+
+async function finalizeMaterialInventoryV171(){
+  if(!materialInventoryActiveV171)return;
+  const btn=$('btnMatInvFinish');if(btn){btn.disabled=true;btn.textContent='Finalizando…';}
+  try{
+    await saveAllMaterialInventoryV171();
+    const {error}=await sb.rpc('finalize_material_inventory',{p_count_id:materialInventoryActiveV171.id});if(error)throw error;
+    toast('Inventário finalizado e estoque ajustado.','success');await Promise.all([loadMaterialInventoryV171(true),loadMaterialStockV171(true),loadMaterialMovementsV171(true)]);
+  }catch(e){toast(materialHumanErrorV171(e),'error');}
+  finally{if(btn){btn.disabled=false;btn.textContent='Finalizar contagem';}}
+}
+
+async function cancelMaterialInventoryV171(){
+  if(!materialInventoryActiveV171)return;
+  if(!confirm('Cancelar esta contagem? O histórico será preservado, mas o estoque não será alterado.'))return;
+  try{const {error}=await sb.rpc('cancel_material_inventory',{p_count_id:materialInventoryActiveV171.id});if(error)throw error;toast('Contagem cancelada.','success');await loadMaterialInventoryV171();}
+  catch(e){toast(materialHumanErrorV171(e),'error');}
+}
+
+function renderMaterialInventoryIdentifierDraftV171(){
+  const box=$('matInvIdentifierDraftList');if(!box)return;
+  box.innerHTML=materialInventoryIdentifierDraftV171.length?materialInventoryIdentifierDraftV171.map((x,i)=>`<div class="mat-id-row"><div><strong>${esc(x.code)}</strong><small>${x.works?'Freezer funciona: Sim':'Freezer funciona: Não'}</small></div><button type="button" class="btn secondary compact" data-mat-inv-id-remove="${i}">Remover</button></div>`).join(''):'<div class="empty-state small">Nenhum identificador informado. Se a contagem física for zero, salve a lista vazia.</div>';
+  if($('matInvIdentifierCounter'))$('matInvIdentifierCounter').textContent=`${materialInventoryIdentifierDraftV171.length} identificador${materialInventoryIdentifierDraftV171.length===1?'':'es'}`;
+}
+
+function openMaterialInventoryIdentifiersV171(itemId){
+  const item=materialInventoryItemsV171.find(x=>String(x.id)===String(itemId));if(!item)return;
+  materialInventoryIdentifierItemV171=item;
+  materialInventoryIdentifierDraftV171=materialInventoryIdentifiersForItemV171(item.id).map(x=>({code:x.identifier_code,works:x.works===true}));
+  const body=`<div class="mat-identifier-editor">
+    <div class="notice compact"><strong>Identificação individual:</strong> adicione cada etiqueta encontrada. Para cada identificador, responda se o freezer está funcionando.</div>
+    <div class="grid grid-3 mat-id-entry-grid">
+      <div class="field"><label>Identificador / etiqueta *</label><input id="matInvIdentifierInput" autocomplete="off" placeholder="Digite ou leia o código"></div>
+      <div class="field"><label>Freezer funciona? *</label><select id="matInvIdentifierWorks"><option value="">Selecione...</option><option value="SIM">Sim</option><option value="NAO">Não</option></select></div>
+      <div class="actions end"><button id="btnMatInvIdentifierAdd" type="button" class="btn secondary">+ Adicionar identificador</button></div>
+    </div>
+    <div class="list-head"><div><strong>Identificadores desta contagem</strong><small>Todos serão enviados juntos ao salvar.</small></div><span id="matInvIdentifierCounter" class="counter">0 identificadores</span></div>
+    <div id="matInvIdentifierDraftList" class="mat-id-draft-list"></div>
+  </div>`;
+  openModal(`Identificadores • ${item.material_name}`,`Saldo do sistema: ${materialNumberV171(item.system_quantity)}`,body,[{label:'Cancelar',onClick:closeModal},{label:'Salvar identificadores',class:'primary',onClick:saveMaterialInventoryIdentifiersV171}]);
+  renderMaterialInventoryIdentifierDraftV171();
+  $('btnMatInvIdentifierAdd').addEventListener('click',addMaterialInventoryIdentifierV171);
+  $('matInvIdentifierInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addMaterialInventoryIdentifierV171();}});
+  $('matInvIdentifierDraftList').addEventListener('click',e=>{const b=e.target.closest('[data-mat-inv-id-remove]');if(!b)return;materialInventoryIdentifierDraftV171.splice(Number(b.dataset.matInvIdRemove),1);renderMaterialInventoryIdentifierDraftV171();});
+  $('matInvIdentifierInput').focus();
+}
+
+function addMaterialInventoryIdentifierV171(){
+  const code=materialNormalizeIdentifierV171($('matInvIdentifierInput')?.value);if(!code)return toast('Informe o identificador.','error');
+  const answer=$('matInvIdentifierWorks')?.value;if(answer!=='SIM'&&answer!=='NAO')return toast('Responda “Freezer funciona?”.','error');
+  if(materialInventoryIdentifierDraftV171.some(x=>x.code===code))return toast('Este identificador já foi adicionado.','error');
+  materialInventoryIdentifierDraftV171.push({code,works:answer==='SIM'});$('matInvIdentifierInput').value='';$('matInvIdentifierWorks').value='';renderMaterialInventoryIdentifierDraftV171();$('matInvIdentifierInput').focus();
+}
+
+async function saveMaterialInventoryIdentifiersV171(){
+  const item=materialInventoryIdentifierItemV171;if(!item||!materialInventoryActiveV171)return;
+  const rowJust=document.querySelector(`[data-mat-inv-just="${materialCssEscapeV171(item.id)}"]`);const justification=String(rowJust?.value||item.justification||'').trim();
+  try{
+    const {error}=await sb.rpc('save_material_inventory_item',{p_count_id:materialInventoryActiveV171.id,p_material_id:item.material_id,p_counted_quantity:materialInventoryIdentifierDraftV171.length,p_justification:justification,p_identifiers:materialInventoryIdentifierDraftV171});if(error)throw error;
+    closeModal();toast('Identificadores salvos na contagem.','success');await loadMaterialInventoryV171(true);
+  }catch(e){toast(materialHumanErrorV171(e),'error');}
+}
+
+async function loadMaterialInventoryHistoryV171(silent=false){
+  if(!sb||!hasPerm('MATERIAL_INVENTORY')||!activeUnit)return;
+  try{
+    const {data,error}=await sb.from('material_inventory_counts').select('*').eq('unit',activeUnit).neq('status','IN_PROGRESS').order('started_at',{ascending:false}).limit(100);if(error)throw error;
+    materialInventoryHistoryV171=data||[];
+    const ids=materialInventoryHistoryV171.map(x=>x.id);let items=[];
+    if(ids.length){const res=await sb.from('material_inventory_items').select('id,count_id,difference,counted_quantity,system_quantity').in('count_id',ids);if(res.error)throw res.error;items=res.data||[];}
+    renderMaterialInventoryHistoryV171(items);
+  }catch(e){if(!silent)toast(materialHumanErrorV171(e),'error');}
+}
+
+function renderMaterialInventoryHistoryV171(items=[]){
+  const body=$('tbodyMaterialInventoryHistory');if(!body)return;
+  const q=String($('matInvHistorySearch')?.value||'').trim().toLowerCase();
+  const status=String($('matInvHistoryStatus')?.value||'');
+  const rows=materialInventoryHistoryV171.filter(c=>{if(status&&c.status!==status)return false;if(q&&!`${c.count_code||''} ${c.counter_name||''}`.toLowerCase().includes(q))return false;return true;});
+  body.innerHTML=rows.length?rows.map(c=>{const its=items.filter(x=>String(x.count_id)===String(c.id));const diff=its.reduce((s,x)=>s+materialNumberV171(x.difference),0);const differences=its.filter(x=>materialNumberV171(x.difference)!==0).length;return `<tr>
+    <td><strong>${esc(c.count_code)}</strong></td><td>${materialFmtDateV171(c.count_date||c.started_at)}</td><td>${esc(c.counter_name||'—')}</td>
+    <td>${c.status==='FINALIZED'?'<span class="mat-badge ok">Finalizado</span>':'<span class="mat-badge neutral">Cancelado</span>'}</td>
+    <td>${its.length}</td><td class="${diff===0?'mat-zero':diff>0?'mat-positive':'mat-negative'}"><strong>${materialSignedV171(diff)}</strong><small>${differences} material${differences===1?'':'is'} com diferença</small></td>
+    <td>${materialFmtDateTimeV171(c.finalized_at||c.cancelled_at||c.started_at)}</td>
+    <td><button type="button" class="btn secondary compact" data-mat-inv-history="${esc(c.id)}">Ver detalhes</button></td>
+  </tr>`;}).join(''):'<tr><td colspan="8"><div class="empty-state">Nenhum inventário finalizado.</div></td></tr>';
+}
+
+async function openMaterialInventoryHistoryV171(countId){
+  const count=materialInventoryHistoryV171.find(x=>String(x.id)===String(countId));if(!count)return;
+  try{
+    const [itemsRes,idsRes]=await Promise.all([
+      sb.from('material_inventory_items').select('*').eq('count_id',countId).order('material_name'),
+      sb.from('material_inventory_identifiers').select('*').eq('count_id',countId).order('identifier_code')
+    ]);
+    if(itemsRes.error)throw itemsRes.error;if(idsRes.error)throw idsRes.error;
+    const items=itemsRes.data||[],ids=idsRes.data||[];
+    const body=`<div class="mat-history-summary"><strong>${esc(count.count_code)}</strong><span>${esc(count.unit)} • ${esc(count.counter_name||'—')} • ${materialFmtDateTimeV171(count.finalized_at||count.started_at)}</span></div><div class="table-wrap"><table><thead><tr><th>Material</th><th>Sistema</th><th>Físico</th><th>Diferença</th><th>Justificativa</th><th>Identificadores / funcionamento</th></tr></thead><tbody>${items.map(item=>{const list=ids.filter(x=>String(x.count_item_id)===String(item.id));return `<tr><td><strong>${esc(item.material_name)}</strong><small>${esc(item.material_code)}</small></td><td>${materialNumberV171(item.system_quantity)}</td><td>${item.counted_quantity===null?'—':materialNumberV171(item.counted_quantity)}</td><td class="${materialNumberV171(item.difference)===0?'mat-zero':materialNumberV171(item.difference)>0?'mat-positive':'mat-negative'}"><strong>${materialSignedV171(item.difference)}</strong></td><td>${esc(item.justification||'—')}</td><td>${item.requires_identifier?(list.length?`<div class="mat-history-ids">${list.map(x=>`<span><strong>${esc(x.identifier_code)}</strong> • Freezer funciona: ${x.works?'Sim':'Não'}</span>`).join('')}</div>`:'<span class="muted">Nenhum identificador</span>'):'—'}</td></tr>`;}).join('')}</tbody></table></div>`;
+    openModal('Detalhes do inventário',`${count.status==='FINALIZED'?'Finalizado':'Cancelado'} • ${count.unit}`,body,[{label:'Fechar',onClick:closeModal}]);
+  }catch(e){toast(materialHumanErrorV171(e),'error');}
+}
+
+function onMaterialInventoryTableClickV171(e){
+  const ids=e.target.closest('[data-mat-inv-ids]');if(ids)return openMaterialInventoryIdentifiersV171(ids.dataset.matInvIds);
+  const save=e.target.closest('[data-mat-inv-save]');if(save){const item=materialInventoryItemsV171.find(x=>String(x.id)===String(save.dataset.matInvSave));if(!item)return;save.disabled=true;save.textContent='Salvando…';saveMaterialInventoryItemV171(item).then(()=>loadMaterialInventoryV171(true)).catch(err=>toast(materialHumanErrorV171(err),'error')).finally(()=>{save.disabled=false;save.textContent='Salvar';});}
+}
+
+async function materialOnViewV171(name){
+  if(name==='materiais-contagem')await loadMaterialInventoryV171();
+  if(name==='materiais-estoque')await loadMaterialStockV171();
+  if(name==='materiais-cadastro')await loadMaterialsCatalogV171();
+  if(name==='materiais-movimentacoes')await loadMaterialMovementsV171();
+}
+
+
+function bindMaterialsV171(){
+  if(materialEventsBoundV171)return;
+  if(!$('formMaterialCadastro')&&!$('formMaterialMovement'))return;
+  materialEventsBoundV171=true;
+  $('formMaterialCadastro')?.addEventListener('submit',submitMaterialCatalogV171);
+  $('btnMatCadSalvar')?.addEventListener('click',e=>{console.log('[MATERIAIS][FIX7] clique salvar');submitMaterialCatalogV171(e);});
+  $('btnMatCadNew')?.addEventListener('click',clearMaterialFormV171);
+  $('matCadSearch')?.addEventListener('input',renderMaterialCatalogV171);
+  $('matCadStatus')?.addEventListener('change',renderMaterialCatalogV171);
+  $('tbodyMaterialsCatalog')?.addEventListener('click',e=>{const b=e.target.closest('[data-mat-edit]');if(b)editMaterialV171(b.dataset.matEdit);});
+  $('matStockSearch')?.addEventListener('input',renderMaterialStockV171);
+  $('matStockTracking')?.addEventListener('change',renderMaterialStockV171);
+  $('matStockStatus')?.addEventListener('change',renderMaterialStockV171);
+  $('btnMatStockRefresh')?.addEventListener('click',()=>loadMaterialStockV171());
+  $('tbodyMaterialsStock')?.addEventListener('click',e=>{const ids=e.target.closest('[data-mat-stock-ids]');if(ids)return openMaterialStockIdentifiersV171(ids.dataset.matStockIds);const move=e.target.closest('[data-mat-stock-move]');if(move)return openMaterialMovementForV171(move.dataset.matStockMove,move.dataset.type);});
+  $('formMaterialMovement')?.addEventListener('submit',submitMaterialMovementV171);
+  $('matMoveMaterial')?.addEventListener('change',()=>{materialMoveIdentifierDraftV171=[];renderMaterialMoveIdentifierDraftV171();updateMaterialMovementModeV171();});
+  $('matMoveType')?.addEventListener('change',()=>{materialMoveIdentifierDraftV171=[];renderMaterialMoveIdentifierDraftV171();updateMaterialMovementModeV171();});
+  $('btnMatMoveIdentifierAdd')?.addEventListener('click',addMaterialMoveIdentifierV171);
+  $('matMoveIdentifier')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addMaterialMoveIdentifierV171();}});
+  $('matMoveIdentifierList')?.addEventListener('click',e=>{const b=e.target.closest('[data-mat-move-id-remove]');if(!b)return;materialMoveIdentifierDraftV171.splice(Number(b.dataset.matMoveIdRemove),1);renderMaterialMoveIdentifierDraftV171();});
+  $('matMoveSearch')?.addEventListener('input',renderMaterialMovementsV171);
+  $('matMoveFilterType')?.addEventListener('change',renderMaterialMovementsV171);
+  $('matMoveFilterMaterial')?.addEventListener('change',renderMaterialMovementsV171);
+  $('btnMatMoveRefresh')?.addEventListener('click',()=>loadMaterialMovementsV171());
+  $('tbodyMaterialMovements')?.addEventListener('click',e=>{const b=e.target.closest('[data-mat-move-ids]');if(b)openMaterialMovementIdentifiersV171(b.dataset.matMoveIds);});
+  $('btnMatInvStart')?.addEventListener('click',startMaterialInventoryV171);
+  $('btnMatInvRefresh')?.addEventListener('click',()=>loadMaterialInventoryV171());
+  $('btnMatInvFinish')?.addEventListener('click',finalizeMaterialInventoryV171);
+  $('btnMatInvCancel')?.addEventListener('click',cancelMaterialInventoryV171);
+  $('tbodyMaterialInventory')?.addEventListener('click',onMaterialInventoryTableClickV171);
+  $('tbodyMaterialInventory')?.addEventListener('input',e=>{const input=e.target.closest('[data-mat-inv-count]');if(input)updateMaterialInventoryDifferenceV171(input.dataset.matInvCount);});
+  $('matInvHistorySearch')?.addEventListener('input',()=>loadMaterialInventoryHistoryV171(true));
+  $('matInvHistoryStatus')?.addEventListener('change',()=>loadMaterialInventoryHistoryV171(true));
+  $('btnMatInvHistoryRefresh')?.addEventListener('click',()=>loadMaterialInventoryHistoryV171());
+  $('tbodyMaterialInventoryHistory')?.addEventListener('click',e=>{const b=e.target.closest('[data-mat-inv-history]');if(b)openMaterialInventoryHistoryV171(b.dataset.matInvHistory);});
+  renderMaterialMoveIdentifierDraftV171();
+  clearMaterialFormV171();
+}
+
+const openViewBeforeMaterialsV171=openView;
+openView=function(name,force=false){
+  const result=openViewBeforeMaterialsV171(name,force);
+  const view=$(`view-${name}`);
+  if(view?.classList.contains('active')&&String(name).startsWith('materiais-'))materialOnViewV171(name).catch(e=>toast(materialHumanErrorV171(e),'error'));
+  return result;
+};
+
+function scheduleBindMaterialsV171(){
+  const run=()=>{
+    bindMaterialsV171();
+    if(!materialEventsBoundV171)setTimeout(bindMaterialsV171,250);
+  };
+  if(document.readyState==='loading'){
+    window.addEventListener('DOMContentLoaded',run,{once:true});
+  }else{
+    setTimeout(run,0);
+  }
+}
+scheduleBindMaterialsV171();
+
+// V1.7.1 - PUSH_RELIABILITY_FIX4
+let pushRepairPromiseV171=null;
+let pushRepairTimerV171=null;
+
+async function pushOnlineSessionV171(){
+  if(!sb)throw new Error('SUPABASE_PUSH_INDISPONIVEL');
+  let result=await sb.auth.getSession();
+  if(result.error)throw result.error;
+  let session=result.data?.session||null;
+  if(!session?.access_token){
+    result=await sb.auth.refreshSession();
+    if(result.error)throw result.error;
+    session=result.data?.session||null;
+  }
+  if(!session?.access_token)throw new Error('SESSAO_PUSH_EXPIRADA');
+  return session;
+}
+
+savePushDeviceV170=async function(channel,data={}){
+  if(!sb)throw new Error('SUPABASE_PUSH_INDISPONIVEL');
+  if(!authUser)throw new Error('USUARIO_PUSH_NAO_AUTENTICADO');
+  if(!activeUnit)throw new Error('UNIDADE_PUSH_NAO_DEFINIDA');
+  const token=channel==='FCM'?String(data.token||'').trim():'';
+  if(channel==='FCM'&&!token)throw new Error('TOKEN_FCM_VAZIO');
+  const row={user_id:authUser.id,device_key:pushDeviceKeyV170(),channel,unit:activeUnit,subscription:channel==='WEB'?(data.subscription||null):null,fcm_token:channel==='FCM'?token:null,platform:isNativeCapacitor()?'ANDROID':'WEB',device_name:isNativeCapacitor()?'Disb Gestao Android':'Disb Gestao PWA',user_agent:String(navigator.userAgent||'').slice(0,900),active:true,last_seen_at:new Date().toISOString()};
+  const {data:saved,error}=await sb.from('push_devices').upsert(row,{onConflict:'user_id,device_key,channel'}).select('id,user_id,device_key,channel,unit,active,last_seen_at').single();
+  if(error)throw error;
+  if(!saved?.id)throw new Error('DISPOSITIVO_PUSH_NAO_GRAVADO');
+  console.log('[PUSH] Dispositivo registrado',{id:saved.id,channel:saved.channel,unit:saved.unit});
+  return true;
+};
+
+async function verifyNativePushDeviceV171(){
+  if(!isNativeCapacitor())return true;
+  await setupNativePushV170({requestPermission:false});
+  const deviceKey=pushDeviceKeyV170();
+  for(let attempt=0;attempt<5;attempt++){
+    if(attempt)await new Promise(resolve=>setTimeout(resolve,400*attempt));
+    const {data,error}=await sb.from('push_devices').select('id,unit,active,fcm_token,last_seen_at').eq('user_id',authUser.id).eq('device_key',deviceKey).eq('channel','FCM').maybeSingle();
+    if(error)throw error;
+    if(data?.id&&data.active===true&&String(data.fcm_token||'').trim()&&String(data.unit||'')===String(activeUnit||''))return data;
+  }
+  throw new Error('TOKEN_FCM_NAO_REGISTRADO');
+}
+
+refreshPushRegistrationV170=async function(){
+  if(!authUser||!activeUnit||!navigator.onLine)return false;
+  if(!hasPerm('DAMAGE_NOTIFICATION')){
+    await deactivatePushDeviceV170();
+    await updatePushButtonV170();
+    return false;
+  }
+  try{
+    await pushOnlineSessionV171();
+    const status=await pushPermissionStatusV170();
+    if(status!=='granted')return false;
+    if(isNativeCapacitor())await verifyNativePushDeviceV171();
+    else await registerWebPushV170({requestPermission:false});
+    return true;
+  }catch(e){
+    console.warn('[PUSH] Re-registro falhou',e);
+    return false;
+  }
+};
+
+dispatchDamagePushV170=async function(kind,requestId){
+  if(!sb||!authUser||!navigator.onLine||!requestId)return false;
+  try{
+    const session=await pushOnlineSessionV171();
+    const {data,error}=await sb.functions.invoke('push-notifications',{body:{action:'dispatch',kind,request_id:requestId},headers:{Authorization:`Bearer ${session.access_token}`}});
+    if(error)throw error;
+    if(data?.error)throw new Error(data.error);
+    console.log('[PUSH] Dispatch concluido',data||{});
+    return true;
+  }catch(e){
+    console.warn('[PUSH] Dispatch falhou',kind,requestId,e);
+    return false;
+  }
+};
+
+enablePushNotificationsV170=async function(){
+  try{
+    await pushOnlineSessionV171();
+    if(isNativeCapacitor()){
+      await setupNativePushV170({requestPermission:true});
+      await verifyNativePushDeviceV171();
+    }else{
+      await registerWebPushV170({requestPermission:true});
+    }
+    toast('Notificacoes externas ativadas neste dispositivo.','success');
+  }catch(e){
+    const m=String(e?.message||e||'');
+    console.warn('[PUSH] Ativacao falhou',e);
+    let msg='Nao foi possivel ativar o Push neste dispositivo.';
+    if(m.includes('NEGADA'))msg='As notificacoes estao bloqueadas. Libere a permissao nas configuracoes do dispositivo.';
+    else if(m.includes('TOKEN_FCM'))msg='O Android autorizou as notificacoes, mas o token FCM nao foi registrado. Abra o app com internet e tente novamente.';
+    else if(m.includes('SESSAO_PUSH'))msg='Sua sessao expirou. Entre novamente e ative as notificacoes.';
+    toast(msg,'error');
+  }
+  await updatePushButtonV170();
+};
+
+async function pushRepairNowV171({notify=false}={}){
+  if(!navigator.onLine||!authUser||!activeUnit||!hasPerm('DAMAGE_NOTIFICATION'))return false;
+  if(pushRepairPromiseV171)return await pushRepairPromiseV171;
+  const current=(async()=>{
+    const ok=await refreshPushRegistrationV170();
+    if(notify)toast(ok?'Push Android sincronizado.':'Push ainda nao conseguiu registrar este dispositivo.',ok?'success':'error');
+    return ok;
+  })();
+  pushRepairPromiseV171=current;
+  try{return await current;}finally{if(pushRepairPromiseV171===current)pushRepairPromiseV171=null;}
+}
+
+function schedulePushRepairV171(delay=700){
+  clearTimeout(pushRepairTimerV171);
+  pushRepairTimerV171=setTimeout(()=>pushRepairNowV171({notify:false}).catch(e=>console.warn('[PUSH] Retry',e)),delay);
+}
+
+window.addEventListener('online',()=>schedulePushRepairV171(900));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&navigator.onLine)schedulePushRepairV171(450);});
+
+const startAppBeforePushReliabilityV171=startApp;
+startApp=async function(){
+  const result=await startAppBeforePushReliabilityV171();
+  schedulePushRepairV171(900);
+  return result;
+};
 
 // V1.7.0 - OFFLINE_RECONNECT_RESYNC_V172
 
@@ -8812,3 +9578,5 @@ setInterval(
   },
   15000
 );
+
+})();

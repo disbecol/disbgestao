@@ -7,7 +7,7 @@
   <title>Disb Gestão</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=1.7.0-native-track-validade34">
+  <link rel="stylesheet" href="styles.css?v=1.7.1-materiais-final-v2">
 </head>
 <body>
   <section id="loginScreen" class="login-screen">
@@ -16,7 +16,7 @@
         <div class="login-logo"><img src="assets/icon-192.png" alt="Disb Gestão"></div>
         <span class="eyebrow light">ARMAZÉM • ENTREGA • CONFERÊNCIA</span>
         <h1>Disb Gestão</h1>
-        <p>NRI, Ativo de Giro, avarias, vendas, conferência, FEFO e Puxada em um único aplicativo.</p><div class="login-version">v1.7.0</div>
+        <p>NRI, Ativo de Giro, avarias, vendas, conferência, FEFO e Puxada em um único aplicativo.</p><div class="login-version">v1.7.1</div>
         <div class="feature-list">
           <span>✓ Cadastro por carreta e impressão de NRIs</span>
           <span>✓ Avarias de entrega e vendas com evidências</span>
@@ -43,8 +43,8 @@
 
   <div id="appShell" class="app-shell hidden">
     <aside id="sidebar" class="sidebar">
-      <div class="brand-row"><div class="brand-box"><img src="assets/icon-192.png" alt="Disb Gestão"></div><div><strong>Disb Gestão</strong><span>Supabase • tempo real</span></div></div><div class="app-version-badge">v1.7.0</div>
-      <div class="nav-area open" data-area="armazem" data-permission-any="NRI_PENDING_VIEW,MARKETPLACE_RECEIVE,NRI_CREATE,NRI_PRINT,NRI_HISTORY,NRI_DAMAGE_HISTORY,CONF_CREATE,CONF_OWN_HISTORY,CONF_HISTORY,CONF_DASHBOARD,FEFO_CREATE,FEFO_ACTIVE,FEFO_REPORT,ROTATING_ASSET_CREATE,ROTATING_ASSET_HISTORY">
+      <div class="brand-row"><div class="brand-box"><img src="assets/icon-192.png" alt="Disb Gestão"></div><div><strong>Disb Gestão</strong><span>Supabase • tempo real</span></div></div><div class="app-version-badge">v1.7.1</div>
+      <div class="nav-area open" data-area="armazem" data-permission-any="NRI_PENDING_VIEW,MARKETPLACE_RECEIVE,NRI_CREATE,NRI_PRINT,NRI_HISTORY,NRI_DAMAGE_HISTORY,CONF_CREATE,CONF_OWN_HISTORY,CONF_HISTORY,CONF_DASHBOARD,FEFO_CREATE,FEFO_ACTIVE,FEFO_REPORT,ROTATING_ASSET_CREATE,ROTATING_ASSET_HISTORY,MATERIAL_INVENTORY,MATERIAL_STOCK_VIEW,MATERIAL_CATALOG,MATERIAL_MOVEMENT">
         <button type="button" class="nav-area-toggle" aria-expanded="true"><span class="area-icon">▦</span><span class="area-name">Armazém</span><span class="area-chevron">⌄</span></button>
         <div class="nav-area-items">
           <div class="nav-module role-nri open" data-module="nri" data-permission-any="NRI_PENDING_VIEW,MARKETPLACE_RECEIVE,NRI_CREATE,NRI_PRINT,NRI_HISTORY,NRI_DAMAGE_HISTORY">
@@ -82,7 +82,17 @@
               <button class="nav-item role-rotating-asset" data-view="ativo-giro-historico" data-permission="ROTATING_ASSET_HISTORY"><span>▤</span>Histórico / Totais</button>
             </div>
           </div>
-        </div>
+        <!-- V1.7.1 - MATERIAIS / ARMAZEM -->
+          <div class="nav-module role-materials" data-module="materiais" data-permission-any="MATERIAL_INVENTORY,MATERIAL_STOCK_VIEW,MATERIAL_CATALOG,MATERIAL_MOVEMENT">
+            <button type="button" class="nav-module-toggle" aria-expanded="false"><span class="module-icon">▧</span><span class="module-name">Materiais</span><span class="module-chevron">⌄</span></button>
+            <div class="nav-module-items">
+              <button class="nav-item role-materials" data-view="materiais-contagem" data-permission="MATERIAL_INVENTORY"><span>✓</span>Contagem</button>
+              <button class="nav-item role-materials" data-view="materiais-estoque" data-permission="MATERIAL_STOCK_VIEW"><span>▤</span>Estoque</button>
+              <button class="nav-item role-materials" data-view="materiais-cadastro" data-permission="MATERIAL_CATALOG"><span>＋</span>Cadastro de Materiais</button>
+              <button class="nav-item role-materials" data-view="materiais-movimentacoes" data-permission="MATERIAL_MOVEMENT"><span>↺</span>Movimentação do estoque</button>
+            </div>
+          </div>
+          </div>
       </div>
 
       <div class="nav-area" data-area="entrega" data-permission-any="DELIVERY_DAMAGE_CREATE,DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST">
@@ -542,6 +552,105 @@
         <div class="card"><div class="section-title">Etapas principais e ocorrências</div><form id="formPullStep"><input id="pullStepId" type="hidden"><div class="grid grid-4"><div class="field"><label>Nome *</label><input id="pullStepName" required></div><div class="field"><label>Tipo *</label><select id="pullStepType"><option value="MAIN">Etapa principal</option><option value="OCCURRENCE">Ocorrência</option></select></div><div class="field"><label>Fluxo *</label><select id="pullStepFlow"><option value="PULL">Puxada</option><option value="TRANSFER">Transferência</option><option value="BOTH">Ambos</option></select></div><div class="field"><label>Código de ação *</label><input id="pullStepCode" placeholder="GENERAL_..." required></div><div class="field"><label>Ordem *</label><input id="pullStepOrder" type="number" required></div><div class="field"><label>Duração</label><select id="pullStepDuration"><option value="POINT">Pontual</option><option value="INTERVAL">Início / fim</option></select></div><div class="field"><label>Motorista responsável *</label><select id="pullStepExecutor"><option value="1">Motorista 1</option><option value="2">Motorista 2</option></select><small id="pullStepExecutorNote">Escolha quem deve registrar esta etapa.</small></div><label class="check"><input id="pullStepGeofence" type="checkbox"> Auditar raio da fábrica</label><label class="check"><input id="pullStepDiscount" type="checkbox"> Sugerir desconto no TMA</label><label class="check"><input id="pullStepActive" type="checkbox" checked> Ativa</label></div><div class="actions right"><button id="btnPullStepNew" type="button" class="btn secondary">Nova</button><button class="btn primary">Salvar</button></div></form><div class="table-wrap"><table><thead><tr><th>Ordem</th><th>Nome</th><th>Tipo</th><th>Fluxo</th><th>Responsável</th><th>Ação</th><th>Regras</th><th>Status</th><th>Ação</th></tr></thead><tbody id="tbodyPullSteps"></tbody></table></div></div>
       </section>
 
+      <!-- V1.7.1 - MATERIAIS / ARMAZEM -->
+      <section id="view-materiais-contagem" class="view role-materials" data-permission="MATERIAL_INVENTORY">
+        <div class="page-head"><div><div class="breadcrumb">Armazém / Materiais</div><h1>Contagem de inventário</h1><p>Compare o saldo do sistema com a contagem física. Materiais com identificação individual registram cada etiqueta e o funcionamento do freezer.</p></div><span class="page-chip">MATERIAIS</span></div>
+
+        <div id="matInventoryEmpty" class="card mat-start-card">
+          <div class="notice compact"><strong>Como funciona:</strong> informe a quantidade física encontrada. Para materiais com controle individual, registre cada identificador; a quantidade será calculada pelos códigos informados. Diferenças exigem justificativa ao finalizar.</div>
+          <div class="grid grid-3">
+            <div class="field"><label>Unidade</label><input id="matInvStartUnit" readonly></div>
+            <div class="field"><label>Conferente</label><input id="matInvStartUser" readonly></div>
+            <div class="actions end"><button id="btnMatInvStart" type="button" class="btn primary">Iniciar contagem</button></div>
+          </div>
+        </div>
+
+        <div id="matInventoryActive" class="hidden">
+          <div class="card mat-active-head">
+            <div><span class="eyebrow">CONTAGEM EM ANDAMENTO</span><h2 id="matInvCode">MAT-INV-000000</h2><p id="matInvSummary">—</p></div>
+            <div class="actions"><button id="btnMatInvRefresh" type="button" class="btn secondary">Atualizar</button><button id="btnMatInvCancel" type="button" class="btn danger">Cancelar</button><button id="btnMatInvFinish" type="button" class="btn primary">Finalizar contagem</button></div>
+          </div>
+          <div class="card">
+            <div class="notice compact"><strong>Identificadores:</strong> em freezers, use <strong>Informar identificadores</strong>. Cada código precisa da resposta <strong>“Freezer funciona?”</strong>. Todos os identificadores do material são enviados juntos.</div>
+            <div class="table-wrap"><table class="mat-inventory-table"><thead><tr><th>Material</th><th>Controle</th><th>Saldo sistema</th><th>Contagem física</th><th>Diferença</th><th>Justificativa</th><th>Ação</th></tr></thead><tbody id="tbodyMaterialInventory"></tbody></table></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="list-head"><div><strong>Histórico de inventários</strong><small>Consulte saldos, diferenças, justificativas e identificadores registrados.</small></div><button id="btnMatInvHistoryRefresh" type="button" class="btn secondary">Atualizar</button></div>
+          <div class="grid grid-3 filters"><div class="field span-2"><label>Pesquisar</label><input id="matInvHistorySearch" placeholder="Contagem ou conferente"></div><div class="field"><label>Status</label><select id="matInvHistoryStatus"><option value="">Todos</option><option value="FINALIZED">Finalizados</option><option value="CANCELLED">Cancelados</option></select></div></div>
+          <div class="table-wrap"><table><thead><tr><th>Contagem</th><th>Data</th><th>Conferente</th><th>Status</th><th>Materiais</th><th>Diferença</th><th>Encerramento</th><th>Ação</th></tr></thead><tbody id="tbodyMaterialInventoryHistory"></tbody></table></div>
+        </div>
+      </section>
+
+      <section id="view-materiais-estoque" class="view role-materials" data-permission="MATERIAL_STOCK_VIEW">
+        <div class="page-head"><div><div class="breadcrumb">Armazém / Materiais</div><h1>Estoque de Materiais</h1><p>Saldo físico por material e unidade, com rastreabilidade individual dos freezers e status de funcionamento.</p></div><span class="page-chip">ESTOQUE</span></div>
+        <div class="mat-kpi-grid">
+          <div class="mat-kpi"><small>Materiais ativos</small><strong id="matKpiItems">0</strong><span>Itens cadastrados</span></div>
+          <div class="mat-kpi"><small>Unidades em estoque</small><strong id="matKpiUnits">0</strong><span>Saldo físico</span></div>
+          <div class="mat-kpi"><small>Identificados</small><strong id="matKpiTracked">0</strong><span>Etiquetas em estoque</span></div>
+          <div class="mat-kpi"><small>Freezers com problema</small><strong id="matKpiNotWorking">0</strong><span>Marcados como “Não funciona”</span></div>
+        </div>
+        <div class="card">
+          <div class="list-head"><div><strong>Estoque atual</strong><small>Entradas, saídas e inventários atualizam este saldo.</small></div><button id="btnMatStockRefresh" type="button" class="btn secondary">Atualizar</button></div>
+          <div class="grid grid-4 filters"><div class="field span-2"><label>Pesquisar</label><input id="matStockSearch" placeholder="Nome, código ou categoria"></div><div class="field"><label>Controle</label><select id="matStockTracking"><option value="">Todos</option><option value="SERIAL">Com identificador</option><option value="QTY">Por quantidade</option></select></div><div class="field"><label>Situação</label><select id="matStockStatus"><option value="">Todos</option><option value="NORMAL">Normal</option><option value="LOW">Estoque baixo</option><option value="ZERO">Sem estoque</option></select></div></div>
+          <div class="table-wrap"><table><thead><tr><th>Código</th><th>Material</th><th>Unidade</th><th>Estoque atual</th><th>Mínimo</th><th>Situação</th><th>Identificadores</th><th>Ações</th></tr></thead><tbody id="tbodyMaterialsStock"></tbody></table></div>
+        </div>
+      </section>
+
+      <section id="view-materiais-cadastro" class="view role-materials" data-permission="MATERIAL_CATALOG">
+        <div class="page-head"><div><div class="breadcrumb">Armazém / Materiais</div><h1>Cadastro de Materiais</h1><p>Cadastre os materiais controlados no estoque. Ative o identificador individual para freezers e outros ativos etiquetados.</p></div><span class="page-chip">CADASTRO</span></div>
+        <div class="card mat-form-card">
+          <form id="formMaterialCadastro">
+            <input id="matCadId" type="hidden">
+            <div class="grid grid-4">
+              <div class="field"><label>Código</label><input id="matCadCodigo" value="Gerado automaticamente" readonly></div>
+              <div class="field span-2"><label>Material *</label><input id="matCadNome" required placeholder="Ex.: FREEZER PORTA CEGA BRAHMA"></div>
+              <div class="field"><label>Categoria</label><input id="matCadCategoria" placeholder="Ex.: Freezer, Mesa, Material promocional"></div>
+              <div class="field"><label>Unidade de estoque *</label><select id="matCadUnidade"><option value="UNIDADE">UNIDADE</option><option value="CONJUNTO">CONJUNTO</option><option value="PECA">PEÇA</option><option value="CAIXA">CAIXA</option></select></div>
+              <div class="field"><label>Estoque mínimo</label><input id="matCadMinimo" type="number" min="0" step="1" value="0"></div>
+              <label class="check mat-check"><input id="matCadIdentificador" type="checkbox"> Controle individual por identificador/etiqueta</label>
+              <label class="check mat-check"><input id="matCadAtivo" type="checkbox" checked> Material ativo</label>
+              <div class="field span-4"><label>Observações</label><textarea id="matCadObs" rows="2" placeholder="Informações adicionais do material"></textarea></div>
+            </div>
+            <div class="actions right"><button id="btnMatCadNew" type="button" class="btn secondary">Novo</button><button id="btnMatCadSalvar" type="button" class="btn primary">Salvar material</button></div>
+          </form>
+        </div>
+        <div class="card">
+          <div class="grid grid-4 filters"><div class="field span-3"><label>Pesquisar</label><input id="matCadSearch" placeholder="Nome, código ou categoria"></div><div class="field"><label>Status</label><select id="matCadStatus"><option value="">Todos</option><option value="ACTIVE">Ativos</option><option value="INACTIVE">Inativos</option></select></div></div>
+          <div class="table-wrap"><table><thead><tr><th>Código</th><th>Material</th><th>Categoria</th><th>Unidade</th><th>Controle</th><th>Mínimo</th><th>Status</th><th>Ação</th></tr></thead><tbody id="tbodyMaterialsCatalog"></tbody></table></div>
+        </div>
+      </section>
+
+      <section id="view-materiais-movimentacoes" class="view role-materials" data-permission="MATERIAL_MOVEMENT">
+        <div class="page-head"><div><div class="breadcrumb">Armazém / Materiais</div><h1>Movimentações do estoque</h1><p>Registre entradas e saídas manuais com justificativa e consulte o histórico completo.</p></div><span class="page-chip">MOVIMENTAÇÕES</span></div>
+        <div class="card mat-form-card">
+          <form id="formMaterialMovement">
+            <div class="grid grid-4">
+              <div class="field span-2"><label>Material *</label><select id="matMoveMaterial" required><option value="">Selecione...</option></select></div>
+              <div class="field"><label>Tipo *</label><select id="matMoveType"><option value="ENTRY">Entrada</option><option value="EXIT">Saída</option></select></div>
+              <div class="field"><label>Quantidade *</label><input id="matMoveQuantity" type="number" min="1" step="1" required></div>
+              <div class="field span-4"><label>Justificativa *</label><textarea id="matMoveJustification" rows="2" required placeholder="Informe o motivo da entrada ou saída"></textarea></div>
+            </div>
+            <div id="matMoveIdentifiersBox" class="mat-identifier-box hidden">
+              <div class="notice compact"><strong>Material identificado:</strong> adicione uma etiqueta por unidade. A quantidade será preenchida automaticamente.</div>
+              <div class="grid grid-3 mat-id-entry-grid">
+                <div class="field"><label>Identificador / etiqueta *</label><input id="matMoveIdentifier" autocomplete="off" placeholder="Digite ou leia o código"></div>
+                <div id="matMoveWorksWrap" class="field"><label>Freezer funciona? *</label><select id="matMoveWorks"><option value="">Selecione...</option><option value="SIM">Sim</option><option value="NAO">Não</option></select></div>
+                <div class="actions end"><button id="btnMatMoveIdentifierAdd" type="button" class="btn secondary">+ Adicionar identificador</button></div>
+              </div>
+              <div id="matMoveIdentifierList" class="mat-id-chip-list"><span class="mat-empty-inline">Nenhum identificador adicionado.</span></div>
+            </div>
+            <div class="actions right"><button id="btnMatMoveSave" type="submit" class="btn primary">Registrar movimentação</button></div>
+          </form>
+        </div>
+        <div class="card">
+          <div class="list-head"><div><strong>Histórico de movimentações</strong><small>Entradas, saídas e ajustes originados por inventário.</small></div><button id="btnMatMoveRefresh" type="button" class="btn secondary">Atualizar</button></div>
+          <div class="grid grid-4 filters"><div class="field span-2"><label>Pesquisar</label><input id="matMoveSearch" placeholder="Material, código, usuário ou justificativa"></div><div class="field"><label>Tipo</label><select id="matMoveFilterType"><option value="">Todos</option><option value="ENTRY">Entrada</option><option value="EXIT">Saída</option><option value="INVENTORY_ADJUSTMENT">Ajuste de inventário</option></select></div><div class="field"><label>Material</label><select id="matMoveFilterMaterial"><option value="">Todos</option></select></div></div>
+          <div class="table-wrap"><table><thead><tr><th>Data/Hora</th><th>Tipo</th><th>Material</th><th>Quantidade</th><th>Saldo após</th><th>Usuário</th><th>Justificativa</th><th>Identificadores</th></tr></thead><tbody id="tbodyMaterialMovements"></tbody></table></div>
+        </div>
+      </section>
+
       <!-- USERS -->
       <!-- ATIVO DE GIRO -->
       <section id="view-ativo-giro-contagem" class="view role-rotating-asset" data-permission="ROTATING_ASSET_CREATE">
@@ -632,6 +741,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="config.js?v=1.7.0"></script>
-  <script src="app.js?v=1.7.0-native-track-validade34"></script>
+  <script src="app.js?v=1.7.1-materiais-final-v2"></script>
 </body>
 </html>

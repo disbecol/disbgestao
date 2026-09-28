@@ -1,1 +1,1 @@
-v1.7.0 - Push Notifications externas para novas avarias no PWA/Windows e APK Android, com registro de dispositivos e envio remoto.
+v1.7.1 - Materiais final: cadastro/estoque/movimentacoes/inventario; corrige escopo Offline Resync, preserva Push Android FCM e remove patches de versao duplicados.
