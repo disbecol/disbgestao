@@ -1,6 +1,6 @@
 -- PASSO 1: no Supabase Dashboard, abra Authentication > Users > Add user.
 -- E-mail: marcelo@disbecol.app
--- Senha: Marcelo123
+-- Senha: crie uma senha forte e exclusiva; nunca use uma senha publicada no repositório.
 -- Marque o e-mail como confirmado.
 --
 -- PASSO 2: depois execute somente este SQL para promover o perfil criado a ADMIN.

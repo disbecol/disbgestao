@@ -64,7 +64,7 @@ No **SQL Editor**, execute:
 Depois crie o primeiro usuário em **Authentication > Users > Add user**:
 
 - e-mail: `marcelo@disbecol.app`
-- senha: `Marcelo123`
+- senha: gere uma senha forte e exclusiva no gerenciador de senhas; não use uma senha de exemplo
 - e-mail confirmado: sim
 
 Em seguida execute:
@@ -72,6 +72,13 @@ Em seguida execute:
 `supabase/02_primeiro_admin.sql`
 
 Isso promove Marcelo para ADMIN.
+
+Depois aplique, em ordem numérica, as migrações de `supabase/06_*.sql` até
+`supabase/37_*.sql`. O arquivo `schema.sql` contém a base inicial; os módulos
+mais recentes, incluindo Materiais, permissões e notificações, são criados
+pelas migrações. O arquivo `03_dados_exemplo_opcional.sql` é apenas para testes.
+
+Se uma instalação anterior usou a senha que constava nesta documentação, troque-a no Supabase Auth antes de continuar. Remover o exemplo do repositório não altera uma senha já cadastrada.
 
 ## 2. Implantar a função de Gestão de Usuários
 
@@ -90,6 +97,15 @@ O código está em:
 `supabase/functions/admin-users/index.ts`
 
 O domínio interno padrão é `disbecol.app`. Não é necessário possuir esse domínio: ele é usado apenas como e-mail técnico interno do Supabase Auth.
+
+Para atualizar uma instalação que já está na v1.7.0, aplique as migrações
+`35_v1_7_1_materiais.sql`, `36_security_unit_scope.sql` e
+`37_fefo_offline_unit_scope.sql` nessa ordem e implante a função de push
+atualizada:
+
+```bash
+supabase functions deploy push-notifications
+```
 
 ## 3. Configurar o site
 

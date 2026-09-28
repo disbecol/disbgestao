@@ -1029,3 +1029,44 @@ button[data-sales-delivered]:hover{
 .empty-state.small{padding:12px}
 @media(max-width:1100px){.mat-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.mat-active-head{align-items:flex-start;flex-direction:column}}
 @media(max-width:700px){.mat-kpi-grid{grid-template-columns:1fr 1fr;gap:9px}.mat-kpi{padding:13px;min-height:98px}.mat-kpi strong{font-size:24px}.mat-id-entry-grid{grid-template-columns:1fr!important}.mat-actions{min-width:160px}.mat-just-input{min-width:180px}.mat-active-head .actions{width:100%;justify-content:flex-start}}
+/* Etapas de aprovação de avarias: uma decisão por vez, com contexto acessível. */
+.damage-review-workspace .damage-stage-hidden,.damage-review-workspace [hidden],.modal-actions[hidden],.modal-actions .btn[hidden]{display:none!important}
+.damage-stage-nav{display:flex;gap:8px;overflow-x:auto;margin:0 0 8px;padding:2px 1px 8px;scrollbar-width:thin}
+.damage-stage-tab{display:inline-flex;align-items:center;justify-content:space-between;gap:10px;flex:0 0 auto;min-height:42px;padding:9px 12px;border:1px solid #d7e3ec;border-radius:11px;background:#fff;color:#4f6477;font-size:11px;font-weight:800;cursor:pointer}
+.damage-stage-tab b{display:grid;place-items:center;min-width:21px;height:21px;padding:0 5px;border-radius:7px;background:#edf3f7;color:#526b7f;font-size:10px}
+.damage-stage-tab.active{border-color:#2475b8;background:#eaf5ff;color:#135c96;box-shadow:0 0 0 1px #2475b8 inset}
+.damage-stage-tab.active b{background:#d1eaff;color:#0f5d98}
+.damage-stage-intro{margin:2px 0 12px;color:#5b7184;font-size:11px;line-height:1.45}
+.damage-request-context{margin:0 0 12px;border:1px solid #e0e9f0;border-radius:11px;background:#fafcfe}
+.damage-request-context>summary{padding:10px 12px;color:#42637c;font-size:10px;font-weight:850;cursor:pointer}
+.damage-request-context .damage-request-grid{padding:0 11px 11px;margin:0}
+.damage-review-workspace .damage-admin-item{margin-bottom:12px;border:1px solid #dce6ee;border-radius:13px;box-shadow:0 3px 12px rgba(21,52,78,.045)}
+.damage-review-workspace .damage-product-head{background:#fff;padding:11px 12px}
+.damage-review-workspace .damage-summary-grid{gap:6px;padding:9px 12px}
+.damage-review-workspace .damage-summary-grid>div{padding:7px 8px;background:#f8fafc}
+.damage-review-workspace .sales-proof-multi{flex-wrap:nowrap;overflow-x:auto;padding:0 12px 12px;scrollbar-width:thin}
+.damage-review-workspace .sales-proof-multi a{flex:0 0 142px;display:block;padding:6px;min-width:0}
+.damage-review-workspace .sales-proof-multi img{width:100%;height:90px;object-fit:cover}
+.damage-review-workspace .sales-proof-multi span{display:block;margin-top:5px;font-size:9px;line-height:1.35;overflow-wrap:anywhere}
+.damage-review-workspace .sales-launch-action{display:none}
+.damage-decision-history{margin:0 12px 12px;border:1px solid #e2eaf0;border-radius:9px;background:#fafcfe}
+.damage-decision-history>summary{padding:9px 11px;color:#42647c;font-size:10px;font-weight:800;cursor:pointer}
+.damage-decision-history>.sales-decision{margin:0 10px 9px}
+.damage-map-link{display:inline-block;margin:8px 0 3px;color:#145d96;font-size:10px;font-weight:800;text-decoration:underline}
+.damage-review-workspace .damage-selection-bar{border:1px solid #cfe3f1;background:#f0f8ff}
+.damage-review-workspace .sales-review-justification{margin-bottom:12px}
+.damage-review-workspace .signature-details{margin-bottom:12px}
+.damage-stage-tab:focus-visible,.damage-request-context>summary:focus-visible,.damage-decision-history>summary:focus-visible,.damage-review-workspace button:focus-visible,.damage-review-workspace input:focus-visible{outline:3px solid #f6ae2d;outline-offset:2px}
+@media(max-width:640px){.damage-stage-tab{min-height:44px}.damage-review-workspace .damage-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.damage-review-workspace .sales-proof-multi a{flex-basis:130px}.damage-review-workspace .damage-product-head strong{font-size:11px}}
+
+/* Leitura e navegação consistentes nas telas de cadastro, consulta e gestão. */
+.page-head p{line-height:1.5}
+.table-wrap th{font-size:10px!important;line-height:1.35}
+.table-wrap td{font-size:11.5px;line-height:1.4}
+.table-wrap{overscroll-behavior-inline:contain}
+.mini-btn{min-height:32px;line-height:1.25}
+:where(.nav-item,.btn,.mini-btn,.menu-btn,.notification-toggle,input,select,textarea,a):focus-visible{outline:3px solid #f6ae2d;outline-offset:2px}
+.mat-catalog-feedback{margin-top:12px;padding:11px 13px;border:1px solid #cbdff0;border-radius:10px;background:#f4f9fd;color:#1f5b86;font-size:12px;font-weight:750;line-height:1.4}
+.mat-catalog-feedback.hidden{display:none}
+.mat-catalog-feedback.success{border-color:#b9dfc8;background:#f0faf4;color:#16663f}
+.mat-catalog-feedback.error{border-color:#edc5c5;background:#fff4f4;color:#a92d2d}

@@ -173,6 +173,16 @@ async function loadRecipients(admin: ReturnType<typeof createClient>, kind: Dama
   if (!devices.length) return [] as Array<PushDevice & { view: string }>;
 
   const userIds = [...new Set(devices.map(d => d.user_id))];
+  // O cadastro do dispositivo pode ser anterior a uma revogacao de acesso.
+  // Confira o vinculo no envio para nao expor avarias de outra unidade.
+  const [unitResult, accessResult] = await Promise.all([
+    admin.from('units').select('name').eq('name', unit).eq('active', true).maybeSingle(),
+    admin.from('user_units').select('user_id').eq('unit_name', unit).in('user_id', userIds),
+  ]);
+  if (unitResult.error) throw unitResult.error;
+  if (accessResult.error) throw accessResult.error;
+  if (!unitResult.data) return [] as Array<PushDevice & { view: string }>;
+  const allowedUsers = new Set((accessResult.data || []).map(row => row.user_id));
   const { data: profileRows, error: profileError } = await admin
     .from('profiles')
     .select('id,role,active')
@@ -201,6 +211,7 @@ async function loadRecipients(admin: ReturnType<typeof createClient>, kind: Dama
   const profileById = new Map(profiles.map(p => [p.id, p]));
   const recipients: Array<PushDevice & { view: string }> = [];
   for (const device of devices) {
+    if (!allowedUsers.has(device.user_id)) continue;
     const profile = profileById.get(device.user_id);
     if (!profile) continue;
     const decision = recipientDecision(kind, profile, creatorId, rolePermissions, explicitPermissions);

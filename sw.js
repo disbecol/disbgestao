@@ -1,22 +1,49 @@
-const CACHE='disb-gestao-1.7.1-materiais-final-v2';
-const STATIC=['./','index.html','styles.css?v=1.7.1-materiais-final-v2','app.js?v=1.7.1-materiais-final-v2','config.js?v=1.7.0','manifest.webmanifest','assets/icon-192.png','assets/icon-512.png'];
+const CACHE='disb-gestao-v1.7.1-static-cache-only';
+const IMAGE_CACHE=`${CACHE}-images`;
+const IMAGE_CACHE_LIMIT=200;
+const STATIC=['./','index.html','styles.css?v=1.7.1-review-unit-scope','app.js?v=1.7.1-review-unit-scope','config.js?v=1.7.0','manifest.webmanifest','assets/icon-192.png','assets/icon-512.png'];
+const STATIC_URLS=new Set(STATIC.map(path=>new URL(path,self.registration.scope).href));
+const EXTERNAL_STATIC_URLS=new Set(['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2','https://unpkg.com/leaflet@1.9.4/dist/leaflet.css','https://unpkg.com/leaflet@1.9.4/dist/leaflet.js']);
+const IMAGE_PATHS=['assets/','imagens_produtos/'].map(path=>new URL(path,self.registration.scope).pathname);
 
 self.addEventListener('install',e=>e.waitUntil(
   caches.open(CACHE).then(c=>c.addAll(STATIC)).then(()=>self.skipWaiting())
 ));
 
 self.addEventListener('activate',e=>e.waitUntil(
-  caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())
+  caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('disb-gestao-')&&k!==CACHE&&k!==IMAGE_CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())
 ));
 
 self.addEventListener('fetch',e=>{
   if(e.request.method!=='GET')return;
   const u=new URL(e.request.url);
-  if(u.hostname.includes('supabase.co'))return;
+  if(u.origin!==self.location.origin&&!EXTERNAL_STATIC_URLS.has(u.href))return;
+  const isNavigation=e.request.mode==='navigate';
+  const isStatic=STATIC_URLS.has(u.href)||EXTERNAL_STATIC_URLS.has(u.href);
+  const isImage=e.request.destination==='image'&&IMAGE_PATHS.some(path=>u.pathname.startsWith(path));
+  if(!isNavigation&&!isStatic&&!isImage)return;
   e.respondWith(
     fetch(e.request,{cache:'no-store'})
-      .then(r=>{const copy=r.clone();caches.open(CACHE).then(c=>c.put(e.request,copy));return r;})
-      .catch(()=>caches.match(e.request).then(r=>r||caches.match('./')))
+      .then(r=>{
+        if(r.ok||r.type==='opaque'){
+          const copy=r.clone();
+          e.waitUntil(caches.open(isImage&&!isStatic?IMAGE_CACHE:CACHE).then(async c=>{
+            const cacheKey=isNavigation?new Request(new URL('./',self.registration.scope)):e.request;
+            await c.put(cacheKey,copy);
+            if(isImage&&!isStatic){
+              const keys=await c.keys();
+              await Promise.all(keys.slice(0,Math.max(0,keys.length-IMAGE_CACHE_LIMIT)).map(key=>c.delete(key)));
+            }
+          }));
+        }
+        return r;
+      })
+      .catch(async()=>{
+        const cached=await caches.match(e.request);
+        if(cached)return cached;
+        if(isNavigation)return await caches.match('./')||Response.error();
+        return Response.error();
+      })
   );
 });
 

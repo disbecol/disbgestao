@@ -178,6 +178,7 @@ async function prepareRuntimeCache(){
 
 async function init(){
 
+  bindMaterialsV171();
   bindBaseEvents();
 
   updateOnlineStatus();
@@ -3565,6 +3566,7 @@ function downloadFefoCsv(count,items){
 
 function humanFefoError(e){
   const m=String(e?.message||e||'Erro na Contagem FEFO');
+  if(m.includes('FEFO_CONTAGEM_EM_OUTRA_UNIDADE'))return 'Você já possui uma contagem FEFO em outra unidade. Finalize essa contagem antes de iniciar uma nova.';
   const map={
     FEFO_CONTAGEM_EM_ANDAMENTO:'Você já possui uma contagem FEFO em andamento. Retome a contagem existente.',
     FEFO_CONTAGEM_NAO_ENCONTRADA:'Contagem FEFO não encontrada.',
@@ -3583,8 +3585,89 @@ function humanFefoError(e){
 }
 
 
-function openModal(title,subtitle,body,actions=[]){$('modalTitle').textContent=title;$('modalSubtitle').textContent=subtitle||'';$('modalBody').innerHTML=body||'';const a=$('modalActions');a.innerHTML='';actions.forEach(x=>{const b=document.createElement('button');b.className=`btn ${x.class||'secondary'}`;b.textContent=x.label;b.addEventListener('click',x.onClick);a.appendChild(b);});$('modal').classList.add('open');}
-function closeModal(){cleanupPullMaps();$('modal').classList.remove('open');$('modalBody').onchange=null;$('modalBody').onclick=null;$('modalBody').innerHTML='';$('modalActions').innerHTML='';}
+function openModal(title,subtitle,body,actions=[]){$('modalTitle').textContent=title;$('modalSubtitle').textContent=subtitle||'';$('modalBody').classList.remove('damage-review-workspace');$('modalBody').innerHTML=body||'';const a=$('modalActions');a.hidden=false;a.innerHTML='';actions.forEach(x=>{const b=document.createElement('button');b.className=`btn ${x.class||'secondary'}`;b.textContent=x.label;b.addEventListener('click',x.onClick);a.appendChild(b);});$('modal').classList.add('open');}
+function closeModal(){cleanupPullMaps();$('modal').classList.remove('open');$('modalBody').onchange=null;$('modalBody').onclick=null;$('modalBody').classList.remove('damage-review-workspace');$('modalBody').innerHTML='';$('modalActions').hidden=false;$('modalActions').innerHTML='';}
+function setupDamageReviewWorkspace(kind){
+  const body=$('modalBody'),actions=$('modalActions');
+  if(!body||!actions)return;
+  const cards=[...body.querySelectorAll(':scope > .damage-admin-item')];
+  if(!cards.length)return;
+  body.classList.add('damage-review-workspace');
+  const stageFor=status=>status==='PENDENTE'?'review':status==='EM_ANALISE'?'final':status==='APROVADO'?'launch':status==='LANCADO'?'deliver':'history';
+  const stages=[
+    {key:'review',label:'Para decidir',hint:'Confira as fotos e selecione os produtos para registrar a decisão.'},
+    ...(kind==='sales'?[{key:'final',label:'Decisão final',hint:'Analise os produtos encaminhados pelo Gerente de Vendas.'}]:[]),
+    {key:'launch',label:'Para lançar',hint:'Selecione os produtos já lançados no sistema.'},
+    {key:'deliver',label:'Para entregar',hint:'Selecione os produtos entregues ao cliente.'},
+    {key:'history',label:'Concluídos',hint:'Consulte as decisões e os comprovantes registrados.'},
+  ];
+  const counts=new Map(stages.map(stage=>[stage.key,0]));
+  cards.forEach(card=>{
+    const status=card.querySelector('.damage-product-head .status')?.textContent?.trim().toUpperCase()||'';
+    const key=stageFor(status==='EM ANÁLISE'?'EM_ANALISE':status==='LANÇADO'?'LANCADO':status);
+    card.dataset.damageStage=key;
+    counts.set(key,(counts.get(key)||0)+1);
+    const decisions=[...card.querySelectorAll(':scope > .sales-decision')];
+    if(decisions.length){
+      const details=document.createElement('details');details.className='damage-decision-history';
+      const summary=document.createElement('summary');summary.textContent=`Histórico e justificativas (${decisions.length})`;
+      details.append(summary,...decisions);card.append(details);
+    }
+    card.querySelectorAll('.map-frame').forEach(frame=>{
+      const link=document.createElement('a');link.className='damage-map-link';link.href=frame.src;link.target='_blank';link.rel='noopener';link.textContent='Abrir localização no mapa ↗';frame.replaceWith(link);
+    });
+  });
+  const hero=body.querySelector(':scope > .damage-request-hero');
+  const nav=document.createElement('nav');nav.className='damage-stage-nav';nav.setAttribute('aria-label','Etapas da avaria');
+  for(const stage of stages){
+    if(!counts.get(stage.key))continue;
+    const button=document.createElement('button');button.type='button';button.className='damage-stage-tab';button.dataset.damageTab=stage.key;
+    button.innerHTML=`<span>${stage.label}</span><b>${counts.get(stage.key)||0}</b>`;
+    nav.append(button);
+  }
+  hero?.after(nav);
+  const context=body.querySelector(':scope > .damage-request-grid');
+  if(context){
+    const details=document.createElement('details');details.className='damage-request-context';
+    const summary=document.createElement('summary');summary.textContent='Dados da ocorrência';
+    context.before(details);details.append(summary,context);
+  }
+  const intro=document.createElement('p');intro.className='damage-stage-intro';nav.after(intro);
+  const selection=body.querySelector(':scope > .damage-selection-bar');
+  const note=body.querySelector(':scope > .sales-review-justification');
+  const observation=body.querySelector(':scope > .sales-request-observation-card');
+  const signature=body.querySelector(':scope > .signature-details');
+  const actionButtons=[...actions.querySelectorAll('.btn')];
+  const setStage=key=>{
+    cards.forEach(card=>{
+      const active=card.dataset.damageStage===key;
+      card.hidden=!active;
+      card.classList.toggle('damage-stage-hidden',!active);
+      if(!active)card.querySelectorAll('input[type="checkbox"]').forEach(box=>box.checked=false);
+    });
+    const visible=cards.filter(card=>!card.hidden);
+    const selectable=visible.some(card=>card.querySelector('input[type="checkbox"]'));
+    if(selection)selection.hidden=!selectable;
+    if(note)note.hidden=!(key==='review'||key==='final')||!selectable;
+    if(observation)observation.hidden=!(key==='review'||key==='final');
+    if(signature)signature.hidden=key!=='review';
+    actionButtons.forEach(button=>button.hidden=!button.classList.contains(`damage-action-${key}`)||!selectable);
+    actions.hidden=!actionButtons.some(button=>!button.hidden);
+    for(const button of nav.querySelectorAll('button')){
+      const active=button.dataset.damageTab===key;
+      button.classList.toggle('active',active);button.setAttribute('aria-current',active?'step':'false');
+    }
+    intro.textContent=stages.find(stage=>stage.key===key)?.hint||'';
+    const selectAll=selection?.querySelector('input[type="checkbox"]');if(selectAll){selectAll.checked=false;selectAll.indeterminate=false;}
+    const summary=selection?.querySelector('[id$="SelectionSummary"]');if(summary)summary.textContent='0 selecionados';
+    const hint=selection?.querySelector('small');if(hint)hint.textContent='Selecione os produtos desta etapa para usar as ações abaixo.';
+  };
+  nav.querySelectorAll('button').forEach(button=>button.addEventListener('click',()=>setStage(button.dataset.damageTab)));
+  const initial=stages.find(stage=>(counts.get(stage.key)||0)>0&&actionButtons.some(button=>button.classList.contains(`damage-action-${stage.key}`)))
+    ||stages.find(stage=>(counts.get(stage.key)||0)>0)||stages[0];
+  setStage(initial.key);
+  if(initial.key==='review')cards.find(card=>card.dataset.damageStage==='review')?.querySelector('.damage-evidence')?.setAttribute('open','');
+}
 function statusBadge(s){const cls=s==='IMPRESSO'||s==='APROVADO'||s==='LANCADO'?'ok':s==='REPROVADO'||s==='REPROVADO_ADMIN'||s==='REMOVIDO'?'bad':s==='PARCIAL'||s==='EM_ANALISE'?'partial':'pending';const labels={REPROVADO_ADMIN:'REPROVADO',EM_ANALISE:'EM ANÁLISE',LANCADO:'LANÇADO'};return `<span class="status ${cls}">${esc(labels[s]||s)}</span>`;}
 function dashStatus(s){return s==='OK'?'<span class="status ok">Sem diferença</span>':s==='DIVERGENTE'?'<span class="status bad">Com diferença</span>':'<span class="status pending">Sem base MAPAS</span>';}
 function toast(msg,type=''){const t=$('toast');t.textContent=msg;t.className=`toast show ${type}`;clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.className='toast',3600);}
@@ -4198,13 +4281,14 @@ async function showAvariaDetail(id){
   const pending=items.filter(i=>i.status==='PENDENTE').length,approved=items.filter(i=>i.status==='APROVADO').length,launched=items.filter(i=>i.status==='LANCADO').length,canDeliverCount=items.filter(i=>i.status==='LANCADO'&&String(i.launched_by||'')===String(authUser?.id||'')).length,selectableCount=(canReview?pending:0)+(canPost?approved+canDeliverCount:0);
   const body=`<div class="damage-request-hero"><div><small>OCORRÊNCIA</small><strong>PDV ${esc(r.customer_code)} · ${esc(r.customer_name)}</strong><span>${esc(r.city)} • Mapa ${esc(r.map_number)} • ${esc(r.delivery_name)}</span></div><div class="damage-counts"><b>${items.length}</b><span>produtos</span><b>${pending+approved+launched}</b><span>em fluxo</span></div></div><div class="detail-grid damage-request-grid"><div class="detail-card"><small>PDV</small><strong>${esc(r.customer_name)}</strong></div><div class="detail-card"><small>Código</small><strong>${esc(r.customer_code)}</strong></div><div class="detail-card"><small>Cidade</small><strong>${esc(r.city)}</strong></div><div class="detail-card"><small>Mapa</small><strong>${esc(r.map_number)}</strong></div><div class="detail-card"><small>Motorista</small><strong>${esc(r.delivery_name)}</strong></div></div>${selectableCount?`<div class="damage-selection-bar delivery-selection-bar"><label class="check delivery-select-all"><input id="deliveryDamageSelectAll" type="checkbox"> Selecionar tudo</label><span id="avariaSelectionSummary">0 selecionados</span><small>${pending&&canReview?'Pendentes: aprovação ou reprovação. ':''}${approved&&canPost?'Aprovados: prontos para lançamento. ':''}${canDeliverCount&&canPost?'Lançados por você: prontos para marcar como entregues.':''}</small></div>`:''}${pending&&canReview?`<div class="sales-review-justification"><div class="field"><label>Justificativa da decisão *</label><textarea id="deliveryDamageDecisionJustification" rows="3" maxlength="500" placeholder="Descreva o motivo da aprovação ou reprovação."></textarea></div></div>`:''}${productsHtml}<details class="signature-details"><summary>Ver assinatura do cliente</summary><img src="${esc(signatureUrl)}" alt="Assinatura"></details>`;
   const actions=[];
-  if(canReview&&pending)actions.push({label:'Reprovar selecionados',class:'danger',onClick:()=>reviewAvaria('REPROVADO',false)},{label:'Aprovar selecionados',class:'success',onClick:()=>reviewAvaria('APROVADO',false)});
-  if(canPost&&approved)actions.push({label:'✓ Marcar como lançada',class:'success delivery-modal-action delivery-modal-launch',onClick:markDeliveryDamageLaunchedBulk});
-  if(canPost&&canDeliverCount)actions.push({label:'✓ Marcar como entregue',class:'primary delivery-modal-action delivery-modal-deliver',onClick:markDeliveryDamageDeliveredBulk});
+  if(canReview&&pending)actions.push({label:'Reprovar selecionados',class:'danger damage-action-review',onClick:()=>reviewAvaria('REPROVADO',false)},{label:'Aprovar selecionados',class:'success damage-action-review',onClick:()=>reviewAvaria('APROVADO',false)});
+  if(canPost&&approved)actions.push({label:'✓ Marcar como lançada',class:'success damage-action-launch',onClick:markDeliveryDamageLaunchedBulk});
+  if(canPost&&canDeliverCount)actions.push({label:'✓ Marcar como entregue',class:'primary damage-action-deliver',onClick:markDeliveryDamageDeliveredBulk});
   openModal(`Avaria • PDV ${r.customer_code}`,`${fmtDate(r.occurrence_date)} • ${r.delivery_name}`,body,actions);
-  const checks=[...($('modalBody')?.querySelectorAll('.delivery-review-check')||[])],selectAll=$('deliveryDamageSelectAll');const update=()=>{const n=checks.filter(x=>x.checked).length;const el=$('avariaSelectionSummary');if(el)el.textContent=`${n} selecionado${n===1?'':'s'}`;if(selectAll){selectAll.checked=checks.length>0&&n===checks.length;selectAll.indeterminate=n>0&&n<checks.length;}};checks.forEach(c=>c.addEventListener('change',update));selectAll?.addEventListener('change',()=>{checks.forEach(c=>c.checked=selectAll.checked);update();});
+  const checks=[...($('modalBody')?.querySelectorAll('.delivery-review-check')||[])],selectAll=$('deliveryDamageSelectAll');const update=()=>{const visible=checks.filter(x=>!x.closest('.damage-admin-item')?.hidden),n=visible.filter(x=>x.checked).length;const el=$('avariaSelectionSummary');if(el)el.textContent=`${n} selecionado${n===1?'':'s'}`;if(selectAll){selectAll.checked=visible.length>0&&n===visible.length;selectAll.indeterminate=n>0&&n<visible.length;}};checks.forEach(c=>c.addEventListener('change',update));selectAll?.addEventListener('change',()=>{checks.filter(x=>!x.closest('.damage-admin-item')?.hidden).forEach(x=>x.checked=selectAll.checked);update();});
   $('modalBody')?.querySelectorAll('[data-delivery-launch]').forEach(b=>b.addEventListener('click',()=>markDeliveryDamageLaunched(b.dataset.deliveryLaunch)));
   $('modalBody')?.querySelectorAll('[data-delivery-delivered]').forEach(b=>b.addEventListener('click',()=>markDeliveryDamageDelivered(b.dataset.deliveryDelivered)));
+  setupDamageReviewWorkspace('delivery');
 }
 async function reviewAvaria(status,all=false){
   if(!currentAvariaDetail)return;let ids=all?(currentAvariaDetail.damage_items||[]).filter(i=>i.status==='PENDENTE').map(i=>i.id):selectedDeliveryDamageIds('review');if(!ids.length)return toast('Selecione ao menos um produto pendente.','error');
@@ -4259,9 +4343,10 @@ async function showSalesDamageDetail(id){
     const requestObservation=String(r.observation||'').trim();
     const observationHtml=requestObservation?`<div class="sales-request-observation-card"><div><small>OBSERVAÇÃO DO VENDEDOR</small><strong>Informação para análise</strong></div><p>${esc(requestObservation)}</p></div>`:'';
     const body=`<div class="damage-request-hero sales-request-hero"><div><small>${esc(r.request_code)}</small><strong>PDV ${esc(r.customer_code)} · ${esc(r.customer_name)}</strong><span>${esc(r.city||'—')} • ${esc(r.branch||'—')} • Vendedor: ${esc(r.seller_name)}</span></div><div class="damage-counts"><b>${items.length}</b><span>produtos</span><b>${pending+analysis+approved+launched}</b><span>em fluxo</span></div></div><div class="detail-grid damage-request-grid"><div class="detail-card"><small>Data</small><strong>${fmtDate(r.occurrence_date)}</strong></div><div class="detail-card"><small>Vendedor</small><strong>${esc(r.seller_name)}</strong></div><div class="detail-card"><small>Código PDV</small><strong>${esc(r.customer_code)}</strong></div><div class="detail-card"><small>Filial</small><strong>${esc(r.branch||'—')}</strong></div></div>${observationHtml}${selectableCount?`<div class="damage-selection-bar sales-selection-bar"><label class="check sales-select-all"><input id="salesDamageSelectAll" type="checkbox"> Selecionar tudo</label><span id="salesDamageSelectionSummary">0 selecionados</span><small>${pending&&canReview&&canFinalize?'Pendentes: GV ou decisão final direta. ':pending&&canReview?'Pendentes: decisão do Gerente de Vendas. ':pending&&canFinalize?'Pendentes: decisão final direta disponível. ':''}${analysis&&canFinalize?'Em análise: decisão final. ':''}${approved&&canPost?'Aprovados: prontos para lançamento. ':''}${deliverable&&canPost?'Lançados por você: prontos para entrega.':''}</small></div>`:''}${needsJustification?`<div class="sales-review-justification"><div class="field"><label>Justificativa da decisão *</label><textarea id="salesDamageDecisionJustification" rows="3" maxlength="500" placeholder="Descreva o motivo da aprovação ou reprovação."></textarea><small>A justificativa fica registrada na auditoria da solicitação.</small></div></div>`:''}${products}`;
-    const actions=[];if(!sellerView&&canReview&&pending)actions.push({label:'GV • Reprovar selecionados',class:'danger',onClick:()=>reviewSalesDamage('REPROVADO')},{label:'GV • Aprovar selecionados',class:'success',onClick:()=>reviewSalesDamage('APROVADO')});if(!sellerView&&canFinalize&&(pending||analysis))actions.push({label:'Final • Reprovar selecionados',class:'danger',onClick:()=>finalizeSalesDamage('REPROVADO')},{label:'Final • Aprovar selecionados',class:'success',onClick:()=>finalizeSalesDamage('APROVADO')});if(!sellerView&&canPost&&approved)actions.push({label:'✓ Marcar selecionados como lançados',class:'success',onClick:markSalesDamageLaunchedBulk});if(!sellerView&&canPost&&deliverable)actions.push({label:'✓ Marcar selecionados como entregues',class:'primary',onClick:markSalesDamageDeliveredBulk});
+    const actions=[];if(!sellerView&&canReview&&pending)actions.push({label:'GV • Reprovar selecionados',class:'danger damage-action-review',onClick:()=>reviewSalesDamage('REPROVADO')},{label:'GV • Aprovar selecionados',class:'success damage-action-review',onClick:()=>reviewSalesDamage('APROVADO')});if(!sellerView&&canFinalize&&(pending||analysis))actions.push({label:'Final • Reprovar selecionados',class:'danger damage-action-review damage-action-final',onClick:()=>finalizeSalesDamage('REPROVADO')},{label:'Final • Aprovar selecionados',class:'success damage-action-review damage-action-final',onClick:()=>finalizeSalesDamage('APROVADO')});if(!sellerView&&canPost&&approved)actions.push({label:'✓ Marcar selecionados como lançados',class:'success damage-action-launch',onClick:markSalesDamageLaunchedBulk});if(!sellerView&&canPost&&deliverable)actions.push({label:'✓ Marcar selecionados como entregues',class:'primary damage-action-deliver',onClick:markSalesDamageDeliveredBulk});
     openModal(`Avaria de Vendas • ${r.request_code}`,`${fmtDate(r.occurrence_date)} • ${r.seller_name} • ${salesDamageStatusLabel(r.status)}`,body,actions);
-    const checks=[...($('modalBody')?.querySelectorAll('.sales-review-check')||[])],selectAll=$('salesDamageSelectAll');const update=()=>{const n=checks.filter(x=>x.checked).length;if($('salesDamageSelectionSummary'))$('salesDamageSelectionSummary').textContent=`${n} selecionado${n===1?'':'s'}`;if(selectAll){selectAll.checked=checks.length>0&&n===checks.length;selectAll.indeterminate=n>0&&n<checks.length;}};checks.forEach(x=>x.addEventListener('change',update));selectAll?.addEventListener('change',()=>{checks.forEach(x=>x.checked=selectAll.checked);update();});$('modalBody')?.querySelectorAll('[data-sales-launch]').forEach(b=>b.addEventListener('click',()=>markSalesDamageLaunched(b.dataset.salesLaunch)));$('modalBody')?.querySelectorAll('[data-sales-delivered]').forEach(b=>b.addEventListener('click',()=>markSalesDamageDelivered(b.dataset.salesDelivered)));
+    const checks=[...($('modalBody')?.querySelectorAll('.sales-review-check')||[])],selectAll=$('salesDamageSelectAll');const update=()=>{const visible=checks.filter(x=>!x.closest('.damage-admin-item')?.hidden),n=visible.filter(x=>x.checked).length;if($('salesDamageSelectionSummary'))$('salesDamageSelectionSummary').textContent=`${n} selecionado${n===1?'':'s'}`;if(selectAll){selectAll.checked=visible.length>0&&n===visible.length;selectAll.indeterminate=n>0&&n<visible.length;}};checks.forEach(x=>x.addEventListener('change',update));selectAll?.addEventListener('change',()=>{checks.filter(x=>!x.closest('.damage-admin-item')?.hidden).forEach(x=>x.checked=selectAll.checked);update();});$('modalBody')?.querySelectorAll('[data-sales-launch]').forEach(b=>b.addEventListener('click',()=>markSalesDamageLaunched(b.dataset.salesLaunch)));$('modalBody')?.querySelectorAll('[data-sales-delivered]').forEach(b=>b.addEventListener('click',()=>markSalesDamageDelivered(b.dataset.salesDelivered)));
+    setupDamageReviewWorkspace('sales');
   }catch(e){toast(humanSalesDamageError(e),'error');}
 }
 async function markSalesDamageDelivered(itemId){
@@ -4915,14 +5000,24 @@ readRefCache = function(){
   try{localStorage.removeItem('ops_ref_cache');const x=JSON.parse(localStorage.getItem(REF_CACHE_KEY)||'null');if(!x?.data)return null;if(!navigator.onLine||Date.now()-Number(x.at||0)<12*3600e3)return sanitizeRefs(x.data);return null;}catch{return null;}
 };
 
-async function saveFefoOfflineSnapshot(){try{await offlineStateSet('fefo_current',{count:fefoActiveCount,items:fefoItems});}catch(e){console.warn('FEFO cache offline',e);}}
-async function restoreFefoOfflineSnapshot(){try{const s=await offlineStateGet('fefo_current');if(!s)return false;fefoActiveCount=s.count||null;fefoItems=s.items||[];renderFefoCurrent();return !!fefoActiveCount;}catch{return false;}}
+function fefoOfflineSnapshotKey(unit=activeUnit){return `fefo_current:${String(unit||'').trim()}`;}
+async function getFefoOfflineSnapshot(unit=activeUnit){
+  const key=fefoOfflineSnapshotKey(unit);
+  let snapshot=await offlineStateGet(key);
+  if(!snapshot){
+    const legacy=await offlineStateGet('fefo_current');
+    if(legacy?.count?.unit===unit){snapshot=legacy;await offlineStateSet(key,legacy);await offlineStateSet('fefo_current',null);}
+  }
+  return snapshot?.count&&!snapshot.count.unit?null:snapshot;
+}
+async function saveFefoOfflineSnapshot(){try{await offlineStateSet(fefoOfflineSnapshotKey(),{count:fefoActiveCount,items:fefoItems});}catch(e){console.warn('FEFO cache offline',e);}}
+async function restoreFefoOfflineSnapshot(){try{const s=await getFefoOfflineSnapshot();if(!s||s.count?.unit!==activeUnit)return false;fefoActiveCount=s.count||null;fefoItems=s.items||[];renderFefoCurrent();return !!fefoActiveCount;}catch{return false;}}
 async function resolveOfflineFefoCountId(id){if(!offlineIsLocalId(id))return id;return await offlineStateGet(`fefo_count_map:${id}`);}
 
 loadFefoCurrent = async function(silent=false){
   if(!hasPerm('FEFO_CREATE')||!sb)return;
   try{
-    const cached=await offlineStateGet('fefo_current');
+    const cached=await getFefoOfflineSnapshot();
     if(cached?.count&&offlineIsLocalId(cached.count.id)){
       const pending=await offlineQueueFind(x=>x.type==='FEFO_START'&&x.payload?.local_count_id===cached.count.id);
       if(pending){fefoActiveCount=cached.count;fefoItems=cached.items||[];renderFefoCurrent();if(navigator.onLine)syncOfflineQueue({silent:true});return;}
@@ -4946,7 +5041,7 @@ renderFefoCurrent = function(){
 };
 
 startFefoCount = async function(){
-  if(!canFefo())return;const unit=$('fefoStartUnit').value;if(!unit)return toast('Selecione a unidade da contagem.','error');
+  if(!canFefo())return;const unit=$('fefoStartUnit').value;if(!unit)return toast('Selecione a unidade da contagem.','error');if(unit!==activeUnit)return toast('Selecione a unidade atual antes de iniciar a contagem.','error');
   const btn=$('btnFefoStart'),old=btn.textContent;btn.disabled=true;btn.textContent='Iniciando…';
   try{
     const localId=offlineLocalId('fefo-count'),op=await offlineQueueAdd('FEFO_START',{local_count_id:localId,unit});
@@ -5701,13 +5796,13 @@ humanRotatingAssetError = function(e){const m=String(e?.message||e||'');if(m.inc
 
 async function processOfflineRecord(row){
   if(row.type==='FEFO_START'){
-    const {data,error}=await sb.rpc('offline_sync_fefo_start',{p_operation_id:row.id,p_unit:row.payload.unit});if(error)throw error;if(!data?.id)throw new Error('FEFO_SYNC_START_SEM_RETORNO');await offlineStateSet(`fefo_count_map:${row.payload.local_count_id}`,data.id);const snap=await offlineStateGet('fefo_current');if(snap?.count?.id===row.payload.local_count_id){snap.count={...data,_offline:false};snap.items=(snap.items||[]).map(i=>({...i,count_id:data.id}));await offlineStateSet('fefo_current',snap);}return data;
+    const {data,error}=await sb.rpc('offline_sync_fefo_start',{p_operation_id:row.id,p_unit:row.payload.unit});if(error)throw error;if(!data?.id)throw new Error('FEFO_SYNC_START_SEM_RETORNO');await offlineStateSet(`fefo_count_map:${row.payload.local_count_id}`,data.id);const key=fefoOfflineSnapshotKey(row.payload.unit),snap=await getFefoOfflineSnapshot(row.payload.unit);if(snap?.count?.id===row.payload.local_count_id){snap.count={...data,_offline:false};snap.items=(snap.items||[]).map(i=>({...i,count_id:data.id}));await offlineStateSet(key,snap);}return data;
   }
   if(row.type==='FEFO_ITEM'){
     const countId=await resolveOfflineFefoCountId(row.payload.p_count_id);if(!countId)throw new Error('FEFO_AGUARDANDO_INICIO');const itemId=row.payload.p_item_id&&!offlineIsLocalId(row.payload.p_item_id)?row.payload.p_item_id:null;const {data,error}=await sb.rpc('offline_sync_fefo_item',{p_operation_id:row.id,p_count_id:countId,p_product_code:row.payload.p_product_code,p_validity_date:row.payload.p_validity_date,p_lot:'',p_street:row.payload.p_street,p_pallet:row.payload.p_pallet,p_layer:row.payload.p_layer,p_box:row.payload.p_box,p_loose_unit:row.payload.p_loose_unit,p_item_id:itemId});if(error)throw error;return data;
   }
   if(row.type==='FEFO_DELETE'){const {data,error}=await sb.rpc('offline_sync_fefo_delete',{p_operation_id:row.id,p_item_id:row.payload.p_item_id});if(error)throw error;return data;}
-  if(row.type==='FEFO_FINISH'){const countId=await resolveOfflineFefoCountId(row.payload.p_count_id);if(!countId)throw new Error('FEFO_AGUARDANDO_INICIO');const {data,error}=await sb.rpc('offline_sync_fefo_finish',{p_operation_id:row.id,p_count_id:countId});if(error)throw error;await offlineStateSet('fefo_current',{count:null,items:[]});return data;}
+  if(row.type==='FEFO_FINISH'){const countId=await resolveOfflineFefoCountId(row.payload.p_count_id);if(!countId)throw new Error('FEFO_AGUARDANDO_INICIO');const {data,error}=await sb.rpc('offline_sync_fefo_finish',{p_operation_id:row.id,p_count_id:countId});if(error)throw error;for(const unit of myUnits){const key=fefoOfflineSnapshotKey(unit),snap=await getFefoOfflineSnapshot(unit);if(snap?.count?.id===countId||snap?.count?.id===row.payload.p_count_id)await offlineStateSet(key,{count:null,items:[]});}return data;}
   if(row.type==='PULL_STEP'){const p=row.payload,{data,error}=await sb.rpc('offline_sync_pull_step',{p_operation_id:row.id,p_trip_id:p.p_trip_id,p_step_id:p.p_step_id,p_latitude:p.p_latitude,p_longitude:p.p_longitude,p_accuracy:p.p_accuracy,p_exception_reason:p.p_exception_reason||'',p_device_at:p.p_device_at});if(error)throw error;return data;}
   if(row.type==='DAMAGE_CREATE'){
     const p=row.payload,base=`${authUser.id}/offline_${row.id}`,signaturePath=`${base}/assinatura.jpg`;await offlineUploadDamageStorage(signaturePath,p.signature_blob);const uploaded=[];
@@ -8367,6 +8462,13 @@ function clearMaterialFormV171(){
   if($('matCadAtivo'))$('matCadAtivo').checked=true;
   if($('matCadObs'))$('matCadObs').value='';
   if($('matCadCodigo'))$('matCadCodigo').value='Gerado automaticamente';
+  setMaterialCatalogFeedbackV171('');
+}
+
+function setMaterialCatalogFeedbackV171(message,type=''){
+  const feedback=$('matCadFeedback');if(!feedback)return;
+  feedback.textContent=message;
+  feedback.className=`mat-catalog-feedback ${message?type:'hidden'}`;
 }
 
 function editMaterialV171(id){
@@ -8387,9 +8489,13 @@ function editMaterialV171(id){
 
 async function submitMaterialCatalogV171(e){
   e.preventDefault();
-  if(!hasPerm('MATERIAL_CATALOG'))return toast('Seu perfil não possui permissão para cadastrar materiais.','error');
+  if(!hasPerm('MATERIAL_CATALOG')){
+    setMaterialCatalogFeedbackV171('Seu perfil não possui permissão para cadastrar materiais.','error');
+    return toast('Seu perfil não possui permissão para cadastrar materiais.','error');
+  }
   const btn=$('btnMatCadSalvar');
   if(btn){btn.disabled=true;btn.textContent='Salvando…';}
+  setMaterialCatalogFeedbackV171('Salvando material…','info');
   try{
     const args={
       p_id:materialEditIdV171||null,
@@ -8404,8 +8510,9 @@ async function submitMaterialCatalogV171(e){
     const {error}=await sb.rpc('save_material',args);if(error)throw error;
     toast(materialEditIdV171?'Material atualizado.':'Material cadastrado.','success');
     clearMaterialFormV171();
+    setMaterialCatalogFeedbackV171('Material salvo com sucesso.','success');
     await loadMaterialsCatalogV171();
-  }catch(err){toast(materialHumanErrorV171(err),'error');}
+  }catch(err){const message=materialHumanErrorV171(err);setMaterialCatalogFeedbackV171(message,'error');toast(message,'error');}
   finally{if(btn){btn.disabled=false;btn.textContent='Salvar material';}}
 }
 
@@ -8786,7 +8893,6 @@ function bindMaterialsV171(){
   if(!$('formMaterialCadastro')&&!$('formMaterialMovement'))return;
   materialEventsBoundV171=true;
   $('formMaterialCadastro')?.addEventListener('submit',submitMaterialCatalogV171);
-  $('btnMatCadSalvar')?.addEventListener('click',e=>{console.log('[MATERIAIS][FIX7] clique salvar');submitMaterialCatalogV171(e);});
   $('btnMatCadNew')?.addEventListener('click',clearMaterialFormV171);
   $('matCadSearch')?.addEventListener('input',renderMaterialCatalogV171);
   $('matCadStatus')?.addEventListener('change',renderMaterialCatalogV171);

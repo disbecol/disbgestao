@@ -7,7 +7,7 @@
   <title>Disb Gestão</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=1.7.1-materiais-final-v2">
+  <link rel="stylesheet" href="styles.css?v=1.7.1-review-unit-scope">
 </head>
 <body>
   <section id="loginScreen" class="login-screen">
@@ -613,7 +613,8 @@
               <label class="check mat-check"><input id="matCadAtivo" type="checkbox" checked> Material ativo</label>
               <div class="field span-4"><label>Observações</label><textarea id="matCadObs" rows="2" placeholder="Informações adicionais do material"></textarea></div>
             </div>
-            <div class="actions right"><button id="btnMatCadNew" type="button" class="btn secondary">Novo</button><button id="btnMatCadSalvar" type="button" class="btn primary">Salvar material</button></div>
+            <div class="actions right"><button id="btnMatCadNew" type="button" class="btn secondary">Novo</button><button id="btnMatCadSalvar" type="submit" class="btn primary">Salvar material</button></div>
+            <div id="matCadFeedback" class="mat-catalog-feedback hidden" role="status" aria-live="polite"></div>
           </form>
         </div>
         <div class="card">
@@ -741,6 +742,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="config.js?v=1.7.0"></script>
-  <script src="app.js?v=1.7.1-materiais-final-v2"></script>
+  <script src="app.js?v=1.7.1-review-unit-scope"></script>
 </body>
 </html>

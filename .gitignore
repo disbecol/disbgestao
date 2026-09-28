@@ -5,6 +5,7 @@ www/
 android/.gradle/
 android/.idea/
 android/local.properties
+android/app/google-services.json
 android/app/build/
 android/build/
 android/app/src/main/assets/public/
