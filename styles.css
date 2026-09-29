@@ -1092,6 +1092,27 @@ button[data-sales-delivered]:hover{
 .damage-photo-viewer-close{position:absolute;top:0;right:0;z-index:1;width:42px;height:42px;border:0;border-radius:11px;background:#fff;color:#17344c;font-size:27px;cursor:pointer}
 @media(max-width:640px){#modal .damage-review-workspace .damage-product-head{flex-wrap:wrap}.damage-product-visual{width:54px;height:54px}#modal .damage-review-workspace .damage-product-name strong{font-size:14px}.damage-review-workspace .damage-product-head>.status{margin-left:auto}.damage-photo-open img,.damage-photo-card .damage-photo-open img{height:180px}}
 
+/* Cada produto tem seu próprio limite visual e ações compactas junto ao status. */
+#modal .damage-review-workspace .damage-admin-item{margin-bottom:18px;border:2px solid #c8d9e8;border-left:5px solid #92aec5;border-radius:16px;background:#fff;box-shadow:0 10px 25px rgba(20,55,83,.1)}
+#modal .damage-review-workspace .damage-admin-item[data-damage-stage="review"]{border-left-color:#d9a234}
+#modal .damage-review-workspace .damage-admin-item[data-damage-stage="final"]{border-left-color:#9468d3}
+#modal .damage-review-workspace .damage-admin-item[data-damage-stage="launch"]{border-left-color:#16885a}
+#modal .damage-review-workspace .damage-admin-item[data-damage-stage="deliver"]{border-left-color:#2868d9}
+#modal .damage-review-workspace .damage-product-head{min-height:88px;border-bottom:1px solid #dce7ef}
+.damage-review-workspace .damage-product-head .damage-card-controls{display:flex;flex-direction:column;align-items:flex-end;gap:7px;flex:0 0 auto;max-width:42%}
+.damage-card-buttons{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:5px}
+.damage-card-action{min-height:31px;width:auto;border:1px solid #c8d9e8;border-radius:8px;padding:6px 9px;background:#f3f8fc;color:#1f5d8d;font-size:10px;font-weight:850;line-height:1.15;white-space:nowrap;cursor:pointer}
+.damage-card-action:hover{filter:brightness(.96)}
+.damage-card-action:focus-visible{outline:3px solid #f6ae2d;outline-offset:2px}
+.damage-card-action.approve,.damage-card-action.launch{border-color:#b7dec9;background:#edf9f2;color:#176b42}
+.damage-card-action.reject{border-color:#efc7c7;background:#fff2f2;color:#a93737}
+.damage-card-action.deliver{border-color:#b9cff4;background:#eaf2ff;color:#205bc4}
+#modal .damage-review-workspace .damage-summary-grid{background:#fff}
+#modal .damage-review-workspace .damage-evidence{background:#f8fbfe}
+#modal .damage-review-workspace .damage-lot-row{padding-top:1px}
+#modal:has(.damage-review-workspace) .modal-actions .btn{min-height:34px!important;width:auto!important;flex:0 0 auto!important;padding:7px 11px!important;font-size:10px!important}
+@media(max-width:640px){.damage-review-workspace .damage-product-head .damage-card-controls{width:100%;max-width:none;align-items:flex-end}.damage-card-buttons{max-width:100%}.damage-card-action{white-space:normal}}
+
 /* Leitura e navegação consistentes nas telas de cadastro, consulta e gestão. */
 .page-head p{line-height:1.5}
 .table-wrap th{font-size:10px!important;line-height:1.35}

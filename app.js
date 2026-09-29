@@ -2099,12 +2099,12 @@ function selectedSalesReviewIds(kind){
   const selected=[...($('modalBody')?.querySelectorAll('.sales-review-check:checked')||[])].map(x=>x.value),items=currentSalesDamageDetail?.sales_damage_items||[];
   return selected.filter(id=>{const i=items.find(x=>String(x.id)===String(id));if(!i)return false;if(kind==='pending')return i.status==='PENDENTE';if(kind==='final')return i.status==='PENDENTE'||i.status==='EM_ANALISE';if(kind==='launch')return i.status==='APROVADO';if(kind==='delivered')return i.status==='LANCADO';return false;});
 }
-async function reviewSalesDamage(status){
-  const ids=selectedSalesReviewIds('pending');if(!ids.length)return toast('Selecione ao menos um produto pendente.','error');const note=String($('salesDamageDecisionJustification')?.value||'').trim();if(status==='REPROVADO'&&!note)return toast('Informe a justificativa da reprovação.','error');
+async function reviewSalesDamage(status,itemId=null){
+  const ids=itemId?[itemId]:selectedSalesReviewIds('pending');if(!ids.length)return toast('Selecione ao menos um produto pendente.','error');const note=String($('salesDamageDecisionJustification')?.value||'').trim();if(status==='REPROVADO'&&!note)return toast('Informe a justificativa da reprovação.','error');
   try{const {error}=await sb.rpc('review_sales_damage_items',{p_item_ids:ids,p_status:status,p_justification:note});if(error)throw error;toast(status==='APROVADO'?`${ids.length} produto(s) aprovado(s) pelo GV e enviado(s) para análise final.`:`${ids.length} produto(s) reprovado(s) pelo GV.`,'success');closeModal();await loadSalesDamageManage(true);if(hasPerm('SALES_DAMAGE_VIEW_OWN'))await loadSalesDamageMy(true);}catch(e){toast(humanSalesDamageError(e),'error');}
 }
-async function finalizeSalesDamage(status){
-  const ids=selectedSalesReviewIds('final');if(!ids.length)return toast('Selecione ao menos um produto pendente ou em análise.','error');const note=String($('salesDamageDecisionJustification')?.value||'').trim();if(status==='REPROVADO'&&!note)return toast('Informe a justificativa da reprovação final.','error');
+async function finalizeSalesDamage(status,itemId=null){
+  const ids=itemId?[itemId]:selectedSalesReviewIds('final');if(!ids.length)return toast('Selecione ao menos um produto pendente ou em análise.','error');const note=String($('salesDamageDecisionJustification')?.value||'').trim();if(status==='REPROVADO'&&!note)return toast('Informe a justificativa da reprovação final.','error');
   try{const {error}=await sb.rpc('finalize_sales_damage_items',{p_item_ids:ids,p_status:status,p_justification:note});if(error)throw error;toast(`${ids.length} produto(s) ${status==='APROVADO'?'aprovado(s)':'reprovado(s)'} na decisão final.`,'success');closeModal();await loadSalesDamageManage(true);if(hasPerm('SALES_DAMAGE_VIEW_OWN'))await loadSalesDamageMy(true);}catch(e){toast(humanSalesDamageError(e),'error');}
 }
 async function markSalesDamageLaunched(itemId){
@@ -3879,6 +3879,9 @@ function damageReviewProductIdentity(item,index){
   const image=code?`<img class="hidden" data-sales-product-image="${esc(code)}" alt="Imagem do produto ${esc(name)}">`:'';
   return `<div class="damage-product-identity"><div class="damage-product-visual">${image}<span class="sales-product-no-image">Sem imagem</span></div><div class="damage-product-name"><small>PRODUTO ${index+1}${code?` <span class="damage-product-code">CÓD. ${esc(code)}</span>`:''}</small><strong>${esc(name)}</strong></div></div>`;
 }
+function damageReviewControls(status,buttons=''){
+  return `<div class="damage-card-controls">${statusBadge(status)}${buttons?`<div class="damage-card-buttons">${buttons}</div>`:''}</div>`;
+}
 let damagePhotoViewer=null,damagePhotoReturnFocus=null;
 function closeDamagePhotoViewer(){
   if(!damagePhotoViewer||damagePhotoViewer.hidden)return;
@@ -3915,16 +3918,16 @@ function setupDamageReviewWorkspace(kind){
   body.classList.add('damage-review-workspace');
   const stageFor=status=>status==='PENDENTE'?'review':status==='EM_ANALISE'?'final':status==='APROVADO'?'launch':status==='LANCADO'?'deliver':'history';
   const stages=[
-    {key:'review',label:'Para decidir',hint:'Confira as fotos e selecione os produtos para registrar a decisão.'},
-    ...(kind==='sales'?[{key:'final',label:'Decisão final',hint:'Analise os produtos encaminhados pelo Gerente de Vendas.'}]:[]),
-    {key:'launch',label:'Para lançar',hint:'Selecione os produtos já lançados no sistema.'},
-    {key:'deliver',label:'Para entregar',hint:'Selecione os produtos entregues ao cliente.'},
+    {key:'review',label:'Para decidir',hint:'Confira cada produto e use os botões junto ao status. A seleção permite decidir vários de uma vez.'},
+    ...(kind==='sales'?[{key:'final',label:'Decisão final',hint:'Analise os produtos encaminhados pelo Gerente de Vendas e registre a decisão junto ao status.'}]:[]),
+    {key:'launch',label:'Para lançar',hint:'Confirme o lançamento no botão junto ao status do produto.'},
+    {key:'deliver',label:'Para entregar',hint:'Confirme a entrega no botão junto ao status do produto.'},
     {key:'history',label:'Concluídos',hint:'Consulte as decisões e os comprovantes registrados.'},
   ];
   const counts=new Map(stages.map(stage=>[stage.key,0]));
   cards.forEach(card=>{
-    const status=card.querySelector('.damage-product-head .status')?.textContent?.trim().toUpperCase()||'';
-    const key=stageFor(status==='EM ANÁLISE'?'EM_ANALISE':status==='LANÇADO'?'LANCADO':status);
+    const status=card.dataset.damageStatus||card.querySelector('.damage-product-head .status')?.textContent?.trim().toUpperCase()||'';
+    const key=stageFor(status==='EM ANÁLISE'?'EM_ANALISE':status.startsWith('LANÇADO')?'LANCADO':status);
     card.dataset.damageStage=key;
     counts.set(key,(counts.get(key)||0)+1);
     const decisions=[...card.querySelectorAll(':scope > .sales-decision')];
@@ -3967,21 +3970,30 @@ function setupDamageReviewWorkspace(kind){
   const observation=body.querySelector(':scope > .sales-request-observation-card');
   const signature=body.querySelector(':scope > .signature-details');
   const actionButtons=[...actions.querySelectorAll('.btn')];
+  let activeStage='';
+  const refreshBulkActions=()=>{
+    const visible=cards.filter(card=>!card.hidden);
+    const showBulk=visible.length>1&&visible.some(card=>card.querySelector('input[type="checkbox"]:checked'));
+    actionButtons.forEach(button=>button.hidden=!showBulk||!button.classList.contains(`damage-action-${activeStage}`));
+    actions.hidden=!actionButtons.some(button=>!button.hidden);
+  };
   const setStage=key=>{
+    activeStage=key;
     cards.forEach(card=>{
       const active=card.dataset.damageStage===key;
       card.hidden=!active;
       card.classList.toggle('damage-stage-hidden',!active);
-      if(!active)card.querySelectorAll('input[type="checkbox"]').forEach(box=>box.checked=false);
+      card.querySelectorAll('input[type="checkbox"]').forEach(box=>box.checked=false);
     });
     const visible=cards.filter(card=>!card.hidden);
     const selectable=visible.some(card=>card.querySelector('input[type="checkbox"]'));
-    if(selection)selection.hidden=!selectable;
+    const multi=selectable&&visible.length>1;
+    if(selection)selection.hidden=!multi;
+    visible.forEach(card=>{const check=card.querySelector('.damage-check');if(check)check.hidden=!multi;});
     if(note)note.hidden=!(key==='review'||key==='final')||!selectable;
     if(observation)observation.hidden=!(key==='review'||key==='final');
     if(signature)signature.hidden=key!=='review';
-    actionButtons.forEach(button=>button.hidden=!button.classList.contains(`damage-action-${key}`)||!selectable);
-    actions.hidden=!actionButtons.some(button=>!button.hidden);
+    refreshBulkActions();
     for(const button of nav.querySelectorAll('button')){
       const active=button.dataset.damageTab===key;
       button.classList.toggle('active',active);button.setAttribute('aria-current',active?'step':'false');
@@ -3991,6 +4003,7 @@ function setupDamageReviewWorkspace(kind){
     const summary=selection?.querySelector('[id$="SelectionSummary"]');if(summary)summary.textContent='0 selecionados';
     const hint=selection?.querySelector('small');if(hint)hint.textContent='Selecione os produtos desta etapa para usar as ações abaixo.';
   };
+  body.onchange=event=>{if(event.target.matches('.delivery-review-check,.sales-review-check,#deliveryDamageSelectAll,#salesDamageSelectAll'))refreshBulkActions();};
   nav.querySelectorAll('button').forEach(button=>button.addEventListener('click',()=>setStage(button.dataset.damageTab)));
   const initial=stages.find(stage=>(counts.get(stage.key)||0)>0&&actionButtons.some(button=>button.classList.contains(`damage-action-${stage.key}`)))
     ||stages.find(stage=>(counts.get(stage.key)||0)>0)||stages[0];
@@ -4612,8 +4625,8 @@ async function showAvariaDetail(id){
     const decision=i.reviewed_at?`<div class="sales-decision ${i.status==='REPROVADO'?'rejected':'approved'}"><strong>Decisão</strong><span>${esc(i.reviewer_name||'—')} • ${fmtDateTime(i.reviewed_at)}</span><p>${esc(i.review_note||'Sem justificativa registrada.')}</p></div>`:'';
     const launched=i.launched_at?`<div class="sales-decision launched"><strong>Lançado no Sistema</strong><span>${esc(i.launched_by_name||'—')} • ${fmtDateTime(i.launched_at)}</span></div>`:'';
     const delivered=i.delivered_at?`<div class="sales-decision delivered"><strong>Entregue</strong><span>${esc(i.delivered_by_name||'—')} • ${fmtDateTime(i.delivered_at)}</span></div>`:'';
-    const postAction=launchable?`<div class="sales-launch-action"><button type="button" class="delivery-launch-btn" data-delivery-launch="${i.id}"><span>✓ Registrar como lançado no sistema</span><small>Confirme depois de lançar esta avaria no sistema</small></button></div>`:deliverable?`<div class="sales-launch-action"><button type="button" class="delivery-delivered-btn" data-delivery-delivered="${i.id}"><span>✓ Marcar como entregue</span><small>Disponível a quem possui a permissão Lançar/Entregar</small></button></div>`:(canPost&&i.status==='LANCADO'?`<div class="sales-launch-help"><strong>Aguardando o usuário do lançamento</strong><small>${esc(i.launched_by_name||'Outro usuário')} deve marcar esta avaria como entregue.</small></div>`:'');
-    return `<div class="damage-admin-item" data-item="${i.id}"><div class="damage-product-head">${selectable?`<label class="damage-check"><input type="checkbox" class="delivery-review-check" value="${i.id}" data-review-kind="${kind}"><span></span></label>`:''}${damageReviewProductIdentity(i,idx)}${statusBadge(i.status)}</div><div class="damage-summary-grid"><div><small>LOTE</small><strong>${esc(i.lot)}</strong></div><div><small>QUANTIDADE</small><strong>${fmtNum(i.quantity)} ${esc(i.quantity_unit)}</strong></div><div><small>MOTIVO</small><strong>${esc(i.reason)}</strong></div><div><small>EVIDÊNCIAS</small><strong>${photos.length} foto(s)</strong></div></div><div class="damage-lot-row">${match.length?`<span class="status approved">Lote compatível</span><span>${match.slice(0,4).map(n=>esc(n.nri)).join(', ')}</span>`:'<span class="status rejected">Lote não encontrado</span>'}</div><details class="damage-evidence"><summary><span>Ver evidências</span><small>${photos.length?`${photos.length} foto(s) • localização por foto`:i.reason==="Não foi no caminhão"?"Foto dispensada pelo motivo":"Sem foto"}</small></summary><div class="damage-photo-grid">${photoHtml||'<div class="empty-state">Sem foto disponível.</div>'}</div></details>${postAction}${decision}${launched}${delivered}</div>`;
+    const inlineActions=reviewable?`<button type="button" class="damage-card-action approve" data-delivery-review="APROVADO" data-item-id="${i.id}">Aprovar</button><button type="button" class="damage-card-action reject" data-delivery-review="REPROVADO" data-item-id="${i.id}">Reprovar</button>`:launchable?`<button type="button" class="damage-card-action launch" data-delivery-launch="${i.id}">Marcar como lançada</button>`:deliverable?`<button type="button" class="damage-card-action deliver" data-delivery-delivered="${i.id}">Marcar como entregue</button>`:'';
+    return `<div class="damage-admin-item" data-item="${i.id}" data-damage-status="${esc(i.status)}"><div class="damage-product-head">${selectable?`<label class="damage-check"><input type="checkbox" class="delivery-review-check" value="${i.id}" data-review-kind="${kind}"><span></span></label>`:''}${damageReviewProductIdentity(i,idx)}${damageReviewControls(i.status,inlineActions)}</div><div class="damage-summary-grid"><div><small>LOTE</small><strong>${esc(i.lot)}</strong></div><div><small>QUANTIDADE</small><strong>${fmtNum(i.quantity)} ${esc(i.quantity_unit)}</strong></div><div><small>MOTIVO</small><strong>${esc(i.reason)}</strong></div><div><small>EVIDÊNCIAS</small><strong>${photos.length} foto(s)</strong></div></div><div class="damage-lot-row">${match.length?`<span class="status approved">Lote compatível</span><span>${match.slice(0,4).map(n=>esc(n.nri)).join(', ')}</span>`:'<span class="status rejected">Lote não encontrado</span>'}</div><details class="damage-evidence"><summary><span>Ver evidências</span><small>${photos.length?`${photos.length} foto(s) • localização por foto`:i.reason==="Não foi no caminhão"?"Foto dispensada pelo motivo":"Sem foto"}</small></summary><div class="damage-photo-grid">${photoHtml||'<div class="empty-state">Sem foto disponível.</div>'}</div></details>${decision}${launched}${delivered}</div>`;
   }).join('');
   const pending=items.filter(i=>i.status==='PENDENTE').length,approved=items.filter(i=>i.status==='APROVADO').length,launched=items.filter(i=>i.status==='LANCADO').length,canDeliverCount=items.filter(i=>i.status==='LANCADO').length,selectableCount=(canReview?pending:0)+(canPost?approved+canDeliverCount:0);
   const body=`<div class="damage-request-hero"><div><small>OCORRÊNCIA</small><strong>PDV ${esc(r.customer_code)} · ${esc(r.customer_name)}</strong><span>${esc(r.city)} • Mapa ${esc(r.map_number)} • ${esc(r.delivery_name)}</span></div><div class="damage-counts"><b>${items.length}</b><span>produtos</span><b>${pending+approved+launched}</b><span>em fluxo</span></div></div><div class="detail-grid damage-request-grid"><div class="detail-card"><small>PDV</small><strong>${esc(r.customer_name)}</strong></div><div class="detail-card"><small>Código</small><strong>${esc(r.customer_code)}</strong></div><div class="detail-card"><small>Cidade</small><strong>${esc(r.city)}</strong></div><div class="detail-card"><small>Mapa</small><strong>${esc(r.map_number)}</strong></div><div class="detail-card"><small>Motorista</small><strong>${esc(r.delivery_name)}</strong></div></div>${selectableCount?`<div class="damage-selection-bar delivery-selection-bar"><label class="check delivery-select-all"><input id="deliveryDamageSelectAll" type="checkbox"> Selecionar tudo</label><span id="avariaSelectionSummary">0 selecionados</span><small>${pending&&canReview?'Pendentes: aprovação ou reprovação. ':''}${approved&&canPost?'Aprovados: prontos para lançamento. ':''}${canDeliverCount&&canPost?'Lançados: prontos para marcar como entregues.':''}</small></div>`:''}${pending&&canReview?`<div class="sales-review-justification"><div class="field"><label>Justificativa da decisão</label><textarea id="deliveryDamageDecisionJustification" rows="3" maxlength="500" placeholder="Obrigatória ao reprovar; opcional ao aprovar."></textarea></div></div>`:''}${productsHtml}<details class="signature-details"><summary>Ver assinatura do cliente</summary><img src="${esc(signatureUrl)}" alt="Assinatura"></details>`;
@@ -4625,10 +4638,11 @@ async function showAvariaDetail(id){
   const checks=[...($('modalBody')?.querySelectorAll('.delivery-review-check')||[])],selectAll=$('deliveryDamageSelectAll');const update=()=>{const visible=checks.filter(x=>!x.closest('.damage-admin-item')?.hidden),n=visible.filter(x=>x.checked).length;const el=$('avariaSelectionSummary');if(el)el.textContent=`${n} selecionado${n===1?'':'s'}`;if(selectAll){selectAll.checked=visible.length>0&&n===visible.length;selectAll.indeterminate=n>0&&n<visible.length;}};checks.forEach(c=>c.addEventListener('change',update));selectAll?.addEventListener('change',()=>{checks.filter(x=>!x.closest('.damage-admin-item')?.hidden).forEach(x=>x.checked=selectAll.checked);update();});
   $('modalBody')?.querySelectorAll('[data-delivery-launch]').forEach(b=>b.addEventListener('click',()=>markDeliveryDamageLaunched(b.dataset.deliveryLaunch)));
   $('modalBody')?.querySelectorAll('[data-delivery-delivered]').forEach(b=>b.addEventListener('click',()=>markDeliveryDamageDelivered(b.dataset.deliveryDelivered)));
+  $('modalBody')?.querySelectorAll('[data-delivery-review]').forEach(b=>b.addEventListener('click',()=>reviewAvaria(b.dataset.deliveryReview,false,b.dataset.itemId)));
   setupDamageReviewWorkspace('delivery');
 }
-async function reviewAvaria(status,all=false){
-  if(!currentAvariaDetail)return;let ids=all?(currentAvariaDetail.damage_items||[]).filter(i=>i.status==='PENDENTE').map(i=>i.id):selectedDeliveryDamageIds('review');if(!ids.length)return toast('Selecione ao menos um produto pendente.','error');
+async function reviewAvaria(status,all=false,itemId=null){
+  if(!currentAvariaDetail)return;let ids=itemId?[itemId]:all?(currentAvariaDetail.damage_items||[]).filter(i=>i.status==='PENDENTE').map(i=>i.id):selectedDeliveryDamageIds('review');if(!ids.length)return toast('Selecione ao menos um produto pendente.','error');
   const note=String($('deliveryDamageDecisionJustification')?.value||'').trim();if(status==='REPROVADO'&&!note)return toast('Informe a justificativa da reprovação.','error');
   try{const {error}=await sb.rpc('review_damage_items',{p_item_ids:ids,p_status:status,p_note:note});if(error)throw error;toast(`${ids.length} produto(s) ${status==='APROVADO'?'aprovado(s)':'reprovado(s)'}.`,'success');closeModal();await loadAdminAvarias(true);}catch(e){toast(humanDeliveryDamageError(e),'error');}
 }
@@ -4672,8 +4686,13 @@ async function showSalesDamageDetail(id){
       const finalDecision=!sellerView&&i.final_reviewed_at?`<div class="sales-decision ${i.status==='REPROVADO'?'rejected':'approved'}"><strong>Decisão final</strong><span>${esc(i.final_reviewer_name||'—')} • ${fmtDateTime(i.final_reviewed_at)}</span><p>${esc(i.final_justification||'Aprovado sem justificativa.')}</p></div>`:'';
       const launched=!sellerView&&i.launched_at?`<div class="sales-decision launched"><strong>Lançado no Sistema</strong><span>${esc(i.launched_by_name||'—')} • ${fmtDateTime(i.launched_at)}</span></div>`:'';
       const delivered=!sellerView&&i.delivered_at?`<div class="sales-decision delivered"><strong>Entregue</strong><span>${esc(i.delivered_by_name||'—')} • ${fmtDateTime(i.delivered_at)}</span></div>`:'';
-      const postAction=launchable?`<div class="sales-launch-action"><button type="button" class="sales-launch-btn" data-sales-launch="${i.id}"><span>✓ Registrar avaria como lançada no sistema</span><small>Toque aqui após registrar esta avaria no sistema</small></button></div>`:deliverable?`<div class="sales-launch-action"><button type="button" class="sales-delivered-btn" data-sales-delivered="${i.id}"><span>✓ Marcar avaria como entregue</span><small>Disponível a quem possui a permissão Lançar/Entregar</small></button></div>`:(!sellerView&&canPost&&i.status==='LANCADO'?`<div class="sales-launch-help"><strong>Aguardando o usuário do lançamento</strong><small>${esc(i.launched_by_name||'Outro usuário')} deve confirmar a entrega.</small></div>`:'');
-      return `<article class="damage-admin-item sales-review-item" data-sales-detail-item="${i.id}"><div class="damage-product-head">${selectable?`<label class="damage-check"><input type="checkbox" class="sales-review-check" value="${i.id}" data-review-kind="${selectionKind}"><span></span></label>`:''}${damageReviewProductIdentity(i,idx)}${salesItemStatusBadge(i)}</div><div class="damage-summary-grid"><div><small>QUANTIDADE</small><strong>${fmtNum(i.quantity)} ${i.quantity_unit==='CAIXA'?'Caixa':'Unidade'}${num(i.quantity)===1?'':'s'}</strong></div><div><small>MOTIVO</small><strong>${esc(salesReasonLabel(i.reason))}</strong></div><div><small>VALIDADE</small><strong>${i.validity_date?fmtDate(i.validity_date):'—'}</strong></div><div><small>EVIDÊNCIA</small><strong>${photos.length} foto${photos.length===1?'':'s'} • ${allGps?'GPS ✓':'GPS legado/indisponível'}</strong></div></div><details class="damage-evidence sales-evidence"><summary><span>Ver evidências</span><small>${photos.length} foto(s) • toque para ampliar</small></summary><div class="sales-proof sales-proof-multi">${gallery||'<span class="muted-text">Sem foto disponível.</span>'}</div></details>${postAction}${managerDecision}${finalDecision}${launched}${delivered}</article>`;
+      const inlineActions=[
+        reviewable?`<button type="button" class="damage-card-action approve" data-sales-review="APROVADO" data-item-id="${i.id}">${canFinalize?'GV · ':''}Aprovar</button><button type="button" class="damage-card-action reject" data-sales-review="REPROVADO" data-item-id="${i.id}">${canFinalize?'GV · ':''}Reprovar</button>`:'',
+        finalizable?`<button type="button" class="damage-card-action approve" data-sales-final="APROVADO" data-item-id="${i.id}">Final · Aprovar</button><button type="button" class="damage-card-action reject" data-sales-final="REPROVADO" data-item-id="${i.id}">Final · Reprovar</button>`:'',
+        launchable?`<button type="button" class="damage-card-action launch" data-sales-launch="${i.id}">Marcar como lançada</button>`:'',
+        deliverable?`<button type="button" class="damage-card-action deliver" data-sales-delivered="${i.id}">Marcar como entregue</button>`:''
+      ].join('');
+      return `<article class="damage-admin-item sales-review-item" data-sales-detail-item="${i.id}" data-damage-status="${esc(i.status)}"><div class="damage-product-head">${selectable?`<label class="damage-check"><input type="checkbox" class="sales-review-check" value="${i.id}" data-review-kind="${selectionKind}"><span></span></label>`:''}${damageReviewProductIdentity(i,idx)}${damageReviewControls(i.status,inlineActions)}</div><div class="damage-summary-grid"><div><small>QUANTIDADE</small><strong>${fmtNum(i.quantity)} ${i.quantity_unit==='CAIXA'?'Caixa':'Unidade'}${num(i.quantity)===1?'':'s'}</strong></div><div><small>MOTIVO</small><strong>${esc(salesReasonLabel(i.reason))}</strong></div><div><small>VALIDADE</small><strong>${i.validity_date?fmtDate(i.validity_date):'—'}</strong></div><div><small>EVIDÊNCIA</small><strong>${photos.length} foto${photos.length===1?'':'s'} • ${allGps?'GPS ✓':'GPS legado/indisponível'}</strong></div></div><details class="damage-evidence sales-evidence"><summary><span>Ver evidências</span><small>${photos.length} foto(s) • toque para ampliar</small></summary><div class="sales-proof sales-proof-multi">${gallery||'<span class="muted-text">Sem foto disponível.</span>'}</div></details>${managerDecision}${finalDecision}${launched}${delivered}</article>`;
     }).join('');
     const pending=items.filter(i=>i.status==='PENDENTE').length,analysis=items.filter(i=>i.status==='EM_ANALISE').length,approved=items.filter(i=>i.status==='APROVADO').length,launched=items.filter(i=>i.status==='LANCADO').length,deliverable=items.filter(i=>i.status==='LANCADO').length,selectableCount=sellerView?0:items.filter(i=>((canReview||canFinalize)&&i.status==='PENDENTE')||(canFinalize&&i.status==='EM_ANALISE')||(canPost&&i.status==='APROVADO')||(canPost&&i.status==='LANCADO')).length;
     const needsJustification=!sellerView&&((canReview&&pending)||(canFinalize&&(pending||analysis)));
@@ -4683,6 +4702,8 @@ async function showSalesDamageDetail(id){
     const actions=[];if(!sellerView&&canReview&&pending)actions.push({label:'GV • Reprovar selecionados',class:'danger damage-action-review',onClick:()=>reviewSalesDamage('REPROVADO')},{label:'GV • Aprovar selecionados',class:'success damage-action-review',onClick:()=>reviewSalesDamage('APROVADO')});if(!sellerView&&canFinalize&&(pending||analysis))actions.push({label:'Final • Reprovar selecionados',class:'danger damage-action-review damage-action-final',onClick:()=>finalizeSalesDamage('REPROVADO')},{label:'Final • Aprovar selecionados',class:'success damage-action-review damage-action-final',onClick:()=>finalizeSalesDamage('APROVADO')});if(!sellerView&&canPost&&approved)actions.push({label:'✓ Marcar selecionados como lançados',class:'success damage-action-launch',onClick:markSalesDamageLaunchedBulk});if(!sellerView&&canPost&&deliverable)actions.push({label:'✓ Marcar selecionados como entregues',class:'primary damage-action-deliver',onClick:markSalesDamageDeliveredBulk});
     openModal(`Avaria de Vendas • ${r.request_code}`,`${fmtDate(r.occurrence_date)} • ${r.seller_name} • ${salesDamageStatusLabel(r.status)}`,body,actions);
     const checks=[...($('modalBody')?.querySelectorAll('.sales-review-check')||[])],selectAll=$('salesDamageSelectAll');const update=()=>{const visible=checks.filter(x=>!x.closest('.damage-admin-item')?.hidden),n=visible.filter(x=>x.checked).length;if($('salesDamageSelectionSummary'))$('salesDamageSelectionSummary').textContent=`${n} selecionado${n===1?'':'s'}`;if(selectAll){selectAll.checked=visible.length>0&&n===visible.length;selectAll.indeterminate=n>0&&n<visible.length;}};checks.forEach(x=>x.addEventListener('change',update));selectAll?.addEventListener('change',()=>{checks.filter(x=>!x.closest('.damage-admin-item')?.hidden).forEach(x=>x.checked=selectAll.checked);update();});$('modalBody')?.querySelectorAll('[data-sales-launch]').forEach(b=>b.addEventListener('click',()=>markSalesDamageLaunched(b.dataset.salesLaunch)));$('modalBody')?.querySelectorAll('[data-sales-delivered]').forEach(b=>b.addEventListener('click',()=>markSalesDamageDelivered(b.dataset.salesDelivered)));
+    $('modalBody')?.querySelectorAll('[data-sales-review]').forEach(b=>b.addEventListener('click',()=>reviewSalesDamage(b.dataset.salesReview,b.dataset.itemId)));
+    $('modalBody')?.querySelectorAll('[data-sales-final]').forEach(b=>b.addEventListener('click',()=>finalizeSalesDamage(b.dataset.salesFinal,b.dataset.itemId)));
     setupDamageReviewWorkspace('sales');
   }catch(e){toast(humanSalesDamageError(e),'error');}
 }
