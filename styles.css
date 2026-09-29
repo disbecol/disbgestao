@@ -712,6 +712,10 @@ button[data-sales-launch]:focus-visible,
 
 /* v1.6.4 - Historico do Ativo de Giro: abas e resumos */
 .asset-history-total-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}
+.asset-share-cards{grid-template-columns:repeat(3,minmax(0,1fr))}
+.asset-share-cards .asset-history-total-card{display:flex;flex-direction:column;align-items:flex-start;gap:7px;min-width:0}
+.asset-share-cards .asset-history-total-card>strong{overflow-wrap:anywhere}
+@media(max-width:760px){.asset-share-cards{grid-template-columns:1fr}}
 .asset-history-total-card{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;padding:12px 14px;border:1px solid #dbe5ee;border-radius:12px;background:#f8fbfe;color:#173650}
 .asset-history-total-card>span{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.35px}
 .asset-history-total-card>strong{font-size:13px;line-height:1.35;white-space:normal}
