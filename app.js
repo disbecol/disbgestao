@@ -2027,8 +2027,9 @@ async function submitSalesDamageOnce(){
     else{
 
       const detalhe=String(
-        pushDiag?.data?.error||
         pushDiag?.error||
+        pushDiag?.data?.error||
+        pushDiag?.data?.errors?.[0]||
         pushDiag?.exception||
         'falha sem detalhe'
       ).slice(0,180);
@@ -6111,7 +6112,7 @@ async function processOfflineRecord(row){
   if(row.type==='DAMAGE_CREATE'){
     const p=row.payload,base=`${authUser.id}/offline_${row.id}`,signaturePath=`${base}/assinatura.jpg`;await offlineUploadDamageStorage(signaturePath,p.signature_blob);const uploaded=[];
     for(let i=0;i<p.items.length;i++){const x=p.items[i],photos=[];for(let j=0;j<(x.photos||[]).length;j++){const ph=x.photos[j],path=`${base}/produto_${String(i+1).padStart(2,'0')}_foto_${String(j+1).padStart(2,'0')}.jpg`;await offlineUploadDamageStorage(path,ph.blob);photos.push({photo_path:path,latitude:ph.gps.latitude,longitude:ph.gps.longitude,accuracy:ph.gps.accuracy||'',gps_at:ph.gps.capturedAt});}uploaded.push({...x,photos});}
-    const serverPayload={unit:p.unit||p.receiptCtx?.unit||activeUnit,date:p.date,customer_code:p.customer.code,customer_name:p.customer.name,city:p.customer.city,map_number:p.map_number,signature_path:signaturePath,items:uploaded.map(x=>{const first=x.photos[0];return {product:x.product,lot:x.lot,quantity:x.quantity,unit:x.unit,reason:x.reason,photos:x.photos,photo_path:first?.photo_path||'',latitude:first?.latitude,longitude:first?.longitude,accuracy:first?.accuracy,gps_at:first?.gps_at};})};const {data,error}=await sb.rpc('offline_sync_damage_request',{p_operation_id:row.id,p_payload:serverPayload});if(error)throw error;const ctx={...p.receiptCtx,request_id:data?.request_id||null};await offlineSaveDamageReceipt(ctx);await dispatchDamagePushV170('delivery',data?.request_id||null);return data;
+    const serverPayload={unit:p.unit||p.receiptCtx?.unit||activeUnit,date:p.date,customer_code:p.customer.code,customer_name:p.customer.name,city:p.customer.city,map_number:p.map_number,signature_path:signaturePath,items:uploaded.map(x=>{const first=x.photos[0];return {product:x.product,lot:x.lot,quantity:x.quantity,unit:x.unit,reason:x.reason,photos:x.photos,photo_path:first?.photo_path||'',latitude:first?.latitude,longitude:first?.longitude,accuracy:first?.accuracy,gps_at:first?.gps_at};})};const {data,error}=await sb.rpc('offline_sync_damage_request',{p_operation_id:row.id,p_payload:serverPayload});if(error)throw error;const ctx={...p.receiptCtx,request_id:data?.request_id||null};await offlineSaveDamageReceipt(ctx);const pushOk=await dispatchDamagePushV170('delivery',data?.request_id||null);if(!pushOk){const detail=String(window.__lastPushDispatchV170?.error||'Falha sem detalhe').slice(0,180);toast(`Avaria salva, mas a notificação falhou: ${detail}`,'error');}return data;
   }
   throw new Error(`TIPO_OFFLINE_DESCONHECIDO:${row.type}`);
 }
@@ -6911,19 +6912,28 @@ async function registerWebPushV170({requestPermission=false}={}){
   console.log('[PUSH] Service Worker pronto');
 
   let sub=await reg.pushManager.getSubscription();
-
+  const key=base64UrlToBytesV170(await getVapidPublicKeyV170());
+  const {data:registered,error:registeredError}=await sb.from('push_devices')
+    .select('active')
+    .eq('user_id',authUser.id)
+    .eq('device_key',pushDeviceKeyV170())
+    .eq('channel','WEB')
+    .maybeSingle();
+  if(registeredError)throw registeredError;
+  const currentKey=sub?.options?.applicationServerKey;
+  const sameKey=currentKey&&currentKey.byteLength===key.byteLength
+    &&new Uint8Array(currentKey).every((value,index)=>value===key[index]);
+  if(sub&&(registered?.active===false||!sameKey)){
+    console.log('[PUSH] Renovando subscription expirada ou com chave alterada');
+    await sub.unsubscribe();
+    sub=null;
+  }
   if(!sub){
     console.log('[PUSH] Criando subscription');
-
-    const key=await getVapidPublicKeyV170();
-
     sub=await reg.pushManager.subscribe({
       userVisibleOnly:true,
-      applicationServerKey:base64UrlToBytesV170(key)
+      applicationServerKey:key
     });
-  }
-  else{
-    console.log('[PUSH] Subscription existente');
   }
 
   if(!sub){
@@ -9368,16 +9378,35 @@ refreshPushRegistrationV170=async function(){
 };
 
 dispatchDamagePushV170=async function(kind,requestId){
-  if(!sb||!authUser||!navigator.onLine||!requestId)return false;
+  const diagnostic={at:new Date().toISOString(),kind,requestId:requestId||null,data:null,error:null};
+  window.__lastPushDispatchV170=diagnostic;
+  if(!sb||!authUser||!navigator.onLine||!requestId){
+    diagnostic.error='PUSH_SEM_SESSAO_CONEXAO_OU_SOLICITACAO';
+    return false;
+  }
   try{
     const session=await pushOnlineSessionV171();
     const {data,error}=await sb.functions.invoke('push-notifications',{body:{action:'dispatch',kind,request_id:requestId},headers:{Authorization:`Bearer ${session.access_token}`}});
-    if(error)throw error;
-    if(data?.error)throw new Error(data.error);
-    console.log('[PUSH] Dispatch concluido',data||{});
+    diagnostic.data=data||null;
+    if(error){
+      let serverMessage='';
+      try{serverMessage=String((await error.context?.clone?.().json())?.error||'');}catch(_e){}
+      throw new Error(serverMessage||String(error?.message||error));
+    }
+    if(data?.error)throw new Error(String(data.error));
+    const recipients=Number(data?.recipients||0);
+    const sent=Number(data?.sent||0);
+    const failed=Number(data?.failed||0);
+    if(!recipients)throw new Error('SEM_DESTINATARIOS: verifique a permissao Notificacao avaria, a unidade e os dispositivos ativos.');
+    if(!sent||failed){
+      const detail=Array.isArray(data?.errors)?String(data.errors[0]||''):'';
+      throw new Error(`FALHA_ENTREGA_PUSH: ${sent} enviado(s), ${failed} falha(s). ${detail}`.trim());
+    }
+    console.log('[PUSH] Dispatch concluido',data);
     return true;
   }catch(e){
-    console.warn('[PUSH] Dispatch falhou',kind,requestId,e);
+    diagnostic.error=String(e?.message||e||'ERRO_PUSH');
+    console.warn('[PUSH] Dispatch falhou',diagnostic);
     return false;
   }
 };
