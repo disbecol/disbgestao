@@ -6019,6 +6019,7 @@ const syncPullTrackingV151=syncPullTracking;
 syncPullTracking = function(){if(!navigator.onLine){stopPullTracking();return;}return syncPullTrackingV151();};
 
 async function offlineUploadDamageStorage(path,blob){const {error}=await sb.storage.from('avarias').upload(path,blob,{contentType:'image/jpeg',upsert:true});if(error)throw error;}
+const damagePushResultsV174=new Map();
 
 submitAvaria = async function(e){
   e.preventDefault();if(submitAvaria._pending)return;submitAvaria._pending=true;
@@ -6031,7 +6032,17 @@ async function submitAvariaOnce(){
     const opId=uuid(),sigBlob=await canvasBlob($('signatureCanvas'),.82),receiptCtx={offline_operation_id:opId,unit:activeUnit,customer:{...customer},date:$('avData').value,map_number:$('avMapa').value.trim(),items:avariaItems.map(x=>({product:x.product,product_code:x.product_code,product_name:x.product_name,quantity:x.quantity,unit:x.unit,reason:x.reason}))};
     const payload={receiptCtx,signature_blob:sigBlob,unit:activeUnit,date:receiptCtx.date,customer:{...customer},map_number:receiptCtx.map_number,items:avariaItems.map(x=>({product:x.product,product_code:x.product_code,product_name:x.product_name,lot:x.lot,quantity:x.quantity,unit:x.unit,reason:x.reason,photos:(x.photos||[]).map(p=>({blob:p.blob,gps:{...p.gps}}))}))};
     await offlineQueueAdd('DAMAGE_CREATE',payload,opId);clearAvariaRequest();
-    if(navigator.onLine){await syncOfflineQueue({silent:true});const still=await offlineGet('queue',opId);if(!still){toast('Avaria registrada e sincronizada.','success');await offlineOpenNextDamageReceipt();}else toast(`Avaria salva no aparelho. Sincronização pendente: ${still.last_error||'aguardando conexão'}.`,'');}
+    if(navigator.onLine){
+      await syncOfflineQueue({silent:true});
+      const still=await offlineGet('queue',opId);
+      const pushResult=damagePushResultsV174.get(opId);
+      damagePushResultsV174.delete(opId);
+      if(!still){
+        if(pushResult?.ok)toast(`Avaria registrada e sincronizada. Push aceito para ${pushResult.sent} dispositivo(s).`,'success');
+        else toast(`Avaria registrada e sincronizada, mas o push falhou: ${pushResult?.error||'resultado indisponível'}.`,'error');
+        await offlineOpenNextDamageReceipt();
+      }else toast(`Avaria salva no aparelho. Sincronização pendente: ${still.last_error||'aguardando conexão'}.`,'');
+    }
     if(!navigator.onLine)toast('Sem sinal: avaria salva no aparelho. Ela será enviada automaticamente quando a internet voltar.','success');
   }catch(err){toast(`Não foi possível salvar a avaria no aparelho: ${humanDeliveryDamageError(err)}`,'error');}
   finally{btn.disabled=false;btn.textContent='Registrar requisição';}
@@ -6112,7 +6123,7 @@ async function processOfflineRecord(row){
   if(row.type==='DAMAGE_CREATE'){
     const p=row.payload,base=`${authUser.id}/offline_${row.id}`,signaturePath=`${base}/assinatura.jpg`;await offlineUploadDamageStorage(signaturePath,p.signature_blob);const uploaded=[];
     for(let i=0;i<p.items.length;i++){const x=p.items[i],photos=[];for(let j=0;j<(x.photos||[]).length;j++){const ph=x.photos[j],path=`${base}/produto_${String(i+1).padStart(2,'0')}_foto_${String(j+1).padStart(2,'0')}.jpg`;await offlineUploadDamageStorage(path,ph.blob);photos.push({photo_path:path,latitude:ph.gps.latitude,longitude:ph.gps.longitude,accuracy:ph.gps.accuracy||'',gps_at:ph.gps.capturedAt});}uploaded.push({...x,photos});}
-    const serverPayload={unit:p.unit||p.receiptCtx?.unit||activeUnit,date:p.date,customer_code:p.customer.code,customer_name:p.customer.name,city:p.customer.city,map_number:p.map_number,signature_path:signaturePath,items:uploaded.map(x=>{const first=x.photos[0];return {product:x.product,lot:x.lot,quantity:x.quantity,unit:x.unit,reason:x.reason,photos:x.photos,photo_path:first?.photo_path||'',latitude:first?.latitude,longitude:first?.longitude,accuracy:first?.accuracy,gps_at:first?.gps_at};})};const {data,error}=await sb.rpc('offline_sync_damage_request',{p_operation_id:row.id,p_payload:serverPayload});if(error)throw error;const ctx={...p.receiptCtx,request_id:data?.request_id||null};await offlineSaveDamageReceipt(ctx);const pushOk=await dispatchDamagePushV170('delivery',data?.request_id||null);if(!pushOk){const detail=String(window.__lastPushDispatchV170?.error||'Falha sem detalhe').slice(0,180);toast(`Avaria salva, mas a notificação falhou: ${detail}`,'error');}return data;
+    const serverPayload={unit:p.unit||p.receiptCtx?.unit||activeUnit,date:p.date,customer_code:p.customer.code,customer_name:p.customer.name,city:p.customer.city,map_number:p.map_number,signature_path:signaturePath,items:uploaded.map(x=>{const first=x.photos[0];return {product:x.product,lot:x.lot,quantity:x.quantity,unit:x.unit,reason:x.reason,photos:x.photos,photo_path:first?.photo_path||'',latitude:first?.latitude,longitude:first?.longitude,accuracy:first?.accuracy,gps_at:first?.gps_at};})};const {data,error}=await sb.rpc('offline_sync_damage_request',{p_operation_id:row.id,p_payload:serverPayload});if(error)throw error;const ctx={...p.receiptCtx,request_id:data?.request_id||null};await offlineSaveDamageReceipt(ctx);const pushOk=await dispatchDamagePushV170('delivery',data?.request_id||null);const diagnostic=window.__lastPushDispatchV170||{};const pushResult={ok:pushOk,sent:Number(diagnostic.data?.sent||0),error:String(diagnostic.error||'Falha sem detalhe').slice(0,180)};damagePushResultsV174.set(row.id,pushResult);if(damagePushResultsV174.size>20)damagePushResultsV174.delete(damagePushResultsV174.keys().next().value);if(!pushOk)toast(`Avaria salva, mas a notificação falhou: ${pushResult.error}`,'error');return data;
   }
   throw new Error(`TIPO_OFFLINE_DESCONHECIDO:${row.type}`);
 }
@@ -6167,6 +6178,7 @@ async function syncOfflineQueue({
       let touchedFefo=false;
       let touchedPull=false;
       let touchedDamage=false;
+      let damagePushFailure='';
 
       try{
 
@@ -6230,6 +6242,8 @@ async function syncOfflineQueue({
               row.type==='DAMAGE_CREATE'
             ){
               touchedDamage=true;
+              const pushResult=damagePushResultsV174.get(row.id);
+              if(pushResult&&!pushResult.ok)damagePushFailure=pushResult.error;
             }
 
           }
@@ -6329,8 +6343,10 @@ async function syncOfflineQueue({
         ){
 
           toast(
-            'Avaria sincronizada. Toque no status Online para abrir o comprovante.',
-            'success'
+            damagePushFailure
+              ?`Avaria sincronizada, mas o push falhou: ${damagePushFailure}`
+              :'Avaria sincronizada. Toque no status Online para abrir o comprovante.',
+            damagePushFailure?'error':'success'
           );
 
         }

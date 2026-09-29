@@ -26,3 +26,19 @@ left join public.user_permissions up on up.user_id=d.user_id
 where u.active=true
 group by u.name,d.channel
 order by u.name,d.channel;
+
+-- A Edge Function usa service_role. Sem estes GRANTs, dispositivos aptos
+-- existem, mas o envio para antes de consultar os destinatarios.
+select
+  has_table_privilege('service_role','public.units','SELECT') as pode_ler_unidades,
+  has_table_privilege('service_role','public.push_devices','SELECT') as pode_ler_dispositivos,
+  has_table_privilege('service_role','public.damage_requests','SELECT') as pode_ler_avarias_entrega,
+  has_table_privilege('service_role','public.sales_damage_requests','SELECT') as pode_ler_avarias_vendas;
+
+-- A Edge Function usa service_role. Sem estes GRANTs, dispositivos aptos
+-- existem, mas o envio para antes de consultar os destinatarios.
+select
+  has_table_privilege('service_role','public.units','SELECT') as pode_ler_unidades,
+  has_table_privilege('service_role','public.push_devices','SELECT') as pode_ler_dispositivos,
+  has_table_privilege('service_role','public.damage_requests','SELECT') as pode_ler_avarias_entrega,
+  has_table_privilege('service_role','public.sales_damage_requests','SELECT') as pode_ler_avarias_vendas;

@@ -74,7 +74,7 @@ Em seguida execute:
 Isso promove Marcelo para ADMIN.
 
 Depois aplique, em ordem numérica, as migrações de `supabase/06_*.sql` até
-`supabase/37_*.sql`. O arquivo `schema.sql` contém a base inicial; os módulos
+`supabase/40_*.sql`. O arquivo `schema.sql` contém a base inicial; os módulos
 mais recentes, incluindo Materiais, permissões e notificações, são criados
 pelas migrações. O arquivo `03_dados_exemplo_opcional.sql` é apenas para testes.
 
@@ -106,6 +106,11 @@ atualizada:
 ```bash
 supabase functions deploy push-notifications
 ```
+
+Depois, aplique `38_pull_solo_trip.sql`,
+`39_v1_7_3_compartilhamento_foto_opcional.sql` e
+`40_v1_7_4_push_service_role_grants.sql`. O SQL 40 libera somente as leituras
+e a atualização de status dos dispositivos necessárias à função de push.
 
 ## 3. Configurar o site
 
