@@ -1063,6 +1063,35 @@ button[data-sales-delivered]:hover{
 .damage-stage-tab:focus-visible,.damage-request-context>summary:focus-visible,.damage-decision-history>summary:focus-visible,.damage-review-workspace button:focus-visible,.damage-review-workspace input:focus-visible{outline:3px solid #f6ae2d;outline-offset:2px}
 @media(max-width:640px){.damage-stage-tab{min-height:44px}.damage-review-workspace .damage-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.damage-review-workspace .sales-proof-multi a{flex-basis:130px}.damage-review-workspace .damage-product-head strong{font-size:11px}}
 
+/* Identificação rápida do produto e ampliação das evidências na revisão. */
+#modal .damage-review-workspace .damage-product-head{display:flex;align-items:center;gap:12px;padding:14px;background:linear-gradient(110deg,#fff,#f7fbff)}
+.damage-review-workspace .damage-product-head .damage-check{margin:0;flex:none}
+.damage-review-workspace .damage-product-head .damage-product-identity{display:flex;flex-direction:row;align-items:center;gap:12px;min-width:0;flex:1}
+.damage-product-visual{width:68px;height:68px;flex:none;display:grid;place-items:center;overflow:hidden;border:1px solid #d7e3ed;border-radius:12px;background:#fff}
+.damage-product-visual img{width:100%;height:100%;object-fit:contain;padding:4px}
+.damage-product-visual .sales-product-no-image{padding:5px;text-align:center;color:#8295a5;font-size:9px;font-weight:700}
+.damage-review-workspace .damage-product-name{display:flex;flex-direction:column;gap:5px;min-width:0}
+.damage-review-workspace .damage-product-name small{display:flex;align-items:center;gap:7px;flex-wrap:wrap;color:#607d94;font-size:9px}
+.damage-product-code{padding:3px 6px;border-radius:6px;background:#eaf3fd;color:#135d98;font-size:9px;letter-spacing:.02em}
+#modal .damage-review-workspace .damage-product-name strong{font-size:16px;line-height:1.3;color:#17344c;overflow-wrap:anywhere}
+.damage-review-workspace .damage-product-head>.status{flex:none;align-self:flex-start}
+.damage-review-workspace .damage-summary-grid{padding:12px 14px;gap:8px}
+.damage-review-workspace .damage-summary-grid>div{padding:10px 11px;background:#f7fafd}
+.damage-review-workspace .damage-summary-grid strong{font-size:11px;line-height:1.3}
+.damage-review-workspace .damage-summary-grid small{font-size:8px}
+.damage-photo-open{display:block;position:relative;border-radius:9px;overflow:hidden;cursor:zoom-in}
+.damage-photo-open img,.damage-photo-card .damage-photo-open img{display:block;width:100%;height:210px;object-fit:contain;border:1px solid #e0e8ef;border-radius:9px;background:#fff}
+.damage-photo-open>span{position:absolute;right:8px;bottom:8px;padding:5px 8px;border-radius:7px;background:#123b5bd9;color:#fff;font-size:10px;font-weight:800}
+.damage-review-workspace .sales-proof-multi a{cursor:zoom-in}
+.damage-review-workspace .sales-proof-multi a:hover,.damage-photo-open:hover{outline:2px solid #2873b9;outline-offset:2px}
+.damage-photo-viewer[hidden]{display:none!important}
+.damage-photo-viewer{position:fixed;inset:0;z-index:320;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(7,22,37,.92)}
+.damage-photo-viewer-content{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;width:100%;height:100%}
+.damage-photo-viewer-content img{max-width:100%;max-height:calc(100% - 50px);object-fit:contain;border-radius:8px}
+.damage-photo-viewer-content p{margin:0;color:#fff;font-size:12px;font-weight:700;text-align:center}
+.damage-photo-viewer-close{position:absolute;top:0;right:0;z-index:1;width:42px;height:42px;border:0;border-radius:11px;background:#fff;color:#17344c;font-size:27px;cursor:pointer}
+@media(max-width:640px){#modal .damage-review-workspace .damage-product-head{flex-wrap:wrap}.damage-product-visual{width:54px;height:54px}#modal .damage-review-workspace .damage-product-name strong{font-size:14px}.damage-review-workspace .damage-product-head>.status{margin-left:auto}.damage-photo-open img,.damage-photo-card .damage-photo-open img{height:180px}}
+
 /* Leitura e navegação consistentes nas telas de cadastro, consulta e gestão. */
 .page-head p{line-height:1.5}
 .table-wrap th{font-size:10px!important;line-height:1.35}

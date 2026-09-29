@@ -111,6 +111,9 @@ Depois, aplique `38_pull_solo_trip.sql`,
 `39_v1_7_3_compartilhamento_foto_opcional.sql` e
 `40_v1_7_4_push_service_role_grants.sql`. O SQL 40 libera somente as leituras
 e a atualização de status dos dispositivos necessárias à função de push.
+Em seguida, execute `41_damage_approval_optional_note.sql` no SQL Editor para
+deixar a justificativa opcional na aprovação e obrigatória na reprovação de
+avarias de Entrega e Vendas.
 
 ## 3. Configurar o site
 
