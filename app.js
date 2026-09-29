@@ -136,7 +136,7 @@ const viewMeta = {
   'nri-cadastro':['Cadastro por carreta','Cadastre várias NRIs de uma vez'],
   'nri-pendentes':['Impressões pendentes','Fila atualizada em tempo real'],
   'avaria-cadastro':['Registrar avaria','Foto, GPS e assinatura'],
-  'avaria-minhas':['Minhas avarias','Acompanhe os status das avarias que você registrou'],
+  'avaria-minhas':['Minhas avarias','Acompanhe o status de cada produto que você registrou'],
   'conf-cadastro':['Conferência de vasilhames','Registro físico de retorno'],
   'conf-minhas':['Minhas conferências','Histórico do usuário atual'],
   'avaria-admin':['Todas as avarias','Análise e aprovação'],
@@ -3889,7 +3889,7 @@ function damageReviewProductIdentity(item,index){
   const parts=raw.match(/^([A-Za-z0-9]+)\s*[-–—•]\s*(.+)$/);
   const code=normalizeCode(item?.product_code||parts?.[1]||'');
   const name=parts?.[2]||raw||'Produto sem identificação';
-  const image=code?`<img class="hidden" data-sales-product-image="${esc(code)}" alt="Imagem do produto ${esc(name)}">`:'';
+  const image=code?`<img class="hidden" loading="lazy" data-sales-product-image="${esc(code)}" alt="Imagem do produto ${esc(name)}">`:'';
   return `<div class="damage-product-identity"><div class="damage-product-visual">${image}<span class="sales-product-no-image">Sem imagem</span></div><div class="damage-product-name"><small>PRODUTO ${index+1}${code?` <span class="damage-product-code">CÓD. ${esc(code)}</span>`:''}</small><strong>${esc(name)}</strong></div></div>`;
 }
 function damageReviewControls(status,buttons=''){
@@ -6125,7 +6125,7 @@ async function loadDeliveryDamageMy(silent=false){
   const userId=authUser.id,unit=activeUnit;
   try{
     const {data,error}=await sb.from('damage_requests')
-      .select('id,unit,occurrence_date,created_at,customer_code,customer_name,city,map_number,status,created_by,damage_items(id,item_order,product_text,lot,quantity,quantity_unit,reason,status)')
+      .select('id,unit,occurrence_date,created_at,customer_code,customer_name,city,map_number,created_by,damage_items(id,item_order,product_text,lot,quantity,quantity_unit,reason,status)')
       .eq('unit',unit).eq('created_by',userId)
       .order('created_at',{ascending:false}).limit(1000);
     if(error)throw error;
@@ -6148,16 +6148,17 @@ function renderDeliveryDamageMy(){
   const search=norm($('avMySearch')?.value||''),status=$('avMyStatus')?.value||'';
   const rows=deliveryDamageMyRequests.filter(r=>{
     const items=r.damage_items||[];
-    const matchesStatus=!status||r.status===status||items.some(i=>i.status===status);
+    const matchesStatus=!status||items.some(i=>i.status===status);
     const matchesSearch=!search||norm([r.customer_code,r.customer_name,r.city,r.map_number,...items.flatMap(i=>[i.product_text,i.lot,i.reason])].join(' ')).includes(search);
     return matchesStatus&&matchesSearch;
   });
   const count=$('avMyCount');if(count)count.textContent=`${rows.length} avaria${rows.length===1?'':'s'} encontrada${rows.length===1?'':'s'}`;
   box.innerHTML=rows.length?rows.map(r=>{
     const items=[...(r.damage_items||[])].sort((a,b)=>Number(a.item_order||0)-Number(b.item_order||0));
-    const products=items.map((i,index)=>`<div class="delivery-my-product"><span class="delivery-my-product-index">${index+1}</span><div class="delivery-my-product-info"><strong>${esc(i.product_text||'Produto sem descrição')}</strong><small>${fmtNum(i.quantity)} ${esc(i.quantity_unit||'')} · Lote ${esc(i.lot||'—')} · ${esc(i.reason||'—')}</small></div>${statusBadge(i.status)}</div>`).join('');
-    return `<article class="delivery-my-card"><header class="delivery-my-card-head"><div><small>${fmtDate(r.occurrence_date)} · Mapa ${esc(r.map_number||'—')}</small><h2>PDV ${esc(r.customer_code||'—')} · ${esc(r.customer_name||'—')}</h2><span>${esc(r.city||'—')} · Registrada em ${fmtDateTime(r.created_at)}</span></div><div class="delivery-my-request-status"><small>STATUS DA AVARIA</small>${statusBadge(r.status)}</div></header><div class="delivery-my-card-label">${items.length} produto${items.length===1?'':'s'}</div><div class="delivery-my-products">${products||'<div class="empty-state">Nenhum produto disponível.</div>'}</div></article>`;
+    const products=items.map((i,index)=>`<section class="delivery-my-product"><div class="delivery-my-product-main">${damageReviewProductIdentity(i,index)}<div class="delivery-my-product-meta"><span><small>QUANTIDADE</small><strong>${fmtNum(i.quantity)} ${esc(i.quantity_unit||'')}</strong></span><span><small>LOTE</small><strong>${esc(i.lot||'—')}</strong></span><span><small>MOTIVO</small><strong>${esc(i.reason||'—')}</strong></span></div></div><div class="delivery-my-product-status"><small>STATUS DO PRODUTO</small>${statusBadge(i.status)}</div></section>`).join('');
+    return `<article class="delivery-my-card"><header class="delivery-my-card-head"><div><small>${fmtDate(r.occurrence_date)}</small><h2>PDV ${esc(r.customer_code||'—')} · ${esc(r.customer_name||'—')}</h2><span>${esc(r.city||'—')} · Registrada em ${fmtDateTime(r.created_at)}</span></div><span class="delivery-my-map">Mapa ${esc(r.map_number||'—')}</span></header><div class="delivery-my-card-body"><div class="delivery-my-card-label">${items.length} produto${items.length===1?'':'s'} nesta avaria</div><div class="delivery-my-products">${products||'<div class="empty-state">Nenhum produto disponível.</div>'}</div></div></article>`;
   }).join(''):'<div class="empty-state">Nenhuma avaria encontrada para os filtros selecionados.</div>';
+  hydrateSalesDamageProductImages(box);
 }
 loadAdminAvarias = async function(silent=false){
   if(!hasAnyPerm('DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST'))return;
