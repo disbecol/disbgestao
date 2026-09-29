@@ -103,6 +103,7 @@ const SALES_DAMAGE_PRODUCT_RENDER_LIMIT = 1500;
 const SALES_DAMAGE_PRODUCT_INITIAL_LIMIT = 80;
 let selectedSalesCustomerKey = '';
 let salesDamageMyRequests = [];
+let deliveryDamageMyRequests = [];
 let salesDamageManageRequests = [];
 let currentSalesDamageDetail = null;
 let allConferences = [];
@@ -135,6 +136,7 @@ const viewMeta = {
   'nri-cadastro':['Cadastro por carreta','Cadastre várias NRIs de uma vez'],
   'nri-pendentes':['Impressões pendentes','Fila atualizada em tempo real'],
   'avaria-cadastro':['Registrar avaria','Foto, GPS e assinatura'],
+  'avaria-minhas':['Minhas avarias','Acompanhe os status das avarias que você registrou'],
   'conf-cadastro':['Conferência de vasilhames','Registro físico de retorno'],
   'conf-minhas':['Minhas conferências','Histórico do usuário atual'],
   'avaria-admin':['Todas as avarias','Análise e aprovação'],
@@ -569,6 +571,9 @@ function bindBaseEvents(){
   $('btnAtualizarAvarias').addEventListener('click',loadAdminAvarias);
   $('btnAvariasCsv')?.addEventListener('click',exportDeliveryDamageCsv);
   $('tbodyAvariasAdmin').addEventListener('click',onAdminAvariaClick);
+  $('avMySearch')?.addEventListener('input',renderDeliveryDamageMy);
+  $('avMyStatus')?.addEventListener('change',renderDeliveryDamageMy);
+  $('btnAvMyRefresh')?.addEventListener('click',()=>loadDeliveryDamageMy());
   setupSignatureCanvas();
 
   // Avarias de Vendas
@@ -899,6 +904,7 @@ async function logout(){
   salesDamageItems=[];
   salesDamagePhotos=[];
   salesDamageMyRequests=[];
+  deliveryDamageMyRequests=[];
   salesDamageManageRequests=[];
   currentSalesDamageDetail=null;
 
@@ -1037,6 +1043,7 @@ function openView(name,force=false){
   if(name==='nri-historico')loadNriHistory();
   if(name==='nri-avarias-historico')loadNriDamageHistory();
   if(name==='avaria-admin')loadAdminAvarias();
+  if(name==='avaria-minhas')loadDeliveryDamageMy();
   if(name==='sales-avaria-cadastro')prepareSalesDamageForm();
   if(name==='sales-avaria-minhas')loadSalesDamageMy();
   if(name==='sales-avaria-gestao')loadSalesDamageManage();
@@ -1059,7 +1066,10 @@ function setupRealtime(){
   teardownRealtime();
   realtimeChannel=sb.channel(`ops-${authUser.id}`);
   if(canNri()) { realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'nris'},()=>debounceReload('nri')); realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'marketplace_receipts'},()=>debounceReload('marketplace')); }
-  if(hasAnyPerm('DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST')) realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'damage_requests'},()=>debounceReload('avaria'));
+  if(canAvaria()){
+    realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'damage_requests'},()=>debounceReload('avaria'));
+    realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'damage_items'},()=>debounceReload('avaria'));
+  }
   if(canSalesDamage()){
     realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'sales_damage_requests'},()=>debounceReload('sales_damage'));
     realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'sales_damage_items'},()=>debounceReload('sales_damage'));
@@ -1079,7 +1089,10 @@ function teardownRealtime(){if(realtimeChannel&&sb){sb.removeChannel(realtimeCha
 const reloadTimers={}; function debounceReload(type){clearTimeout(reloadTimers[type]);reloadTimers[type]=setTimeout(()=>{
   if(type==='nri'&&canNri())loadPending(true);
   if(type==='marketplace'&&canNri()){if(hasPerm('MARKETPLACE_RECEIVE'))loadMarketplaceModule(true);if(hasPerm('NRI_PENDING_VIEW'))loadPullNriPending(true);}
-  if(type==='avaria'&&hasAnyPerm('DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST'))loadAdminAvarias(true);
+  if(type==='avaria'){
+    if(hasAnyPerm('DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST'))loadAdminAvarias(true);
+    if(activeView==='avaria-minhas'&&hasPerm('DELIVERY_DAMAGE_CREATE'))loadDeliveryDamageMy(true);
+  }
   if(type==='sales_damage'){if(hasPerm('SALES_DAMAGE_VIEW_OWN'))loadSalesDamageMy(true);if(hasAnyPerm('SALES_DAMAGE_VIEW_ALL,SALES_DAMAGE_REVIEW,SALES_DAMAGE_OVERRIDE,SALES_DAMAGE_POST'))loadSalesDamageManage(true);}
   if(type==='conf'){if(activeView==='conf-minhas'&&hasPerm('CONF_OWN_HISTORY'))loadMyConferences(true);if(activeView==='conf-dashboard'&&hasPerm('CONF_DASHBOARD'))loadDashboard(true);}
   if(type==='fefo'&&canFefo()){refreshFefoBadge(true);if(activeView==='fefo-contagem'&&hasPerm('FEFO_CREATE'))loadFefoCurrent(true);if(activeView==='fefo-andamento'&&hasPerm('FEFO_ACTIVE'))loadFefoActiveCounts(true);if(activeView==='fefo-relatorios'&&hasPerm('FEFO_REPORT'))loadFefoReports(true);}
@@ -6107,6 +6120,45 @@ async function submitAvariaOnce(){
 
 function deliveryDamageItemProductCode(item){const direct=normalizeCode(item?.product_code||'');if(direct)return direct;const text=String(item?.product_text||item?.product||'');return normalizeCode(text.split(/\s+-\s+|\s+•\s+/)[0]||'');}
 function deliveryDamageLotKey(item){return `${deliveryDamageItemProductCode(item)}|${sanitizeLot(item?.lot)}`;}
+async function loadDeliveryDamageMy(silent=false){
+  if(!hasPerm('DELIVERY_DAMAGE_CREATE')||!authUser||!activeUnit)return;
+  const userId=authUser.id,unit=activeUnit;
+  try{
+    const {data,error}=await sb.from('damage_requests')
+      .select('id,unit,occurrence_date,created_at,customer_code,customer_name,city,map_number,status,created_by,damage_items(id,item_order,product_text,lot,quantity,quantity_unit,reason,status)')
+      .eq('unit',unit).eq('created_by',userId)
+      .order('created_at',{ascending:false}).limit(1000);
+    if(error)throw error;
+    if(authUser?.id!==userId||activeUnit!==unit)return;
+    deliveryDamageMyRequests=data||[];
+    renderDeliveryDamageMy();
+  }catch(error){
+    if(!silent){
+      const box=$('avMyCards');
+      if(box&&!deliveryDamageMyRequests.length){
+        box.innerHTML='<div class="empty-state">Não foi possível carregar suas avarias. Toque em Atualizar para tentar novamente.</div>';
+        if($('avMyCount'))$('avMyCount').textContent='Avarias indisponíveis';
+      }
+      toast(humanDeliveryDamageError(error),'error');
+    }
+  }
+}
+function renderDeliveryDamageMy(){
+  const box=$('avMyCards');if(!box)return;
+  const search=norm($('avMySearch')?.value||''),status=$('avMyStatus')?.value||'';
+  const rows=deliveryDamageMyRequests.filter(r=>{
+    const items=r.damage_items||[];
+    const matchesStatus=!status||r.status===status||items.some(i=>i.status===status);
+    const matchesSearch=!search||norm([r.customer_code,r.customer_name,r.city,r.map_number,...items.flatMap(i=>[i.product_text,i.lot,i.reason])].join(' ')).includes(search);
+    return matchesStatus&&matchesSearch;
+  });
+  const count=$('avMyCount');if(count)count.textContent=`${rows.length} avaria${rows.length===1?'':'s'} encontrada${rows.length===1?'':'s'}`;
+  box.innerHTML=rows.length?rows.map(r=>{
+    const items=[...(r.damage_items||[])].sort((a,b)=>Number(a.item_order||0)-Number(b.item_order||0));
+    const products=items.map((i,index)=>`<div class="delivery-my-product"><span class="delivery-my-product-index">${index+1}</span><div class="delivery-my-product-info"><strong>${esc(i.product_text||'Produto sem descrição')}</strong><small>${fmtNum(i.quantity)} ${esc(i.quantity_unit||'')} · Lote ${esc(i.lot||'—')} · ${esc(i.reason||'—')}</small></div>${statusBadge(i.status)}</div>`).join('');
+    return `<article class="delivery-my-card"><header class="delivery-my-card-head"><div><small>${fmtDate(r.occurrence_date)} · Mapa ${esc(r.map_number||'—')}</small><h2>PDV ${esc(r.customer_code||'—')} · ${esc(r.customer_name||'—')}</h2><span>${esc(r.city||'—')} · Registrada em ${fmtDateTime(r.created_at)}</span></div><div class="delivery-my-request-status"><small>STATUS DA AVARIA</small>${statusBadge(r.status)}</div></header><div class="delivery-my-card-label">${items.length} produto${items.length===1?'':'s'}</div><div class="delivery-my-products">${products||'<div class="empty-state">Nenhum produto disponível.</div>'}</div></article>`;
+  }).join(''):'<div class="empty-state">Nenhuma avaria encontrada para os filtros selecionados.</div>';
+}
 loadAdminAvarias = async function(silent=false){
   if(!hasAnyPerm('DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST'))return;
   try{const {data,error}=await sb.from('damage_requests').select('*,damage_items(*,damage_item_photos(*))').eq('unit',activeUnit).order('created_at',{ascending:false}).limit(1000);if(error)throw error;adminAvarias=data||[];const codes=[...new Set(adminAvarias.flatMap(r=>r.damage_items||[]).map(deliveryDamageItemProductCode).filter(Boolean))];lotNriMap=new Map();for(const chunk of chunks(codes,100)){const q=await sb.from('nris').select('nri,lot,product_code,product_name,validity_date,unit').eq('unit',activeUnit).in('product_code',chunk);if(q.error)throw q.error;(q.data||[]).forEach(n=>{splitMultiLots(n.lot).forEach(lot=>{const k=`${normalizeCode(n.product_code)}|${sanitizeLot(lot)}`;if(!lotNriMap.has(k))lotNriMap.set(k,[]);lotNriMap.get(k).push(n);});});}renderAdminAvarias();if($('badgeAvarias'))$('badgeAvarias').textContent=adminAvarias.filter(r=>(r.damage_items||[]).some(i=>['PENDENTE','APROVADO','LANCADO'].includes(i.status))).length;}catch(e){if(!silent)toast(humanDeliveryDamageError(e),'error');}
@@ -6657,7 +6709,7 @@ async function loadUnitAccess(){
 }
 
 function resetUnitScopedState(){
-  pendingNris=[];historyNris=[];selectedNris.clear();adminAvarias=[];salesDamageMyRequests=[];salesDamageManageRequests=[];
+  pendingNris=[];historyNris=[];selectedNris.clear();adminAvarias=[];deliveryDamageMyRequests=[];salesDamageMyRequests=[];salesDamageManageRequests=[];
   fefoActiveCount=null;fefoItems=[];fefoEditingItemId=null;fefoActiveCounts=[];fefoReports=[];fefoItemsByCount.clear();
   rotatingAssetActiveCount=null;rotatingAssetEntries=[];rotatingAssetHistory=[];rotatingAssetEntriesByCount.clear();
   marketplaceActiveReceipt=null;marketplaceDashboardReceipts=[];pullActiveTrip=null;pullDriverEvents=[];pullDriverOccurrences=[];pullHistory=[];
@@ -6671,6 +6723,7 @@ async function changeActiveUnit(next){
   if(canFefo())await refreshFefoBadge(true);
   if(canRotatingAsset()){await loadRotatingAssetProducts(true);if(hasPerm('ROTATING_ASSET_CREATE'))await loadRotatingAssetCurrent(true);}
   if(hasAnyPerm('DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST'))await loadAdminAvarias(true);
+  if(activeView==='avaria-minhas'&&hasPerm('DELIVERY_DAMAGE_CREATE'))await loadDeliveryDamageMy(true);
   if(hasPerm('SALES_DAMAGE_VIEW_OWN'))await loadSalesDamageMy(true);
   if(hasAnyPerm('SALES_DAMAGE_VIEW_ALL,SALES_DAMAGE_REVIEW,SALES_DAMAGE_OVERRIDE,SALES_DAMAGE_POST'))await loadSalesDamageManage(true);
   if(canPull())await initPullModule();
@@ -7541,7 +7594,10 @@ setupRealtime=function(){
   teardownRealtime();
   realtimeChannel=sb.channel(`ops-${authUser.id}`);
   if(canNri()){realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'nris'},()=>debounceReload('nri'));realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'marketplace_receipts'},()=>debounceReload('marketplace'));}
-  if(hasAnyPerm('DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST'))realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'damage_requests'},()=>debounceReload('avaria'));
+  if(canAvaria()){
+    realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'damage_requests'},()=>debounceReload('avaria'));
+    realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'damage_items'},()=>debounceReload('avaria'));
+  }
   if(canSalesDamage()){realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'sales_damage_requests'},()=>debounceReload('sales_damage'));realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'sales_damage_items'},()=>debounceReload('sales_damage'));}
   if(canConference())realtimeChannel.on('postgres_changes',{event:'INSERT',schema:'public',table:'container_conferences'},()=>debounceReload('conf'));
   if(canFefo()){realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'fefo_counts'},()=>debounceReload('fefo'));realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'fefo_count_items'},()=>debounceReload('fefo'));}

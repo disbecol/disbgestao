@@ -1142,3 +1142,28 @@ button[data-sales-delivered]:hover{
 .pull-map-jump.occurrence{border-color:#ead18b;background:#fff9e8;color:#775600}
 .pull-map-jump.occurrence:hover{background:#fff0bd}
 .pull-timeline-map-actions{display:flex;gap:7px;flex-wrap:wrap}
+
+/* Avarias de entrega: acompanhamento do motorista */
+.delivery-my-filters{margin-bottom:14px}
+.delivery-my-heading{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 2px 12px;color:#183b5d}
+.delivery-my-heading strong{font-size:14px}
+.delivery-my-heading small{color:#60758a;font-size:10px;line-height:1.4}
+.delivery-my-list{display:grid;gap:13px}
+.delivery-my-card{overflow:hidden;border:1px solid #cbdbe9;border-radius:15px;background:#fff;box-shadow:0 5px 20px rgba(22,58,87,.06)}
+.delivery-my-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:16px 18px;background:linear-gradient(110deg,#f7fbff,#eef6fc);border-bottom:1px solid #dce8f0}
+.delivery-my-card-head>div:first-child{min-width:0}
+.delivery-my-card-head small,.delivery-my-request-status small{display:block;color:#5c7890;font-size:9px;font-weight:800;letter-spacing:.03em}
+.delivery-my-card-head h2{margin:5px 0;color:#14334f;font-size:16px;line-height:1.25}
+.delivery-my-card-head span:not(.status){color:#61778a;font-size:10px}
+.delivery-my-request-status{text-align:right;flex:none}
+.delivery-my-request-status .status{margin-top:7px}
+.delivery-my-card-label{padding:11px 18px 5px;color:#4a687f;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}
+.delivery-my-products{padding:0 10px 11px}
+.delivery-my-product{display:flex;align-items:center;gap:11px;min-height:60px;padding:10px 8px;border-bottom:1px solid #e8eef3}
+.delivery-my-product:last-child{border-bottom:0}
+.delivery-my-product-index{display:grid;place-items:center;flex:none;width:25px;height:25px;border-radius:8px;background:#e9f2fb;color:#276590;font-size:11px;font-weight:800}
+.delivery-my-product-info{display:flex;flex:1;flex-direction:column;gap:4px;min-width:0}
+.delivery-my-product-info strong{color:#1a3146;font-size:12px;line-height:1.3}
+.delivery-my-product-info small{color:#65798b;font-size:10px;line-height:1.35}
+.delivery-my-product .status{flex:none;margin-left:auto}
+@media(max-width:650px){.delivery-my-heading{display:block}.delivery-my-heading small{display:block;margin-top:4px}.delivery-my-card-head{padding:13px;flex-wrap:wrap}.delivery-my-card-head h2{font-size:14px}.delivery-my-request-status{text-align:left}.delivery-my-card-label{padding-left:13px}.delivery-my-products{padding:0 7px 8px}.delivery-my-product{align-items:flex-start;flex-wrap:wrap}.delivery-my-product-info{flex-basis:calc(100% - 40px)}.delivery-my-product .status{margin-left:36px}}
