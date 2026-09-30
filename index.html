@@ -7,7 +7,7 @@
   <title>Disb Gestão</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=1.7.9-my-delivery-cards">
+  <link rel="stylesheet" href="styles.css?v=1.7.10-home-solo">
   <link rel="stylesheet" href="visual-refresh.css?v=1.7.1-visual">
   <link rel="stylesheet" href="pull-dashboard.css?v=1.7.1-pull-dashboard">
 </head>
@@ -18,7 +18,7 @@
         <div class="login-logo"><img src="assets/icon-192.png" alt="Disb Gestão"></div>
         <span class="eyebrow light">ARMAZÉM • ENTREGA • CONFERÊNCIA</span>
         <h1>Disb Gestão</h1>
-        <p>NRI, Ativo de Giro, avarias, vendas, conferência, FEFO e Puxada em um único aplicativo.</p><div class="login-version">v1.7.9</div>
+        <p>NRI, Ativo de Giro, avarias, vendas, conferência, FEFO e Puxada em um único aplicativo.</p><div class="login-version">v1.7.10</div>
         <div class="feature-list">
           <span>✓ Cadastro por carreta e impressão de NRIs</span>
           <span>✓ Avarias de entrega e vendas com evidências</span>
@@ -45,7 +45,8 @@
 
   <div id="appShell" class="app-shell hidden">
     <aside id="sidebar" class="sidebar">
-      <div class="brand-row"><div class="brand-box"><img src="assets/icon-192.png" alt="Disb Gestão"></div><div><strong>Disb Gestão</strong><span>Supabase • tempo real</span></div></div><div class="app-version-badge">v1.7.9</div>
+      <div class="brand-row"><div class="brand-box"><img src="assets/icon-192.png" alt="Disb Gestão"></div><div><strong>Disb Gestão</strong><span>Supabase • tempo real</span></div></div><div class="app-version-badge">v1.7.10</div>
+      <button class="nav-item home-nav-item" data-view="home"><span aria-hidden="true">⌂</span>Home</button>
       <div class="nav-area open" data-area="armazem" data-permission-any="NRI_PENDING_VIEW,MARKETPLACE_RECEIVE,NRI_CREATE,NRI_PRINT,NRI_HISTORY,NRI_DAMAGE_HISTORY,CONF_CREATE,CONF_OWN_HISTORY,CONF_HISTORY,CONF_DASHBOARD,FEFO_CREATE,FEFO_ACTIVE,FEFO_REPORT,ROTATING_ASSET_CREATE,ROTATING_ASSET_HISTORY,MATERIAL_INVENTORY,MATERIAL_STOCK_VIEW,MATERIAL_CATALOG,MATERIAL_MOVEMENT">
         <button type="button" class="nav-area-toggle" aria-expanded="true"><span class="area-icon">▦</span><span class="area-name">Armazém</span><span class="area-chevron">⌄</span></button>
         <div class="nav-area-items">
@@ -173,6 +174,16 @@
     <div id="overlay" class="overlay"></div>
 
     <main class="content">
+      <section id="view-home" class="view">
+        <div class="home-hero">
+          <div><span class="home-kicker">SEU ESPAÇO DE TRABALHO</span><h1 id="homeGreeting">Bem-vindo</h1><p>Suas funções mais usadas, em um lugar fácil de encontrar.</p><div class="home-context"><span id="homeUnitLabel">Unidade atual</span><span id="homeTodayLabel"></span></div></div>
+          <div class="home-hero-mark" aria-hidden="true">⌂</div>
+        </div>
+        <div class="home-section-head"><div><span class="home-section-eyebrow">PERSONALIZÁVEL</span><h2>Meus atalhos</h2><p>Escolha apenas as telas que fazem sentido para sua rotina.</p></div><button id="btnHomeAddShortcut" type="button" class="btn primary" aria-expanded="false" aria-controls="homeShortcutPicker">＋ Adicionar atalho</button></div>
+        <div id="homeShortcutGrid" class="home-shortcut-grid" aria-live="polite"></div>
+        <div id="homeShortcutPicker" class="home-shortcut-picker hidden"><div class="home-picker-head"><div><strong>Adicionar atalho</strong><small>Disponíveis conforme suas permissões.</small></div><button id="btnHomeClosePicker" type="button" class="mini-btn">Fechar</button></div><label class="home-search"><span class="sr-only">Buscar funcionalidade</span><input id="homeShortcutSearch" type="search" placeholder="Buscar funcionalidade ou área"></label><div id="homeShortcutOptions" class="home-shortcut-options"></div></div>
+        <p id="homeSyncStatus" class="home-sync-status" aria-live="polite"></p>
+      </section>
       <!-- NRI CADASTRO -->
       <section id="view-nri-cadastro" class="view role-nri" data-permission="NRI_CREATE">
         <div class="page-head"><div><div class="breadcrumb">Armazém / NRI</div><h1>Cadastro por carreta</h1><p>Cadastre vários produtos, lotes e NRIs em uma única requisição.</p></div><span class="page-chip">NRI</span></div>
@@ -597,7 +608,7 @@
           <div class="card"><div class="section-title">Fábricas e raio de auditoria</div><form id="formPullFactory"><input id="pullFactoryOriginal" type="hidden"><div class="field"><label>Fábrica *</label><select id="pullFactoryName" required></select></div><div class="grid grid-3"><div class="field"><label>Latitude *</label><input id="pullFactoryLat" type="number" step="any" required></div><div class="field"><label>Longitude *</label><input id="pullFactoryLon" type="number" step="any" required></div><div class="field"><label>Raio (m) *</label><input id="pullFactoryRadius" type="number" min="1" required></div></div><div class="actions"><button id="btnPullFactoryGps" type="button" class="btn secondary">Usar minha localização</button><button type="submit" class="btn primary">Salvar localização/raio</button></div></form><div id="pullFactoryList" class="compact-list"></div></div>
           <div class="card"><div class="section-title">Veículos / parceiros</div><form id="formPullVehicle"><input id="pullVehicleId" type="hidden"><div class="grid grid-2"><div class="field"><label>Placa *</label><input id="pullVehiclePlate" maxlength="12" required></div><div class="field"><label>Parceiro / transportadora *</label><input id="pullVehicleCarrier" required></div></div><label class="check"><input id="pullVehicleActive" type="checkbox" checked> Veículo ativo</label><div class="actions right"><button id="btnPullVehicleNew" type="button" class="btn secondary">Novo</button><button class="btn primary">Salvar veículo</button></div></form><div id="pullVehicleRows" class="compact-list"></div></div>
         </div>
-        <div class="card"><div class="section-title">Etapas principais e ocorrências</div><form id="formPullStep"><input id="pullStepId" type="hidden"><div class="grid grid-4"><div class="field"><label>Nome *</label><input id="pullStepName" required></div><div class="field"><label>Tipo *</label><select id="pullStepType"><option value="MAIN">Etapa principal</option><option value="OCCURRENCE">Ocorrência</option></select></div><div class="field"><label>Fluxo *</label><select id="pullStepFlow"><option value="PULL">Puxada</option><option value="TRANSFER">Transferência</option><option value="BOTH">Ambos</option></select></div><div class="field"><label>Código de ação *</label><input id="pullStepCode" placeholder="GENERAL_..." required></div><div class="field"><label>Ordem *</label><input id="pullStepOrder" type="number" required></div><div class="field"><label>Duração</label><select id="pullStepDuration"><option value="POINT">Pontual</option><option value="INTERVAL">Início / fim</option></select></div><div class="field"><label>Motorista responsável *</label><select id="pullStepExecutor"><option value="1">Motorista 1</option><option value="2">Motorista 2</option></select><small id="pullStepExecutorNote">Escolha quem deve registrar esta etapa.</small></div><label class="check"><input id="pullStepGeofence" type="checkbox"> Auditar raio da fábrica</label><label class="check"><input id="pullStepDiscount" type="checkbox"> Sugerir desconto no TMA</label><label class="check"><input id="pullStepActive" type="checkbox" checked> Ativa</label></div><div class="actions right"><button id="btnPullStepNew" type="button" class="btn secondary">Nova</button><button class="btn primary">Salvar</button></div></form><div class="table-wrap"><table><thead><tr><th>Ordem</th><th>Nome</th><th>Tipo</th><th>Fluxo</th><th>Responsável</th><th>Ação</th><th>Regras</th><th>Status</th><th>Ação</th></tr></thead><tbody id="tbodyPullSteps"></tbody></table></div></div>
+        <div class="card"><div class="section-title">Etapas principais e ocorrências</div><form id="formPullStep"><input id="pullStepId" type="hidden"><div class="grid grid-4"><div class="field"><label>Nome *</label><input id="pullStepName" required></div><div class="field"><label>Tipo *</label><select id="pullStepType"><option value="MAIN">Etapa principal</option><option value="OCCURRENCE">Ocorrência</option></select></div><div class="field"><label>Fluxo *</label><select id="pullStepFlow"><option value="PULL">Puxada</option><option value="TRANSFER">Transferência</option><option value="BOTH">Ambos</option></select></div><div class="field"><label>Código de ação *</label><input id="pullStepCode" placeholder="GENERAL_..." required></div><div class="field"><label>Ordem *</label><input id="pullStepOrder" type="number" required></div><div class="field"><label>Duração</label><select id="pullStepDuration"><option value="POINT">Pontual</option><option value="INTERVAL">Início / fim</option></select></div><div class="field"><label>Motorista responsável *</label><select id="pullStepExecutor"><option value="1">Motorista 1</option><option value="2">Motorista 2</option></select><small id="pullStepExecutorNote">Escolha quem deve registrar esta etapa.</small></div><label class="check"><input id="pullStepGeofence" type="checkbox"> Auditar raio da fábrica</label><label class="check"><input id="pullStepDiscount" type="checkbox"> Sugerir desconto no TMA</label><label class="check"><input id="pullStepActive" type="checkbox" checked> Ativa</label><label id="pullStepSkipSoloWrap" class="pull-step-solo-choice"><input id="pullStepSkipSolo" type="checkbox"><span><strong>Desconsiderar de Puxada de único motorista</strong><small>Esta etapa não será exigida nem exibida na sequência da viagem sozinho.</small></span></label></div><div class="actions right"><button id="btnPullStepNew" type="button" class="btn secondary">Nova</button><button class="btn primary">Salvar</button></div></form><div class="table-wrap"><table><thead><tr><th>Ordem</th><th>Nome</th><th>Tipo</th><th>Fluxo</th><th>Responsável</th><th>Ação</th><th>Regras</th><th>Status</th><th>Ação</th></tr></thead><tbody id="tbodyPullSteps"></tbody></table></div></div>
       </section>
 
       <!-- V1.7.1 - MATERIAIS / ARMAZEM -->
@@ -791,6 +802,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="config.js?v=1.7.0"></script>
   <script src="share-reports.js?v=1.7.3"></script>
-  <script src="app.js?v=1.7.9-my-delivery-cards"></script>
+  <script src="app.js?v=1.7.10-home-solo"></script>
 </body>
 </html>

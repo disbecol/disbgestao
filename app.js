@@ -121,6 +121,9 @@ let rotatingAssetHistory = [];
 let rotatingAssetEntriesByCount = new Map();
 let realtimeChannel = null;
 let activeView = '';
+let homeShortcutIds = [];
+let homeShortcutsPending = false;
+let homeShortcutSyncPromise = null;
 let toastTimer = null;
 let refRefreshPromise = null;
 let deliveryCustomerLookupTimer = null;
@@ -133,6 +136,7 @@ const PRODUCT_REF_LIMIT = 25000;
 const REF_CACHE_KEY = 'ops_ref_cache_v140_customers5000';
 
 const viewMeta = {
+  'home':['Home','Seus atalhos para o dia a dia'],
   'nri-cadastro':['Cadastro por carreta','Cadastre várias NRIs de uma vez'],
   'nri-pendentes':['Impressões pendentes','Fila atualizada em tempo real'],
   'avaria-cadastro':['Registrar avaria','Foto, GPS e assinatura'],
@@ -181,7 +185,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.3-share',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.10-home-solo',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -495,6 +499,13 @@ function bindBaseEvents(){
   $('btnSair').addEventListener('click', logout); $('btnSairMobile').addEventListener('click',logout);
   $('menuBtn').addEventListener('click',()=>toggleSidebar(true)); $('overlay').addEventListener('click',()=>toggleSidebar(false));
   document.querySelectorAll('.nav-item').forEach(b=>b.addEventListener('click',()=>openView(b.dataset.view)));
+  $('btnHomeAddShortcut')?.addEventListener('click',toggleHomeShortcutPicker);
+  $('btnHomeClosePicker')?.addEventListener('click',()=>setHomeShortcutPicker(false));
+  $('homeShortcutSearch')?.addEventListener('input',renderHomeShortcutOptions);
+  $('homeShortcutGrid')?.addEventListener('click',onHomeShortcutClick);
+  $('homeShortcutOptions')?.addEventListener('click',onHomeShortcutClick);
+  window.addEventListener('online',()=>setTimeout(()=>{if(homeShortcutsPending)void syncHomeShortcuts();},2000));
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&navigator.onLine&&homeShortcutsPending)void syncHomeShortcuts();});
   document.querySelectorAll('.nav-area-toggle').forEach(b=>b.addEventListener('click',()=>toggleNavArea(b.closest('.nav-area'))));
   document.querySelectorAll('.nav-module-toggle').forEach(b=>b.addEventListener('click',()=>toggleNavModule(b.closest('.nav-module'))));
   $('modalClose').addEventListener('click',closeModal); $('modal').addEventListener('click',e=>{if(e.target===$('modal'))closeModal();});
@@ -942,6 +953,7 @@ async function startApp(){
   $('userNome').textContent=profile.name; $('userPerfil').textContent=ROLE_LABELS[profile.role]||profile.role; $('userAvatar').textContent=initials(profile.name);
   await loadMyPermissions();
   applyRole(); restoreNavNavigation(); fillDefaultDates(); updateDashboardPeriod();
+  await loadHomeShortcuts();
   await loadReferences(true);
   prepareSalesDamageForm();
   setupRealtime();
@@ -951,8 +963,7 @@ async function startApp(){
   if(canRotatingAsset()) { await loadRotatingAssetProducts(true); if(hasPerm('ROTATING_ASSET_CREATE'))await loadRotatingAssetCurrent(true); }
   if(hasAnyPerm('DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST')) loadAdminAvarias(true);
   if(hasAnyPerm('SALES_DAMAGE_VIEW_ALL,SALES_DAMAGE_REVIEW,SALES_DAMAGE_OVERRIDE,SALES_DAMAGE_POST')) loadSalesDamageManage(true);
-  const visible=[...document.querySelectorAll('.nav-item[data-view]')].find(x=>!x.classList.contains('hidden')&&!x.closest('.nav-module')?.classList.contains('hidden')&&!x.closest('.nav-area')?.classList.contains('hidden'));
-  openView(visible?.dataset.view||'nri-cadastro',true);
+  openView('home',true);
 }
 function isAdmin(){return profile?.role==='ADMIN';}
 function isPullDriver(){return profile?.role==='MOTORISTA_PUXADOR';}
@@ -1030,6 +1041,97 @@ function openModuleForView(name){
   if(area)document.querySelectorAll('.nav-area').forEach(a=>setNavAreaOpen(a,a===area));
   saveNavNavigation();
 }
+function homeShortcutCatalog(){
+  return [...document.querySelectorAll('.nav-item[data-view]')].filter(button=>{
+    const view=button.dataset.view;
+    return view&&view!=='home'&&viewMeta[view]&&$(`view-${view}`)
+      &&!button.classList.contains('hidden')
+      &&!button.closest('.nav-area')?.classList.contains('hidden')
+      &&!button.closest('.nav-module')?.classList.contains('hidden')
+      &&!$(`view-${view}`).classList.contains('hidden');
+  }).map(button=>({
+    view:button.dataset.view,
+    title:[...button.childNodes].filter(node=>node.nodeType===3).map(node=>node.textContent).join(' ').trim()||viewMeta[button.dataset.view][0],
+    detail:viewMeta[button.dataset.view][1],
+    area:button.closest('.nav-area')?.querySelector(':scope > .nav-area-toggle .area-name')?.textContent?.trim()||'Sistema',
+    icon:button.querySelector(':scope > span')?.textContent?.trim()||'↗'
+  }));
+}
+function homeShortcutCacheKey(){return `disb_home_shortcuts_v1_${authUser?.id||'guest'}`;}
+function saveHomeShortcutCache(){
+  try{localStorage.setItem(homeShortcutCacheKey(),JSON.stringify({ids:homeShortcutIds,pending:homeShortcutsPending}));}catch(_e){}
+  const status=$('homeSyncStatus');
+  if(status)status.textContent=homeShortcutsPending?'Atalhos salvos neste aparelho. A sincronização será feita quando houver conexão.':'';
+}
+async function loadHomeShortcuts(){
+  homeShortcutIds=[];homeShortcutsPending=false;
+  try{
+    const saved=JSON.parse(localStorage.getItem(homeShortcutCacheKey())||'null');
+    if(Array.isArray(saved?.ids))homeShortcutIds=[...new Set(saved.ids.filter(id=>typeof id==='string'&&Object.hasOwn(viewMeta,id)&&id!=='home'))];
+    homeShortcutsPending=saved?.pending===true;
+  }catch(_e){}
+  if(!navigator.onLine||!sb){renderHome();return;}
+  if(homeShortcutsPending){await syncHomeShortcuts();renderHome();return;}
+  try{
+    const {data,error}=await sb.from('user_home_shortcuts').select('view_ids').eq('user_id',authUser.id).maybeSingle();
+    if(error)throw error;
+    homeShortcutIds=[...new Set((Array.isArray(data?.view_ids)?data.view_ids:[]).filter(id=>typeof id==='string'&&Object.hasOwn(viewMeta,id)&&id!=='home'))];
+    saveHomeShortcutCache();
+  }catch(error){console.warn('Atalhos da Home: leitura remota indisponível',error);}
+  renderHome();
+}
+async function syncHomeShortcuts(){
+  if(homeShortcutSyncPromise)return homeShortcutSyncPromise;
+  if(!sb||!authUser||!navigator.onLine)return;
+  const userId=authUser.id;
+  homeShortcutSyncPromise=(async()=>{
+    while(homeShortcutsPending&&navigator.onLine&&authUser?.id===userId){
+      const ids=[...homeShortcutIds];
+      try{
+        const {error}=await sb.from('user_home_shortcuts').upsert({user_id:userId,view_ids:ids,updated_at:new Date().toISOString()},{onConflict:'user_id'});
+        if(error)throw error;
+        if(JSON.stringify(ids)===JSON.stringify(homeShortcutIds))homeShortcutsPending=false;
+        saveHomeShortcutCache();
+      }catch(error){console.warn('Atalhos da Home: sincronização pendente',error);break;}
+    }
+  })();
+  try{await homeShortcutSyncPromise;}finally{homeShortcutSyncPromise=null;}
+}
+function setHomeShortcutPicker(open){
+  $('homeShortcutPicker')?.classList.toggle('hidden',!open);
+  $('btnHomeAddShortcut')?.setAttribute('aria-expanded',open?'true':'false');
+  if(open){renderHomeShortcutOptions();$('homeShortcutSearch')?.focus();}
+}
+function toggleHomeShortcutPicker(){setHomeShortcutPicker($('homeShortcutPicker')?.classList.contains('hidden'));}
+function renderHome(){
+  const grid=$('homeShortcutGrid');if(!grid)return;
+  const catalog=homeShortcutCatalog(),byView=new Map(catalog.map(item=>[item.view,item]));
+  const selected=homeShortcutIds.map(id=>byView.get(id)).filter(Boolean);
+  const firstName=String(profile?.name||'').trim().split(/\s+/)[0];
+  $('homeGreeting').textContent=firstName?`Olá, ${firstName}`:'Bem-vindo';
+  $('homeUnitLabel').textContent=activeUnit||'Sua unidade';
+  $('homeTodayLabel').textContent=new Intl.DateTimeFormat('pt-BR',{timeZone:TZ,day:'numeric',month:'long',year:'numeric'}).format(new Date());
+  grid.innerHTML=selected.length?selected.map(item=>`<article class="home-shortcut-card"><div class="home-shortcut-card-top"><span class="home-shortcut-icon" aria-hidden="true">${esc(item.icon)}</span><span class="home-shortcut-area">${esc(item.area)}</span></div><button type="button" class="home-shortcut-open" data-home-open="${esc(item.view)}"><strong>${esc(item.title)}</strong><small>${esc(item.detail||'Abrir funcionalidade')}</small><span>Abrir <span aria-hidden="true">↗</span></span></button><button type="button" class="home-shortcut-remove" data-home-remove="${esc(item.view)}" aria-label="Remover atalho ${esc(item.title)}">Remover atalho</button></article>`).join(''):`<div class="home-empty"><span aria-hidden="true">✦</span><strong>Sua Home está pronta para você</strong><p>Adicione suas funções favoritas para acessá-las rapidamente.</p><button type="button" class="btn secondary" data-home-show-picker>＋ Adicionar primeiro atalho</button></div>`;
+  renderHomeShortcutOptions();saveHomeShortcutCache();
+}
+function renderHomeShortcutOptions(){
+  const box=$('homeShortcutOptions');if(!box)return;
+  const query=norm($('homeShortcutSearch')?.value||'');
+  const catalog=homeShortcutCatalog().filter(item=>!query||norm(`${item.title} ${item.area} ${item.detail}`).includes(query));
+  box.innerHTML=catalog.length?catalog.map(item=>{const added=homeShortcutIds.includes(item.view);return `<div class="home-option"><span class="home-option-icon" aria-hidden="true">${esc(item.icon)}</span><div><small>${esc(item.area)}</small><strong>${esc(item.title)}</strong></div><button type="button" class="mini-btn" data-home-add="${esc(item.view)}" ${added?'disabled':''}>${added?'Adicionado':'Adicionar'}</button></div>`;}).join(''):'<div class="home-options-empty">Nenhuma funcionalidade disponível para esta busca.</div>';
+}
+function onHomeShortcutClick(event){
+  if(event.target.closest('[data-home-show-picker]')){setHomeShortcutPicker(true);return;}
+  const open=event.target.closest('[data-home-open]');
+  if(open){if(homeShortcutCatalog().some(item=>item.view===open.dataset.homeOpen))openView(open.dataset.homeOpen);return;}
+  const add=event.target.closest('[data-home-add]');
+  const remove=event.target.closest('[data-home-remove]');
+  if(!add&&!remove)return;
+  const view=add?.dataset.homeAdd||remove?.dataset.homeRemove;
+  if(add){if(!homeShortcutCatalog().some(item=>item.view===view)||homeShortcutIds.includes(view))return;homeShortcutIds.push(view);}
+  else homeShortcutIds=homeShortcutIds.filter(id=>id!==view);
+  homeShortcutsPending=true;renderHome();void syncHomeShortcuts();
+}
 function openView(name,force=false){
   const v=$(`view-${name}`); if(!v||v.classList.contains('hidden'))return;
   if(!force&&activeView===name){toggleSidebar(false);return;}
@@ -1037,6 +1139,7 @@ function openView(name,force=false){
   document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.view===name));
   openModuleForView(name);
   const meta=viewMeta[name]||['Disb Gestão','']; $('topbarTitulo').textContent=meta[0];$('topbarSubtitulo').textContent=meta[1]; toggleSidebar(false);
+  if(name==='home')renderHome();
   if(name==='nri-cadastro')ensureNriPlateOptions();
   if(name==='nri-pendentes')loadPending();
   if(name==='avaria-cadastro')ensureAvariaLocationPermission();
@@ -2907,7 +3010,7 @@ async function loadPullFarol(silent=false){
   if(!hasPerm('PULL_FAROL'))return;
   try{await loadPullReferenceData();const {data,error}=await sb.from('pull_trips').select('*').eq('origin_unit',activeUnit).eq('status','IN_PROGRESS').order('started_at');if(error)throw error;const trips=data||[];$('badgePullAtivos').textContent=trips.length;if(!trips.length){$('pullFarolCards')._rows=[];renderPullFarol();return;}const ids=trips.map(x=>x.id);const [ev,tp]=await Promise.all([sb.from('pull_events').select('*').in('trip_id',ids).order('recorded_at',{ascending:false}),sb.from('pull_track_points').select('*').in('trip_id',ids).order('recorded_at',{ascending:false}).limit(2000)]);if(ev.error)throw ev.error;if(tp.error)throw tp.error;const eventBy=new Map(),trackBy=new Map();(ev.data||[]).forEach(x=>{if(!eventBy.has(x.trip_id))eventBy.set(x.trip_id,x);});(tp.data||[]).forEach(x=>{if(!trackBy.has(x.trip_id))trackBy.set(x.trip_id,x);});$('pullFarolCards')._rows=trips.map(t=>({...t,last_event:eventBy.get(t.id)||null,last_track:trackBy.get(t.id)||null}));renderPullFarol();}catch(e){if(!silent)toast(humanPullError(e),'error');}
 }
-function renderPullFarol(){const box=$('pullFarolCards');const q=norm($('pullFarolBusca')?.value||'');const rows=(box?._rows||[]).filter(t=>!q||norm([t.origin_unit,t.plate,t.carrier,t.factory,t.driver1_name,t.driver2_name,t.active_driver_name].join(' ')).includes(q));if(!rows.length){box.className='pull-card-grid empty-state';box.textContent='Nenhuma Puxada em andamento.';return;}box.className='pull-card-grid';box.innerHTML=rows.map(t=>{const last=t.last_track||t.last_event;const age=last?Math.max(0,Math.round((Date.now()-new Date(last.recorded_at).getTime())/60000)):null;return `<article class="pull-card farol"><div class="pull-card-head"><div><small>${esc(t.trip_code)}</small><strong>${esc(t.plate)} • ${esc(t.factory)}</strong></div>${pullFarolBadge(t,last)}</div><div class="pull-card-body"><span><b>Origem:</b> ${esc(t.origin_unit||'—')}</span><span><b>Parceiro:</b> ${esc(t.carrier||'—')}</span><span><b>Motorista atual:</b> ${esc(t.active_driver_name||'—')}</span><span><b>Etapa:</b> ${esc(t.last_event?pullNumberedStepName(t.last_event):'1. Saída da revenda')}</span><span><b>Início:</b> ${fmtDateTime(t.started_at)}</span><span><b>Último GPS:</b> ${last?`${age} min atrás`:'Sem rastreio'}</span></div><button class="btn secondary wide" data-pull-detail="${t.id}">Ver mapa e linha do tempo</button></article>`;}).join('');}
+function renderPullFarol(){const box=$('pullFarolCards');const q=norm($('pullFarolBusca')?.value||'');const rows=(box?._rows||[]).filter(t=>!q||norm([t.origin_unit,t.plate,t.carrier,t.factory,t.driver1_name,t.driver2_name,t.active_driver_name].join(' ')).includes(q));if(!rows.length){box.className='pull-card-grid empty-state';box.textContent='Nenhuma Puxada em andamento.';return;}box.className='pull-card-grid';box.innerHTML=rows.map(t=>{const last=t.last_track||t.last_event;const age=last?Math.max(0,Math.round((Date.now()-new Date(last.recorded_at).getTime())/60000)):null;return `<article class="pull-card farol"><div class="pull-card-head"><div><small>${esc(t.trip_code)}</small><strong>${esc(t.plate)} • ${esc(t.factory)}</strong></div>${pullFarolBadge(t,last)}</div><div class="pull-card-body"><span><b>Origem:</b> ${esc(t.origin_unit||'—')}</span><span><b>Parceiro:</b> ${esc(t.carrier||'—')}</span><span><b>Motorista atual:</b> ${esc(t.active_driver_name||'—')}</span><span><b>Etapa:</b> ${esc(t.last_event?pullNumberedStepName(t.last_event,t):'1. Saída da revenda')}</span><span><b>Início:</b> ${fmtDateTime(t.started_at)}</span><span><b>Último GPS:</b> ${last?`${age} min atrás`:'Sem rastreio'}</span></div><button class="btn secondary wide" data-pull-detail="${t.id}">Ver mapa e linha do tempo</button></article>`;}).join('');}
 function pullFarolBadge(t,last){if(!last)return '<span class="status bad">Sem GPS</span>';const age=(Date.now()-new Date(last.recorded_at).getTime())/60000;if(age>10)return '<span class="status pending">GPS atrasado</span>';return '<span class="status ok">Em andamento</span>';}
 function onPullFarolClick(e){const b=e.target.closest('[data-pull-detail]');if(b)openPullTripDetail(b.dataset.pullDetail,true);}
 
@@ -2993,7 +3096,7 @@ async function openPullTripDetail(id,live=false){
     const transfer=t.cycle_type==='TRANSFER';
     const mapId=`pullMap-${String(id).replace(/-/g,'')}`;
     const timeline=[
-      ...(ev.data||[]).map(x=>({kind:'STEP',mapKey:String(x.id||`${x.action_code||'STEP'}-${x.step_order||''}-${x.recorded_at||''}`),at:x.recorded_at,title:pullNumberedStepName(x),detail:`${x.user_name} • ${Number(x.latitude).toFixed(5)}, ${Number(x.longitude).toFixed(5)} • precisão ±${Math.round(x.gps_accuracy||0)} m${x.geofence_status==='INSIDE'?` • dentro do raio de auditoria (${Math.round(x.distance_factory_m||0)} m)`:x.geofence_status==='OUTSIDE'?` • fora do raio de auditoria (${Math.round(x.distance_factory_m||0)} m)${x.exception_reason?` • ${x.exception_reason}`:''}`:''}`})),
+      ...(ev.data||[]).map(x=>({kind:'STEP',mapKey:String(x.id||`${x.action_code||'STEP'}-${x.step_order||''}-${x.recorded_at||''}`),at:x.recorded_at,title:pullNumberedStepName(x,t),detail:`${x.user_name} • ${Number(x.latitude).toFixed(5)}, ${Number(x.longitude).toFixed(5)} • precisão ±${Math.round(x.gps_accuracy||0)} m${x.geofence_status==='INSIDE'?` • dentro do raio de auditoria (${Math.round(x.distance_factory_m||0)} m)`:x.geofence_status==='OUTSIDE'?` • fora do raio de auditoria (${Math.round(x.distance_factory_m||0)} m)${x.exception_reason?` • ${x.exception_reason}`:''}`:''}`})),
       ...(oc.data||[]).map(x=>({kind:'OCC',mapKey:`occ-start-${x.id}`,mapEndKey:x.ended_at&&x.end_latitude!=null&&x.end_longitude!=null?`occ-end-${x.id}`:'',at:x.started_at,title:`Ocorrência: ${x.occurrence_name}`,detail:`${x.started_by_name}${x.ended_at?` • ${fmtDurationMinutes(minutesBetween(x.started_at,x.ended_at))}`:' • em andamento'}${x.note?` • ${x.note}`:''}`}))
     ].sort((a,b)=>new Date(a.at)-new Date(b.at));
     const body=`<div class="detail-grid"><div class="detail-card"><small>Origem</small><strong>${esc(t.origin_unit||'—')}</strong></div><div class="detail-card"><small>${transfer?'Placa / rota':'Placa / fábrica'}</small><strong>${esc(t.plate)} • ${esc(transfer?'Matriz → Filial → Matriz':t.factory)}</strong></div><div class="detail-card"><small>${transfer?'Tipo':'Parceiro'}</small><strong>${esc(transfer?'Transferência':t.carrier||'Ambev')}</strong></div><div class="detail-card"><small>${transfer||pullTripSolo(t)?'Motorista':'Motoristas'}</small><strong>${esc(t.driver1_name)}${transfer||pullTripSolo(t)?'':` / ${esc(t.driver2_name)}`}${pullTripSolo(t)?' • viagem sozinho':''}</strong></div><div class="detail-card"><small>Início</small><strong>${fmtDateTime(t.started_at)}</strong></div><div class="detail-card"><small>Fim da viagem</small><strong>${fmtDateTime(t.ended_at)}</strong></div></div>${transfer?`<div class="pull-metric-strip"><span>Tipo <b>Transferência</b></span><span>Ciclo Matriz → Filial → Matriz <b>${m.CYCLE==null?'Aguardando':fmtMinutes(m.CYCLE)}</b></span></div>`:`<div class="pull-metric-strip"><span>TMV Ida <b>${fmtMinutes(m.TMV_OUT)}</b></span><span>TMA Fábrica <b>${fmtMinutes(m.FACTORY)}</b></span><span>TMV Volta <b>${fmtMinutes(m.TMV_RETURN)}</b></span><span>TMA Revenda <b>${m.UNIT==null?'Aguardando':fmtMinutes(m.UNIT)}</b></span><span>Ciclo <b>${m.CYCLE==null?'Aguardando':fmtMinutes(m.CYCLE)}</b></span></div>`}${t.tma_adjust_minutes>0?`<div class="notice"><strong>TMA ajustado:</strong> bruto ${fmtMinutes(m.UNIT_RAW)} − ${fmtMinutes(t.tma_adjust_minutes)} = <b>${fmtMinutes(m.UNIT)}</b><br>${esc(t.tma_adjust_reason)} • por ${esc(t.tma_adjusted_by_name||'Admin')} em ${fmtDateTime(t.tma_adjusted_at)}</div>`:''}<div id="${mapId}" class="pull-map"></div><div class="section-title">Linha do tempo</div><div class="pull-timeline">${timeline.map(x=>`<div class="pull-timeline-item ${x.kind==='OCC'?'occurrence':''}"><span class="dot"></span><div><small>${fmtDateTime(x.at)}</small><strong>${esc(x.title)}</strong><span>${esc(x.detail)}</span><div class="pull-timeline-map-actions">${x.mapKey?`<button type="button" class="pull-map-jump ${x.kind==='OCC'?'occurrence':''}" data-pull-map-jump="${esc(x.mapKey)}" data-pull-map-id="${esc(mapId)}">${x.kind==='OCC'?'Início no mapa':'Ver no mapa'}</button>`:''}${x.mapEndKey?`<button type="button" class="pull-map-jump occurrence" data-pull-map-jump="${esc(x.mapEndKey)}" data-pull-map-id="${esc(mapId)}">Fim no mapa</button>`:''}</div></div></div>`).join('')}</div>${transfer?'':`<div class="notice"><strong>NRIs vinculados:</strong> ${(nri.data||[]).length}</div>`}${(aud.data||[]).length?`<details><summary>Auditoria de ajustes TMA (${aud.data.length})</summary>${aud.data.map(a=>`<div class="audit-row">${fmtDateTime(a.changed_at)} • ${esc(a.changed_by_name)} • ${fmtMinutes(a.old_minutes)} → ${fmtMinutes(a.new_minutes)} • ${esc(a.new_reason||'sem ajuste')}</div>`).join('')}</details>`:''}`;
@@ -3022,7 +3125,7 @@ function renderPullMap(mapId,t,track,events){
     if(trackPts.length>1)L.polyline(trackPts).addTo(map);
     else if(eventPts.length>1)L.polyline(eventPts).addTo(map);
     eventRows.forEach((ev,idx)=>{
-      const n=pullMainStepNumber(ev)||idx+1;
+      const n=pullMainStepNumber(ev,t)||idx+1;
       const key=String(ev.id||`${ev.action_code||'STEP'}-${ev.step_order||''}-${ev.recorded_at||''}`);
       const icon=L.divIcon({className:'pull-stage-marker-shell',html:`<span class="pull-stage-map-marker">${n}</span>`,iconSize:[34,34],iconAnchor:[17,17],popupAnchor:[0,-18]});
       const audit=ev.geofence_status==='INSIDE'?`<br>Dentro do raio • ${Math.round(Number(ev.distance_factory_m)||0)} m`:ev.geofence_status==='OUTSIDE'?`<br>Fora do raio • ${Math.round(Number(ev.distance_factory_m)||0)} m`:'';
@@ -3203,7 +3306,7 @@ function pullMainStepNumber(stepOrEvent){
   if(idx<0&&Number.isFinite(order))idx=pullMainSteps.findIndex(s=>Number(s.sort_order)===order);
   return idx>=0?idx+1:null;
 }
-function pullNumberedStepName(stepOrEvent){const n=pullMainStepNumber(stepOrEvent);const name=stepOrEvent?.step_name||stepOrEvent?.name||'Etapa';return n?`${n}. ${name}`:name;}
+function pullNumberedStepName(stepOrEvent,trip=pullActiveTrip){const n=pullMainStepNumber(stepOrEvent,trip);const name=stepOrEvent?.step_name||stepOrEvent?.name||'Etapa';return n?`${n}. ${name}`:name;}
 
 function pullTripMetrics(t){const adj=Math.max(0,Number(t.tma_adjust_minutes||0));const unitRaw=t.ended_at&&t.next_started_at?Math.max(0,minutesBetween(t.ended_at,t.next_started_at)):null;return {TMV_OUT:t.started_at&&t.arrived_factory_at?minutesBetween(t.started_at,t.arrived_factory_at):null,FACTORY:t.arrived_factory_at&&t.left_factory_at?minutesBetween(t.arrived_factory_at,t.left_factory_at):null,TMV_RETURN:t.left_factory_at&&t.ended_at?minutesBetween(t.left_factory_at,t.ended_at):null,UNIT_RAW:unitRaw,UNIT:unitRaw==null?null:Math.max(0,unitRaw-adj),CYCLE:t.started_at&&t.next_started_at?Math.max(0,minutesBetween(t.started_at,t.next_started_at)-adj):null};}
 function minutesBetween(a,b){if(!a||!b)return null;const n=(new Date(b)-new Date(a))/60000;return Number.isFinite(n)?Math.max(0,n):null;}
@@ -3357,9 +3460,9 @@ onPullNriCardsClick = function(e){
 prefillNriFromPull = function(t){clearNriRequest();nriPullLocked=true;$('nriPullTripId').value=t.id;const end=new Date(t.ended_at),unitSel=$('nriUnidade');if(unitSel){[...unitSel.options].filter(o=>o.dataset.fixed==='__fixed_value__').forEach(o=>o.remove());if(![...unitSel.options].some(o=>o.value===t.origin_unit)){const o=document.createElement('option');o.value=t.origin_unit;o.textContent=t.origin_unit;unitSel.appendChild(o);}unitSel.value=t.origin_unit;unitSel.disabled=false;unitSel.required=true;}$('nriTipo').value='AMBEV';$('nriTipo').disabled=true;$('nriTipo').required=false;$('nriRecebimento').value=localIsoDate(end);$('nriRecebimento').disabled=true;$('nriHora').value=localTime(end);$('nriHora').disabled=true;setSelectFixedValue($('nriMotorista'),t.ended_by_name||t.active_driver_name||'—',true);setSelectFixedValue($('nriPlaca'),t.plate,true);setSelectFixedValue($('nriFabrica'),t.factory,true);$('nriPullBanner').classList.remove('hidden');$('nriPullBanner').innerHTML=`<strong>${esc(t.trip_code)} • ${esc(t.plate)}</strong><span>Dados preenchidos automaticamente pela Puxada. A unidade pode ser ajustada antes do cadastro dos NRIs.</span>`;openView('nri-cadastro',true);};
 function prefillNriFromMarketplace(r){clearNriRequest();nriMarketplaceLocked=true;$('nriMarketplaceReceiptId').value=r.id;const end=new Date(r.ended_at);setSelectFixedValue($('nriUnidade'),r.unit,true);$('nriTipo').value='MARKETPLACE';$('nriTipo').disabled=true;$('nriTipo').required=false;$('nriRecebimento').value=localIsoDate(end);$('nriRecebimento').disabled=true;$('nriHora').value=localTime(end);$('nriHora').disabled=true;setSelectFixedValue($('nriMotorista'),'--',true);setSelectFixedValue($('nriPlaca'),'--',true);setSelectFixedValue($('nriFabrica'),r.supplier_name,true);$('nriPullBanner').classList.remove('hidden');$('nriPullBanner').innerHTML=`<strong>${esc(r.receipt_code)} • Marketplace</strong><span>Unidade, data, hora, conferente e fornecedor foram preenchidos pelo recebimento. No NRI, a Fábrica será registrada como ${esc(r.supplier_name)}.</span>`;openView('nri-cadastro',true);}
 
-function pullStepsForCycle(type){const flow=type==='TRANSFER'?'TRANSFER':'PULL';return pullAllMainSteps.filter(x=>(x.flow_type||'PULL')===flow).sort((a,b)=>a.sort_order-b.sort_order);}
+function pullStepsForCycle(type,trip=null){const flow=type==='TRANSFER'?'TRANSFER':'PULL',solo=flow==='PULL'&&pullTripSolo(trip);return pullAllMainSteps.filter(x=>(x.flow_type||'PULL')===flow&&(!solo||x.skip_when_solo!==true)).sort((a,b)=>a.sort_order-b.sort_order);}
 loadPullReferenceData = async function(){
-  const promises=[sb.from('pull_steps').select('*').order('step_type').order('sort_order'),sb.from('pull_settings').select('*').eq('singleton',true).maybeSingle(),sb.from('factories').select('name,active,latitude,longitude,radius_meters').eq('active',true).order('name'),sb.from('pull_vehicles').select('*').order('plate')];if(hasPerm('PULL_TRIP')||hasPerm('PULL_CONFIG'))promises.push(sb.from('profiles').select('id,username,name,role,active').eq('role','MOTORISTA_PUXADOR').eq('active',true).order('name'));const rows=await Promise.all(promises),err=rows.find(x=>x.error)?.error;if(err)throw err;const [steps,settings,factories,vehicles,profilesRes]=rows;const all=steps.data||[];pullConfigSteps=all.map(x=>({...x,flow_type:x.flow_type||(x.step_type==='OCCURRENCE'?'BOTH':'PULL')}));pullAllMainSteps=pullConfigSteps.filter(x=>x.step_type==='MAIN'&&x.active).sort((a,b)=>a.sort_order-b.sort_order);pullMainSteps=pullStepsForCycle(pullActiveTrip?.cycle_type||'PULL');pullOccurrenceTypes=pullConfigSteps.filter(x=>x.step_type==='OCCURRENCE'&&x.active).sort((a,b)=>a.sort_order-b.sort_order);pullSettings=settings.data||{singleton:true,gps_max_accuracy_m:200,track_interval_seconds:60,track_min_distance_m:50};pullFactories=factories.data||[];pullVehicles=vehicles.data||[];pullProfiles=profilesRes?.data||pullProfiles;populatePullReferenceInputs();
+  const promises=[sb.from('pull_steps').select('*').order('step_type').order('sort_order'),sb.from('pull_settings').select('*').eq('singleton',true).maybeSingle(),sb.from('factories').select('name,active,latitude,longitude,radius_meters').eq('active',true).order('name'),sb.from('pull_vehicles').select('*').order('plate')];if(hasPerm('PULL_TRIP')||hasPerm('PULL_CONFIG'))promises.push(sb.from('profiles').select('id,username,name,role,active').eq('role','MOTORISTA_PUXADOR').eq('active',true).order('name'));const rows=await Promise.all(promises),err=rows.find(x=>x.error)?.error;if(err)throw err;const [steps,settings,factories,vehicles,profilesRes]=rows;const all=steps.data||[];pullConfigSteps=all.map(x=>({...x,flow_type:x.flow_type||(x.step_type==='OCCURRENCE'?'BOTH':'PULL')}));pullAllMainSteps=pullConfigSteps.filter(x=>x.step_type==='MAIN'&&x.active).sort((a,b)=>a.sort_order-b.sort_order);pullMainSteps=pullStepsForCycle(pullActiveTrip?.cycle_type||'PULL',pullActiveTrip);pullOccurrenceTypes=pullConfigSteps.filter(x=>x.step_type==='OCCURRENCE'&&x.active).sort((a,b)=>a.sort_order-b.sort_order);pullSettings=settings.data||{singleton:true,gps_max_accuracy_m:200,track_interval_seconds:60,track_min_distance_m:50};pullFactories=factories.data||[];pullVehicles=vehicles.data||[];pullProfiles=profilesRes?.data||pullProfiles;populatePullReferenceInputs();
 };
 function updatePullSoloChoice(){
   const solo=!!$('pullStartSolo')?.checked;
@@ -3384,11 +3487,11 @@ function onPullCycleChoice(e){
   $('pullTransferDriver').textContent=profile?.name||'—';
   if($('pullStartGps'))$('pullStartGps').textContent=`${type==='TRANSFER'?'Transferência Matriz → Filial → Matriz':'Puxada'} • GPS exigido até ±${pullGpsTarget()} m.`;
 }
-pullNextStep = function(){if(!pullActiveTrip)return null;const steps=pullStepsForCycle(pullActiveTrip.cycle_type);const max=pullDriverEvents.length?Math.max(...pullDriverEvents.map(x=>Number(x.step_order)||0)):-Infinity;return steps.find(x=>Number(x.sort_order)>max)||null;};
-pullMainStepNumber = function(stepOrEvent){if(!stepOrEvent)return null;const id=stepOrEvent.step_id||stepOrEvent.id||'',code=stepOrEvent.action_code||'',order=Number(stepOrEvent.step_order??stepOrEvent.sort_order);let steps=pullAllMainSteps;const matched=steps.find(s=>(id&&s.id===id)||(code&&s.action_code===code));if(matched)steps=pullStepsForCycle(matched.flow_type);else if(pullActiveTrip)steps=pullStepsForCycle(pullActiveTrip.cycle_type);let idx=steps.findIndex(s=>(id&&s.id===id)||(code&&s.action_code===code));if(idx<0&&Number.isFinite(order))idx=steps.findIndex(s=>Number(s.sort_order)===order);return idx>=0?idx+1:null;};
+pullNextStep = function(){if(!pullActiveTrip)return null;const steps=pullStepsForCycle(pullActiveTrip.cycle_type,pullActiveTrip);const max=pullDriverEvents.length?Math.max(...pullDriverEvents.map(x=>Number(x.step_order)||0)):-Infinity;return steps.find(x=>Number(x.sort_order)>max)||null;};
+pullMainStepNumber = function(stepOrEvent,trip=pullActiveTrip){if(!stepOrEvent)return null;const id=stepOrEvent.step_id||stepOrEvent.id||'',code=stepOrEvent.action_code||'',order=Number(stepOrEvent.step_order??stepOrEvent.sort_order);const matched=pullAllMainSteps.find(s=>(id&&s.id===id)||(code&&s.action_code===code));const flow=matched?.flow_type||trip?.cycle_type||'PULL';const steps=pullStepsForCycle(flow,trip);let idx=steps.findIndex(s=>(id&&s.id===id)||(code&&s.action_code===code));if(idx<0&&Number.isFinite(order))idx=steps.findIndex(s=>Number(s.sort_order)===order);return idx>=0?idx+1:null;};
 const renderPullDriverV119=renderPullDriver;
 renderPullDriver = function(){
-  pullMainSteps=pullStepsForCycle(pullActiveTrip?.cycle_type||'PULL');
+  pullMainSteps=pullStepsForCycle(pullActiveTrip?.cycle_type||'PULL',pullActiveTrip);
   renderPullDriverV119();
   if(!pullActiveTrip){
     onPullCycleChoice({target:document.querySelector(`[data-pull-cycle="${$('pullStartCycleType')?.value||'PULL'}"]`)});
@@ -3467,14 +3570,14 @@ startPullTrip = async function(e){
 renderPullFarol = function(){
   const box=$('pullFarolCards'),q=norm($('pullFarolBusca')?.value||''),rows=(box?._rows||[]).filter(t=>!q||norm([t.origin_unit,t.plate,t.carrier,t.factory,t.driver1_name,t.driver2_name,t.active_driver_name,t.cycle_type].join(' ')).includes(q));
   if(!rows.length){box.className='pull-card-grid empty-state';box.textContent='Nenhum ciclo em andamento.';return;}
-  box.className='pull-card-grid';box.innerHTML=rows.map(t=>{const transfer=t.cycle_type==='TRANSFER',last=t.last_track||t.last_event,age=last?Math.max(0,Math.round((Date.now()-new Date(last.recorded_at).getTime())/60000)):null;return `<article class="pull-card farol"><div class="pull-card-head"><div><small>${transfer?'TRANSFERÊNCIA':pullTripSolo(t)?'PUXADA • SOZINHO':'PUXADA'} • ${esc(t.trip_code)}</small><strong>${esc(t.plate)} • ${esc(transfer?'Filial Pau dos Ferros / Matriz':t.factory)}</strong></div>${pullFarolBadge(t,last)}</div><div class="pull-card-body"><span><b>Origem:</b> ${esc(t.origin_unit||'—')}</span><span><b>${transfer?'Rota':'Parceiro'}:</b> ${esc(transfer?'Matriz → Filial → Matriz':t.carrier||'—')}</span><span><b>Motorista atual:</b> ${esc(t.active_driver_name||'—')}</span><span><b>Etapa:</b> ${esc(t.last_event?pullNumberedStepName(t.last_event):'1. Início')}</span><span><b>Início:</b> ${fmtDateTime(t.started_at)}</span><span><b>Último GPS:</b> ${last?`${age} min atrás`:'Sem rastreio'}</span></div><button class="btn secondary wide" data-pull-detail="${t.id}">Ver mapa e linha do tempo</button></article>`;}).join('');
+  box.className='pull-card-grid';box.innerHTML=rows.map(t=>{const transfer=t.cycle_type==='TRANSFER',last=t.last_track||t.last_event,age=last?Math.max(0,Math.round((Date.now()-new Date(last.recorded_at).getTime())/60000)):null;return `<article class="pull-card farol"><div class="pull-card-head"><div><small>${transfer?'TRANSFERÊNCIA':pullTripSolo(t)?'PUXADA • SOZINHO':'PUXADA'} • ${esc(t.trip_code)}</small><strong>${esc(t.plate)} • ${esc(transfer?'Filial Pau dos Ferros / Matriz':t.factory)}</strong></div>${pullFarolBadge(t,last)}</div><div class="pull-card-body"><span><b>Origem:</b> ${esc(t.origin_unit||'—')}</span><span><b>${transfer?'Rota':'Parceiro'}:</b> ${esc(transfer?'Matriz → Filial → Matriz':t.carrier||'—')}</span><span><b>Motorista atual:</b> ${esc(t.active_driver_name||'—')}</span><span><b>Etapa:</b> ${esc(t.last_event?pullNumberedStepName(t.last_event,t):'1. Início')}</span><span><b>Início:</b> ${fmtDateTime(t.started_at)}</span><span><b>Último GPS:</b> ${last?`${age} min atrás`:'Sem rastreio'}</span></div><button class="btn secondary wide" data-pull-detail="${t.id}">Ver mapa e linha do tempo</button></article>`;}).join('');
 };
 
 filteredPullHistoryRows = function(){const q=norm($('pullHistBusca')?.value||''),factory=$('pullHistFactory')?.value||'',type=$('pullHistType')?.value||'';return pullHistory.filter(t=>(!type||t.cycle_type===type)&&(!factory||t.factory===factory)&&(!q||norm([t.trip_code,t.origin_unit,t.plate,t.carrier,t.factory,t.driver1_name,t.driver2_name,t.ended_by_name,t.cycle_type].join(' ')).includes(q)));};
 function pullHistoryStages(){const type=$('pullHistType')?.value||'';if(type)return pullStepsForCycle(type);return [...pullStepsForCycle('PULL'),...pullStepsForCycle('TRANSFER')];}
-renderPullHistoryHead = function(){const head=$('pullHistoryHead');if(!head)return;const stages=pullHistoryStages().map((s,i)=>`<th class="pull-history-stage-head"><span>${pullMainStepNumber(s)||i+1}</span>${esc((!$('pullHistType')?.value?`${s.flow_type==='TRANSFER'?'Transferência':'Puxada'} · `:'')+s.name)}</th>`).join('');head.innerHTML=`<th>Viagem / Tipo</th><th>Origem</th><th>Placa / Fábrica-destino</th><th>Motorista(s)</th>${stages}<th>TMV Ida</th><th>TMA Fábrica</th><th>TMV Volta</th><th>TMA Revenda</th><th>Ciclo</th><th>NRI</th><th>Ações</th>`;};
-renderPullHistory = function(){if(!$('tbodyPullHistory'))return;const hf=$('pullHistFactory');if(hf){const old=hf.value,vals=[...new Set(pullHistory.map(t=>t.factory).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));hf.innerHTML='<option value="">Todas</option>'+vals.map(v=>`<option>${esc(v)}</option>`).join('');if(vals.includes(old))hf.value=old;}renderPullHistoryHead();const rows=filteredPullHistoryRows(),lookup=pullHistoryEventLookup(),stages=pullHistoryStages(),totalCols=4+stages.length+7;$('tbodyPullHistory').innerHTML=rows.length?rows.map(t=>{const m=pullTripMetrics(t),stageCells=stages.map(step=>{if((step.flow_type||'PULL')!==(t.cycle_type||'PULL'))return '<td class="pull-history-stage-cell">—</td>';const ev=pullHistoryStageEvent(lookup,t.id,step);return `<td class="pull-history-stage-cell">${ev?`<strong>${fmtDateTime(ev.recorded_at)}</strong><small>${esc(ev.user_name||'—')} • GPS ±${Math.round(Number(ev.gps_accuracy)||0)} m</small>`:'—'}</td>`;}).join(''),transfer=t.cycle_type==='TRANSFER';return `<tr><td><strong>${esc(t.trip_code)}</strong><small>${transfer?'Transferência':pullTripSolo(t)?'Puxada • sozinho':'Puxada'} • ${pullTripStatusLabel(t)}</small></td><td>${esc(t.origin_unit||'—')}</td><td>${esc(t.plate)}<small>${esc(t.factory)}</small></td><td>${esc(t.driver1_name)}${transfer?'':pullTripSolo(t)?'<small>Viagem sozinho</small>':`<small>${esc(t.driver2_name)}</small>`}</td>${stageCells}<td>${fmtMinutes(m.TMV_OUT)}</td><td>${fmtMinutes(m.FACTORY)}</td><td>${fmtMinutes(m.TMV_RETURN)}</td><td>${m.UNIT==null?'—':fmtMinutes(m.UNIT)}</td><td>${m.CYCLE==null?'Aguardando':fmtMinutes(m.CYCLE)}</td><td>${transfer?'—':nriPendingHistoryBadge(t.nri_status)}</td><td><div class="mini-actions"><button class="mini-btn" data-hist-detail="${t.id}">Detalhar</button>${hasPerm('PULL_TMA_ADJUST')&&!transfer&&t.next_started_at?`<button class="mini-btn" data-tma-adjust="${t.id}">Ajustar TMA</button>`:''}</div></td></tr>`;}).join(''):`<tr><td colspan="${totalCols}">Nenhum ciclo.</td></tr>`;};
-exportPullHistoryCsv = function(){const rows=filteredPullHistoryRows();if(!rows.length)return toast('Não há ciclos para exportar com os filtros atuais.','error');const lookup=pullHistoryEventLookup(),stages=pullHistoryStages(),headers=['Viagem','Tipo','Status','Origem','Placa','Fábrica/Destino','Parceiro','Motorista 1','Motorista 2',...stages.map(s=>`${s.flow_type==='TRANSFER'?'Transferência':'Puxada'} - ${s.name}`),'TMV Ida','TMA Fábrica','TMV Volta','TMA Revenda bruto','Horas a diminuir','TMA Revenda ajustado','Ciclo','NRI'],matrix=rows.map(t=>{const m=pullTripMetrics(t),stageValues=stages.map(step=>{if((step.flow_type||'PULL')!==(t.cycle_type||'PULL'))return '';const ev=pullHistoryStageEvent(lookup,t.id,step);return ev?`${fmtDateTime(ev.recorded_at)} | ${ev.user_name||''} | GPS ${Number(ev.latitude).toFixed(6)}, ${Number(ev.longitude).toFixed(6)} | ±${Math.round(Number(ev.gps_accuracy)||0)} m`:'';});return [t.trip_code,t.cycle_type==='TRANSFER'?'Transferência':pullTripSolo(t)?'Puxada • sozinho':'Puxada',pullTripStatusLabel(t),t.origin_unit,t.plate,t.factory,t.carrier||'Ambev',t.driver1_name,t.cycle_type==='TRANSFER'?'':pullTripSolo(t)?'Viagem sozinho':t.driver2_name,...stageValues,fmtMinutes(m.TMV_OUT),fmtMinutes(m.FACTORY),fmtMinutes(m.TMV_RETURN),fmtMinutes(m.UNIT_RAW),fmtMinutes(Number(t.tma_adjust_minutes||0)),fmtMinutes(m.UNIT),fmtMinutes(m.CYCLE),t.cycle_type==='TRANSFER'?'':t.nri_status||''];});downloadCsv(`historico_ciclos_${localIsoDate(new Date())}.csv`,[headers,...matrix]);};
+renderPullHistoryHead = function(){const head=$('pullHistoryHead');if(!head)return;const stages=pullHistoryStages().map((s,i)=>`<th class="pull-history-stage-head"><span>${pullMainStepNumber(s,null)||i+1}</span>${esc((!$('pullHistType')?.value?`${s.flow_type==='TRANSFER'?'Transferência':'Puxada'} · `:'')+s.name)}</th>`).join('');head.innerHTML=`<th>Viagem / Tipo</th><th>Origem</th><th>Placa / Fábrica-destino</th><th>Motorista(s)</th>${stages}<th>TMV Ida</th><th>TMA Fábrica</th><th>TMV Volta</th><th>TMA Revenda</th><th>Ciclo</th><th>NRI</th><th>Ações</th>`;};
+renderPullHistory = function(){if(!$('tbodyPullHistory'))return;const hf=$('pullHistFactory');if(hf){const old=hf.value,vals=[...new Set(pullHistory.map(t=>t.factory).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));hf.innerHTML='<option value="">Todas</option>'+vals.map(v=>`<option>${esc(v)}</option>`).join('');if(vals.includes(old))hf.value=old;}renderPullHistoryHead();const rows=filteredPullHistoryRows(),lookup=pullHistoryEventLookup(),stages=pullHistoryStages(),totalCols=4+stages.length+7;$('tbodyPullHistory').innerHTML=rows.length?rows.map(t=>{const m=pullTripMetrics(t),stageCells=stages.map(step=>{if((step.flow_type||'PULL')!==(t.cycle_type||'PULL'))return '<td class="pull-history-stage-cell">—</td>';const ev=pullHistoryStageEvent(lookup,t.id,step);return `<td class="pull-history-stage-cell">${ev?`<strong>${fmtDateTime(ev.recorded_at)}</strong><small>${esc(ev.user_name||'—')} • GPS ±${Math.round(Number(ev.gps_accuracy)||0)} m</small>`:pullTripSolo(t)&&step.skip_when_solo?'<span class="status approved">Dispensada</span>':'—'}</td>`;}).join(''),transfer=t.cycle_type==='TRANSFER';return `<tr><td><strong>${esc(t.trip_code)}</strong><small>${transfer?'Transferência':pullTripSolo(t)?'Puxada • sozinho':'Puxada'} • ${pullTripStatusLabel(t)}</small></td><td>${esc(t.origin_unit||'—')}</td><td>${esc(t.plate)}<small>${esc(t.factory)}</small></td><td>${esc(t.driver1_name)}${transfer?'':pullTripSolo(t)?'<small>Viagem sozinho</small>':`<small>${esc(t.driver2_name)}</small>`}</td>${stageCells}<td>${fmtMinutes(m.TMV_OUT)}</td><td>${fmtMinutes(m.FACTORY)}</td><td>${fmtMinutes(m.TMV_RETURN)}</td><td>${m.UNIT==null?'—':fmtMinutes(m.UNIT)}</td><td>${m.CYCLE==null?'Aguardando':fmtMinutes(m.CYCLE)}</td><td>${transfer?'—':nriPendingHistoryBadge(t.nri_status)}</td><td><div class="mini-actions"><button class="mini-btn" data-hist-detail="${t.id}">Detalhar</button>${hasPerm('PULL_TMA_ADJUST')&&!transfer&&t.next_started_at?`<button class="mini-btn" data-tma-adjust="${t.id}">Ajustar TMA</button>`:''}</div></td></tr>`;}).join(''):`<tr><td colspan="${totalCols}">Nenhum ciclo.</td></tr>`;};
+exportPullHistoryCsv = function(){const rows=filteredPullHistoryRows();if(!rows.length)return toast('Não há ciclos para exportar com os filtros atuais.','error');const lookup=pullHistoryEventLookup(),stages=pullHistoryStages(),headers=['Viagem','Tipo','Status','Origem','Placa','Fábrica/Destino','Parceiro','Motorista 1','Motorista 2',...stages.map(s=>`${s.flow_type==='TRANSFER'?'Transferência':'Puxada'} - ${s.name}`),'TMV Ida','TMA Fábrica','TMV Volta','TMA Revenda bruto','Horas a diminuir','TMA Revenda ajustado','Ciclo','NRI'],matrix=rows.map(t=>{const m=pullTripMetrics(t),stageValues=stages.map(step=>{if((step.flow_type||'PULL')!==(t.cycle_type||'PULL'))return '';const ev=pullHistoryStageEvent(lookup,t.id,step);return ev?`${fmtDateTime(ev.recorded_at)} | ${ev.user_name||''} | GPS ${Number(ev.latitude).toFixed(6)}, ${Number(ev.longitude).toFixed(6)} | ±${Math.round(Number(ev.gps_accuracy)||0)} m`:pullTripSolo(t)&&step.skip_when_solo?'Dispensada':'';});return [t.trip_code,t.cycle_type==='TRANSFER'?'Transferência':pullTripSolo(t)?'Puxada • sozinho':'Puxada',pullTripStatusLabel(t),t.origin_unit,t.plate,t.factory,t.carrier||'Ambev',t.driver1_name,t.cycle_type==='TRANSFER'?'':pullTripSolo(t)?'Viagem sozinho':t.driver2_name,...stageValues,fmtMinutes(m.TMV_OUT),fmtMinutes(m.FACTORY),fmtMinutes(m.TMV_RETURN),fmtMinutes(m.UNIT_RAW),fmtMinutes(Number(t.tma_adjust_minutes||0)),fmtMinutes(m.UNIT),fmtMinutes(m.CYCLE),t.cycle_type==='TRANSFER'?'':t.nri_status||''];});downloadCsv(`historico_ciclos_${localIsoDate(new Date())}.csv`,[headers,...matrix]);};
 pullTripStatusLabel = function(t){if(t.status==='IN_PROGRESS')return 'Em andamento';if(t.cycle_type==='TRANSFER'&&t.ended_at)return 'Transferência finalizada';return t.kpi_status==='WAITING_NEXT_START'?'Viagem finalizada • aguardando próxima saída':t.kpi_status==='CLOSED'?'Ciclo KPI fechado':'Cancelado';};
 pullTripMetrics = function(t){const transfer=t.cycle_type==='TRANSFER',adj=Math.max(0,Number(t.tma_adjust_minutes||0));if(transfer)return {TMV_OUT:null,FACTORY:null,TMV_RETURN:null,UNIT_RAW:null,UNIT:null,CYCLE:t.started_at&&t.ended_at?minutesBetween(t.started_at,t.ended_at):null};const unitRaw=t.ended_at&&t.next_started_at?Math.max(0,minutesBetween(t.ended_at,t.next_started_at)):null;return {TMV_OUT:t.started_at&&t.arrived_factory_at?minutesBetween(t.started_at,t.arrived_factory_at):null,FACTORY:t.arrived_factory_at&&t.left_factory_at?minutesBetween(t.arrived_factory_at,t.left_factory_at):null,TMV_RETURN:t.left_factory_at&&t.ended_at?minutesBetween(t.left_factory_at,t.ended_at):null,UNIT_RAW:unitRaw,UNIT:unitRaw==null?null:Math.max(0,unitRaw-adj),CYCLE:t.started_at&&t.next_started_at?Math.max(0,minutesBetween(t.started_at,t.next_started_at)-adj):null};};
 filteredPullDashTrips = function(){const y=Number($('pullDashYear').value),m=Number($('pullDashMonth').value||0),carrier=$('pullDashCarrier').value,factory=$('pullDashFactory').value,driver=$('pullDashDriver').value,type=$('pullDashType')?.value||'';return pullDashTrips.filter(t=>{const d=new Date(t.started_at);return d.getFullYear()===y&&(!m||d.getMonth()+1===m)&&(!type||t.cycle_type===type)&&(!carrier||t.carrier===carrier)&&(!factory||t.factory===factory)&&(!driver||t.driver1_name===driver||t.driver2_name===driver);});};
@@ -3518,11 +3621,33 @@ renderPullDashboardCore = function(){
   highlightPullHistogramPeaks();
 };
 
-clearPullStepForm = function(){$('pullStepId').value='';$('pullStepName').value='';$('pullStepType').value='MAIN';$('pullStepFlow').value='PULL';$('pullStepCode').disabled=false;$('pullStepCode').value='';$('pullStepOrder').value=100;$('pullStepDuration').value='POINT';$('pullStepExecutor').value='1';$('pullStepGeofence').checked=false;$('pullStepDiscount').checked=false;$('pullStepActive').checked=true;updatePullStepExecutorUi();};
-renderPullSteps = function(){const all=[...pullConfigSteps].sort((a,b)=>a.step_type.localeCompare(b.step_type)||String(a.flow_type).localeCompare(String(b.flow_type))||a.sort_order-b.sort_order);$('tbodyPullSteps').innerHTML=all.map(s=>`<tr><td>${s.sort_order}</td><td><strong>${esc(s.name)}</strong></td><td>${s.step_type==='MAIN'?'Principal':'Ocorrência'}</td><td>${s.flow_type==='TRANSFER'?'Transferência':s.flow_type==='BOTH'?'Ambos':'Puxada'}</td><td>${s.step_type==='MAIN'?`<span class="status partial">Motorista ${Number(s.executor_driver)===2?'2':'1'}</span>`:'Motorista ativo'}</td><td><code>${esc(s.action_code)}</code></td><td>${s.requires_factory_geofence?'Auditoria de raio ':''}${s.duration_mode==='INTERVAL'?'Intervalo ':''}${s.suggest_tma_discount?'Sugere desconto':''}</td><td>${s.active?'<span class="status ok">Ativa</span>':'<span class="status bad">Inativa</span>'}</td><td><button class="mini-btn" data-step-edit="${s.id}">Editar</button></td></tr>`).join('');};
-onPullStepsClick = function(e){const b=e.target.closest('[data-step-edit]');if(!b)return;const s=pullConfigSteps.find(x=>x.id===b.dataset.stepEdit);if(!s)return;$('pullStepId').value=s.id;$('pullStepName').value=s.name;$('pullStepType').value=s.step_type;$('pullStepFlow').value=s.flow_type|| (s.step_type==='OCCURRENCE'?'BOTH':'PULL');$('pullStepCode').value=s.action_code;$('pullStepCode').disabled=['START_TRIP','ARRIVE_FACTORY','LEAVE_FACTORY','DRIVER_SWAP_OUT','DRIVER_SWAP_RETURN','ARRIVE_UNIT','TRANSFER_START','TRANSFER_ARRIVE_BRANCH','TRANSFER_LEAVE_BRANCH','TRANSFER_ARRIVE_MATRIX'].includes(s.action_code);$('pullStepOrder').value=s.sort_order;$('pullStepDuration').value=s.duration_mode;$('pullStepExecutor').value=String(Number(s.executor_driver)===2?2:1);$('pullStepGeofence').checked=s.requires_factory_geofence;$('pullStepDiscount').checked=s.suggest_tma_discount;$('pullStepActive').checked=s.active;updatePullStepExecutorUi();};
-savePullStep = async function(e){e.preventDefault();const id=$('pullStepId').value,type=$('pullStepType').value,flow=$('pullStepFlow').value,action=$('pullStepCode').value.trim().toUpperCase().replace(/[^A-Z0-9_]/g,'_'),fixedStart=['START_TRIP','TRANSFER_START'].includes(action),executor=fixedStart?1:Number($('pullStepExecutor').value||1),row={name:$('pullStepName').value.trim(),step_type:type,flow_type:type==='OCCURRENCE'?(flow||'BOTH'):(flow==='TRANSFER'?'TRANSFER':'PULL'),action_code:action,sort_order:Number($('pullStepOrder').value),duration_mode:$('pullStepDuration').value,executor_driver:type==='MAIN'?executor:null,requires_factory_geofence:$('pullStepGeofence').checked,suggest_tma_discount:$('pullStepDiscount').checked,active:$('pullStepActive').checked,required:type==='MAIN'};if(!row.name||!row.action_code)return toast('Informe nome e código da etapa.','error');if(type==='MAIN'&&![1,2].includes(row.executor_driver))return toast('Selecione Motorista 1 ou Motorista 2 como responsável.','error');try{const r=id?await sb.from('pull_steps').update(row).eq('id',id):await sb.from('pull_steps').insert(row);if(r.error)throw r.error;toast('Etapa/ocorrência salva.','success');clearPullStepForm();await loadPullReferenceData();renderPullSteps();}catch(err){toast(humanPullError(err),'error');}};
-updatePullStepExecutorUi = function(){const type=$('pullStepType')?.value,code=String($('pullStepCode')?.value||'').trim().toUpperCase(),flow=$('pullStepFlow'),sel=$('pullStepExecutor'),note=$('pullStepExecutorNote');if(!sel)return;if(type==='OCCURRENCE'){sel.disabled=true;if(flow&&flow.value==='PULL')flow.value='BOTH';if(note)note.textContent='Ocorrências podem ser compartilhadas pelos dois fluxos e são vinculadas ao motorista ativo.';return;}if(flow&&flow.value==='BOTH')flow.value='PULL';sel.disabled=['START_TRIP','TRANSFER_START'].includes(code);if(sel.disabled)sel.value='1';if(note)note.textContent=sel.disabled?'A etapa inicial é sempre registrada pelo Motorista 1.':'Escolha quem deverá apontar esta etapa.';};
+clearPullStepForm = function(){$('pullStepId').value='';$('pullStepName').value='';$('pullStepType').value='MAIN';$('pullStepFlow').value='PULL';$('pullStepCode').disabled=false;$('pullStepCode').value='';$('pullStepOrder').value=100;$('pullStepDuration').value='POINT';$('pullStepExecutor').value='1';$('pullStepGeofence').checked=false;$('pullStepDiscount').checked=false;$('pullStepActive').checked=true;$('pullStepSkipSolo').checked=false;updatePullStepExecutorUi();};
+renderPullSteps = function(){const all=[...pullConfigSteps].sort((a,b)=>a.step_type.localeCompare(b.step_type)||String(a.flow_type).localeCompare(String(b.flow_type))||a.sort_order-b.sort_order);$('tbodyPullSteps').innerHTML=all.map(s=>`<tr><td>${s.sort_order}</td><td><strong>${esc(s.name)}</strong></td><td>${s.step_type==='MAIN'?'Principal':'Ocorrência'}</td><td>${s.flow_type==='TRANSFER'?'Transferência':s.flow_type==='BOTH'?'Ambos':'Puxada'}</td><td>${s.step_type==='MAIN'?`<span class="status partial">Motorista ${Number(s.executor_driver)===2?'2':'1'}</span>`:'Motorista ativo'}</td><td><code>${esc(s.action_code)}</code></td><td>${s.requires_factory_geofence?'Auditoria de raio ':''}${s.duration_mode==='INTERVAL'?'Intervalo ':''}${s.suggest_tma_discount?'Sugere desconto ':''}${s.skip_when_solo?'<span class="pull-step-solo-tag">Dispensada no solo</span>':''}</td><td>${s.active?'<span class="status ok">Ativa</span>':'<span class="status bad">Inativa</span>'}</td><td><button class="mini-btn" data-step-edit="${s.id}">Editar</button></td></tr>`).join('');};
+onPullStepsClick = function(e){const b=e.target.closest('[data-step-edit]');if(!b)return;const s=pullConfigSteps.find(x=>x.id===b.dataset.stepEdit);if(!s)return;$('pullStepId').value=s.id;$('pullStepName').value=s.name;$('pullStepType').value=s.step_type;$('pullStepFlow').value=s.flow_type|| (s.step_type==='OCCURRENCE'?'BOTH':'PULL');$('pullStepCode').value=s.action_code;$('pullStepCode').disabled=['START_TRIP','ARRIVE_FACTORY','LEAVE_FACTORY','DRIVER_SWAP_OUT','DRIVER_SWAP_RETURN','ARRIVE_UNIT','TRANSFER_START','TRANSFER_ARRIVE_BRANCH','TRANSFER_LEAVE_BRANCH','TRANSFER_ARRIVE_MATRIX'].includes(s.action_code);$('pullStepOrder').value=s.sort_order;$('pullStepDuration').value=s.duration_mode;$('pullStepExecutor').value=String(Number(s.executor_driver)===2?2:1);$('pullStepGeofence').checked=s.requires_factory_geofence;$('pullStepDiscount').checked=s.suggest_tma_discount;$('pullStepActive').checked=s.active;$('pullStepSkipSolo').checked=s.skip_when_solo===true;updatePullStepExecutorUi();};
+savePullStep = async function(e){e.preventDefault();const id=$('pullStepId').value,type=$('pullStepType').value,flow=$('pullStepFlow').value,action=$('pullStepCode').value.trim().toUpperCase().replace(/[^A-Z0-9_]/g,'_'),fixedStart=['START_TRIP','TRANSFER_START'].includes(action),executor=fixedStart?1:Number($('pullStepExecutor').value||1),row={name:$('pullStepName').value.trim(),step_type:type,flow_type:type==='OCCURRENCE'?(flow||'BOTH'):(flow==='TRANSFER'?'TRANSFER':'PULL'),action_code:action,sort_order:Number($('pullStepOrder').value),duration_mode:$('pullStepDuration').value,executor_driver:type==='MAIN'?executor:null,requires_factory_geofence:$('pullStepGeofence').checked,suggest_tma_discount:$('pullStepDiscount').checked,skip_when_solo:pullStepSoloSkipEligible()&&$('pullStepSkipSolo').checked,active:$('pullStepActive').checked,required:type==='MAIN'};if(!row.name||!row.action_code)return toast('Informe nome e código da etapa.','error');if(type==='MAIN'&&![1,2].includes(row.executor_driver))return toast('Selecione Motorista 1 ou Motorista 2 como responsável.','error');try{const r=id?await sb.from('pull_steps').update(row).eq('id',id):await sb.from('pull_steps').insert(row);if(r.error)throw r.error;toast('Etapa/ocorrência salva.','success');clearPullStepForm();await loadPullReferenceData();renderPullSteps();}catch(err){toast(humanPullError(err),'error');}};
+function pullStepSoloSkipEligible(){
+  const type=$('pullStepType')?.value,flow=$('pullStepFlow')?.value;
+  const code=String($('pullStepCode')?.value||'').trim().toUpperCase();
+  return type==='MAIN'&&flow==='PULL'&&!['START_TRIP','ARRIVE_FACTORY','LEAVE_FACTORY','ARRIVE_UNIT'].includes(code);
+}
+updatePullStepExecutorUi = function(){
+  const type=$('pullStepType')?.value,code=String($('pullStepCode')?.value||'').trim().toUpperCase();
+  const flow=$('pullStepFlow'),sel=$('pullStepExecutor'),note=$('pullStepExecutorNote');
+  if(!sel)return;
+  if(type==='OCCURRENCE'){
+    sel.disabled=true;
+    if(flow&&flow.value==='PULL')flow.value='BOTH';
+    if(note)note.textContent='Ocorrências podem ser compartilhadas pelos dois fluxos e são vinculadas ao motorista ativo.';
+  }else{
+    if(flow&&flow.value==='BOTH')flow.value='PULL';
+    sel.disabled=['START_TRIP','TRANSFER_START'].includes(code);
+    if(sel.disabled)sel.value='1';
+    if(note)note.textContent=sel.disabled?'A etapa inicial é sempre registrada pelo Motorista 1.':'Escolha quem deverá apontar esta etapa.';
+  }
+  const eligible=pullStepSoloSkipEligible(),check=$('pullStepSkipSolo');
+  $('pullStepSkipSoloWrap')?.classList.toggle('hidden',!eligible);
+  if(check){check.disabled=!eligible;if(!eligible)check.checked=false;}
+};
 
 const humanPullErrorV119=humanPullError;
 humanPullError = function(e){const m=String(e?.message||e||'');const extra={MOTORISTA_COM_CICLO_EM_ANDAMENTO:'Um dos motoristas já possui um ciclo em andamento.',FORNECEDOR_MARKETPLACE_INVALIDO:'Fornecedor Marketplace inválido ou inativo.',RECEBIMENTO_MARKETPLACE_EM_ANDAMENTO:'Você já possui um recebimento Marketplace em andamento.',RECEBIMENTO_MARKETPLACE_NAO_ENCONTRADO:'Recebimento Marketplace não encontrado.',RECEBIMENTO_MARKETPLACE_NAO_ESTA_EM_ANDAMENTO:'Este recebimento Marketplace já foi finalizado.',MARKETPLACE_NAO_DISPONIVEL_PARA_NRI:'Este recebimento Marketplace não está mais disponível para NRI.',FORNECEDOR_MARKETPLACE_OBRIGATORIO:'Informe o fornecedor do Marketplace.',QTD_PALETE_AVARIADO_INVALIDA:'A quantidade de paletes avariados é inválida.',MOTIVO_PALETE_AVARIADO_OBRIGATORIO:'Selecione o motivo do palete avariado.',FOTO_PALETE_AVARIADO_OBRIGATORIA:'Adicione pelo menos uma foto do palete avariado.',MAXIMO_5_FOTOS_PALETE_AVARIADO:'São permitidas no máximo 5 fotos por produto avariado.',NOTA_FISCAL_PALETE_AVARIADO_OBRIGATORIA:'Informe o Número da Nota Fiscal do palete avariado.',MATRIZ_CAICO_NAO_CONFIGURADA:'A unidade Matriz Caicó precisa estar ativa no cadastro de unidades.',FILIAL_PAU_DOS_FERROS_NAO_CONFIGURADA:'A unidade Filial Pau dos Ferros precisa estar ativa no cadastro de unidades.',ETAPA_INICIO_TRANSFERENCIA_NAO_CONFIGURADA:'A etapa inicial da Transferência não está configurada.'};const key=Object.keys(extra).find(k=>m.includes(k));return key?extra[key]:humanPullErrorV119(e);};
@@ -5459,8 +5584,8 @@ finishFefoCount = async function(){
   finally{btn.disabled=false;if(fefoActiveCount&&!fefoActiveCount._finishPending)btn.textContent=old;}
 };
 
-async function cachePullOfflineSnapshot(){try{await offlineStateSet('pull_snapshot',{trip:pullActiveTrip,events:pullDriverEvents,occurrences:pullDriverOccurrences,mainSteps:pullMainSteps,occurrenceTypes:pullOccurrenceTypes,settings:pullSettings,factories:pullFactories,vehicles:pullVehicles,profiles:pullProfiles});}catch(e){console.warn('Puxada cache',e);}}
-async function restorePullOfflineSnapshot(){try{const s=await offlineStateGet('pull_snapshot');if(!s)return false;pullActiveTrip=s.trip||null;pullDriverEvents=s.events||[];pullDriverOccurrences=s.occurrences||[];pullMainSteps=s.mainSteps||[];pullOccurrenceTypes=s.occurrenceTypes||[];pullSettings=s.settings||pullSettings;pullFactories=s.factories||[];pullVehicles=s.vehicles||[];pullProfiles=s.profiles||[];populatePullReferenceInputs();renderPullDriver();return !!pullActiveTrip;}catch{return false;}}
+async function cachePullOfflineSnapshot(){try{await offlineStateSet('pull_snapshot',{trip:pullActiveTrip,events:pullDriverEvents,occurrences:pullDriverOccurrences,mainSteps:pullMainSteps,allMainSteps:pullAllMainSteps,occurrenceTypes:pullOccurrenceTypes,settings:pullSettings,factories:pullFactories,vehicles:pullVehicles,profiles:pullProfiles});}catch(e){console.warn('Puxada cache',e);}}
+async function restorePullOfflineSnapshot(){try{const s=await offlineStateGet('pull_snapshot');if(!s)return false;pullActiveTrip=s.trip||null;pullDriverEvents=s.events||[];pullDriverOccurrences=s.occurrences||[];pullAllMainSteps=s.allMainSteps||s.mainSteps||[];pullMainSteps=pullStepsForCycle(pullActiveTrip?.cycle_type||'PULL',pullActiveTrip);pullOccurrenceTypes=s.occurrenceTypes||[];pullSettings=s.settings||pullSettings;pullFactories=s.factories||[];pullVehicles=s.vehicles||[];pullProfiles=s.profiles||[];populatePullReferenceInputs();renderPullDriver();return !!pullActiveTrip;}catch{return false;}}
 
 const loadPullReferenceDataV151=loadPullReferenceData;
 loadPullReferenceData = async function(){
@@ -5528,7 +5653,8 @@ loadPullActiveTrip = async function(silent=false){
       pullStepsForCycle(
         pullActiveTrip?.cycle_type
         ||
-        'PULL'
+        'PULL',
+        pullActiveTrip
       );
 
     if(pullActiveTrip){
@@ -8273,7 +8399,7 @@ renderPullMap=function(mapId,t,track,events,occurrences=[]){
 
     // As etapas continuam como marcadores de auditoria, nunca como linha ficticia.
     eventRows.forEach((ev,idx)=>{
-      const n=pullMainStepNumber(ev)||idx+1;
+      const n=pullMainStepNumber(ev,t)||idx+1;
       const key=String(ev.id||`${ev.action_code||'STEP'}-${ev.step_order||''}-${ev.recorded_at||''}`);
       const icon=L.divIcon({
         className:'pull-stage-marker-shell',
