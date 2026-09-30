@@ -26,6 +26,17 @@ const PERMISSION_CATALOG = [
   ['Administração','ADMIN_USERS','Usuários e permissões'],['Administração','ADMIN_BASES','Bases / importação']
 ].map(([module,code,name],sort)=>({module,code,name,sort}));
 
+const MODULE_CATALOG = [
+  {name:'NRI',icon:'▣',description:'Recebimentos, cadastro, impressões e histórico.'},
+  {name:'Conferência',icon:'✓',description:'Conferência de vasilhames e relatórios.'},
+  {name:'Contagem FEFO',icon:'▦',description:'Contagens, andamento e relatórios FEFO.'},
+  {name:'Ativo de Giro',icon:'↻',description:'Contagem e histórico do ativo de giro.'},
+  {name:'Materiais',icon:'▧',description:'Inventário, estoque, cadastro e movimentações.'},
+  {name:'Avarias de Entrega',icon:'!',description:'Registro, acompanhamento e gestão das avarias de entrega.'},
+  {name:'Avarias de Vendas',icon:'!',description:'Solicitações, acompanhamento e gestão das avarias de vendas.'},
+  {name:'Puxada',icon:'↗',description:'Viagens, farol, histórico, dashboards e configuração.'}
+];
+
 const ROLE_PERMISSION_DEFAULTS = {
   ADMIN:PERMISSION_CATALOG.filter(x=>x.code!=='DAMAGE_NOTIFICATION').map(x=>x.code),
   COLABORADOR_ARMAZEM:['NRI_PENDING_VIEW','MARKETPLACE_RECEIVE','NRI_CREATE','NRI_PRINT','CONF_CREATE','CONF_OWN_HISTORY','FEFO_CREATE','FEFO_ACTIVE','FEFO_REPORT','MATERIAL_INVENTORY','MATERIAL_STOCK_VIEW','MATERIAL_CATALOG','MATERIAL_MOVEMENT'],
@@ -121,6 +132,9 @@ let rotatingAssetHistory = [];
 let rotatingAssetEntriesByCount = new Map();
 let realtimeChannel = null;
 let activeView = '';
+let moduleSettings = new Map();
+let moduleSettingsLoaded = false;
+let moduleSettingsRefreshPromise = null;
 let homeShortcutIds = [];
 let homeShortcutsPending = false;
 let homeShortcutSyncPromise = null;
@@ -137,6 +151,7 @@ const REF_CACHE_KEY = 'ops_ref_cache_v140_customers5000';
 
 const viewMeta = {
   'home':['Home','Seus atalhos para o dia a dia'],
+  'modulos-config':['Módulos do sistema','Ative ou inative áreas completas do aplicativo'],
   'nri-cadastro':['Cadastro por carreta','Cadastre várias NRIs de uma vez'],
   'nri-pendentes':['Impressões pendentes','Fila atualizada em tempo real'],
   'avaria-cadastro':['Registrar avaria','Foto, GPS e assinatura'],
@@ -185,7 +200,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.10-home-solo',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.11-timeline-modules-decisions',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -499,13 +514,16 @@ function bindBaseEvents(){
   $('btnSair').addEventListener('click', logout); $('btnSairMobile').addEventListener('click',logout);
   $('menuBtn').addEventListener('click',()=>toggleSidebar(true)); $('overlay').addEventListener('click',()=>toggleSidebar(false));
   document.querySelectorAll('.nav-item').forEach(b=>b.addEventListener('click',()=>openView(b.dataset.view)));
+  $('moduleSettingsGrid')?.addEventListener('click',onModuleSettingsClick);
   $('btnHomeAddShortcut')?.addEventListener('click',toggleHomeShortcutPicker);
   $('btnHomeClosePicker')?.addEventListener('click',()=>setHomeShortcutPicker(false));
   $('homeShortcutSearch')?.addEventListener('input',renderHomeShortcutOptions);
   $('homeShortcutGrid')?.addEventListener('click',onHomeShortcutClick);
   $('homeShortcutOptions')?.addEventListener('click',onHomeShortcutClick);
   window.addEventListener('online',()=>setTimeout(()=>{if(homeShortcutsPending)void syncHomeShortcuts();},2000));
+  window.addEventListener('online',()=>setTimeout(()=>{if(authUser)void refreshModuleSettings();},2000));
   document.addEventListener('visibilitychange',()=>{if(!document.hidden&&navigator.onLine&&homeShortcutsPending)void syncHomeShortcuts();});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&navigator.onLine&&authUser)void refreshModuleSettings();});
   document.querySelectorAll('.nav-area-toggle').forEach(b=>b.addEventListener('click',()=>toggleNavArea(b.closest('.nav-area'))));
   document.querySelectorAll('.nav-module-toggle').forEach(b=>b.addEventListener('click',()=>toggleNavModule(b.closest('.nav-module'))));
   $('modalClose').addEventListener('click',closeModal); $('modal').addEventListener('click',e=>{if(e.target===$('modal'))closeModal();});
@@ -866,6 +884,9 @@ function hasPerm(code){
   const key=
     String(code||'');
 
+  const moduleName=moduleNameForPermission(key);
+  if(moduleName&&moduleSettings.get(moduleName)===false)return false;
+
   if(key==='DAMAGE_NOTIFICATION'){
     return myPermissions.has(key);
   }
@@ -877,6 +898,74 @@ function hasPerm(code){
   );
 }
 function hasAnyPerm(codes){return String(codes||'').split(',').map(x=>x.trim()).filter(Boolean).some(hasPerm);}
+
+function moduleNameForPermission(code){
+  if(code.startsWith('NRI_')||code==='MARKETPLACE_RECEIVE')return 'NRI';
+  if(code.startsWith('CONF_'))return 'Conferência';
+  if(code.startsWith('FEFO_'))return 'Contagem FEFO';
+  if(code.startsWith('ROTATING_ASSET_'))return 'Ativo de Giro';
+  if(code.startsWith('MATERIAL_'))return 'Materiais';
+  if(code.startsWith('DELIVERY_DAMAGE_'))return 'Avarias de Entrega';
+  if(code.startsWith('SALES_DAMAGE_'))return 'Avarias de Vendas';
+  if(code.startsWith('PULL_'))return 'Puxada';
+  return '';
+}
+function moduleIsActive(name){return moduleSettings.get(name)!==false;}
+function saveModuleSettingsCache(){
+  try{localStorage.setItem('disb_module_settings_v1',JSON.stringify([...moduleSettings]));}catch(_e){}
+}
+async function loadModuleSettings(){
+  if(!moduleSettingsLoaded){
+    try{
+      const saved=JSON.parse(localStorage.getItem('disb_module_settings_v1')||'[]');
+      if(Array.isArray(saved))moduleSettings=new Map(saved.filter(row=>Array.isArray(row)&&MODULE_CATALOG.some(m=>m.name===row[0])));
+    }catch(_e){}
+    moduleSettingsLoaded=true;
+  }
+  if(!sb||!navigator.onLine)return false;
+  try{
+    const {data,error}=await sb.from('module_settings').select('module_name,active');
+    if(error)throw error;
+    const before=JSON.stringify([...moduleSettings]);
+    moduleSettings=new Map((data||[]).filter(row=>MODULE_CATALOG.some(m=>m.name===row.module_name)).map(row=>[row.module_name,row.active!==false]));
+    saveModuleSettingsCache();
+    return JSON.stringify([...moduleSettings])!==before;
+  }catch(error){console.warn('Configuração de módulos indisponível',error);return false;}
+}
+async function refreshModuleSettings(){
+  if(moduleSettingsRefreshPromise)return moduleSettingsRefreshPromise;
+  moduleSettingsRefreshPromise=(async()=>{
+    const changed=await loadModuleSettings();
+    if(changed){applyRole();renderHome();}
+    if(activeView==='modulos-config')renderModuleSettings();
+  })();
+  try{await moduleSettingsRefreshPromise;}finally{moduleSettingsRefreshPromise=null;}
+}
+function renderModuleSettings(){
+  const grid=$('moduleSettingsGrid');if(!grid)return;
+  grid.innerHTML=MODULE_CATALOG.map(m=>{
+    const active=moduleIsActive(m.name);
+    return `<article class="module-setting-card ${active?'':'inactive'}"><span class="module-setting-icon" aria-hidden="true">${esc(m.icon)}</span><div class="module-setting-copy"><strong>${esc(m.name)}</strong><p>${esc(m.description)}</p><span class="module-setting-state ${active?'active':'inactive'}">${active?'Ativo':'Inativo'}</span></div><button type="button" class="btn ${active?'secondary':'primary'}" data-module-setting="${esc(m.name)}" ${navigator.onLine?'':'disabled'} aria-label="${active?'Inativar':'Ativar'} módulo ${esc(m.name)}">${active?'Inativar':'Ativar'}</button></article>`;
+  }).join('');
+  const note=$('moduleSettingsNote');
+  if(note)note.textContent=navigator.onLine?'A mudança afeta as telas e os atalhos de todos os usuários. As permissões individuais e os dados existentes são preservados.':'Conecte-se à internet para alterar módulos.';
+}
+async function onModuleSettingsClick(event){
+  const button=event.target.closest('[data-module-setting]');if(!button||!isAdmin())return;
+  const name=button.dataset.moduleSetting;if(!MODULE_CATALOG.some(m=>m.name===name)||!navigator.onLine)return;
+  const active=!moduleIsActive(name);
+  button.disabled=true;
+  try{
+    const {data,error}=await sb.from('module_settings').update({active,updated_at:new Date().toISOString()}).eq('module_name',name).select('module_name,active').single();
+    if(error)throw error;
+    moduleSettings.set(name,data.active!==false);saveModuleSettingsCache();
+    applyRole();renderHome();renderModuleSettings();
+    toast(`${name} ${active?'ativado':'inativado'} no aplicativo.`,'success');
+  }catch(error){
+    button.disabled=false;
+    toast(/module_settings|42P01/i.test(String(error?.message||''))?'Execute o SQL 44 para habilitar a configuração de módulos.':humanError(error),'error');
+  }
+}
 
 async function logout(){
 
@@ -952,6 +1041,7 @@ async function startApp(){
   document.title='Disb Gestão';
   $('userNome').textContent=profile.name; $('userPerfil').textContent=ROLE_LABELS[profile.role]||profile.role; $('userAvatar').textContent=initials(profile.name);
   await loadMyPermissions();
+  await loadModuleSettings();
   applyRole(); restoreNavNavigation(); fillDefaultDates(); updateDashboardPeriod();
   await loadHomeShortcuts();
   await loadReferences(true);
@@ -985,6 +1075,8 @@ function applyRole(){
   document.querySelectorAll('.role-puxada:not([data-permission])').forEach(x=>x.classList.toggle('hidden',!canPull()));
   document.querySelectorAll('.puxador-only:not([data-permission])').forEach(x=>x.classList.toggle('hidden',!isPullDriver()&&!hasPerm('PULL_TRIP')));
   document.querySelectorAll('.admin-only:not([data-permission]):not([data-permission-any])').forEach(x=>x.classList.toggle('hidden',!isAdmin()));
+  document.querySelectorAll('[data-view="modulos-config"],#view-modulos-config').forEach(x=>x.classList.toggle('hidden',!isAdmin()));
+  if(activeView&&$(`view-${activeView}`)?.classList.contains('hidden'))openView('home',true);
 }
 function setNavAreaOpen(area,open){
   if(!area)return;
@@ -1140,6 +1232,7 @@ function openView(name,force=false){
   openModuleForView(name);
   const meta=viewMeta[name]||['Disb Gestão','']; $('topbarTitulo').textContent=meta[0];$('topbarSubtitulo').textContent=meta[1]; toggleSidebar(false);
   if(name==='home')renderHome();
+  if(name==='modulos-config')renderModuleSettings();
   if(name==='nri-cadastro')ensureNriPlateOptions();
   if(name==='nri-pendentes')loadPending();
   if(name==='avaria-cadastro')ensureAvariaLocationPermission();
@@ -2205,7 +2298,7 @@ async function showSalesDamageDetail(id){
     }).join('');
     const pending=items.filter(i=>i.status==='PENDENTE').length,analysis=items.filter(i=>i.status==='EM_ANALISE').length,approved=items.filter(i=>i.status==='APROVADO').length,selectableCount=sellerView?0:items.filter(i=>((canReview||canFinalize)&&i.status==='PENDENTE')||(canFinalize&&i.status==='EM_ANALISE')||(canPost&&i.status==='APROVADO')).length;
     const needsJustification=!sellerView&&((canReview&&pending)||(canFinalize&&(pending||analysis)));
-    const body=`<div class="damage-request-hero sales-request-hero"><div><small>${esc(r.request_code)}</small><strong>PDV ${esc(r.customer_code)} · ${esc(r.customer_name)}</strong><span>${esc(r.city||'—')} • ${esc(r.branch||'—')} • Vendedor: ${esc(r.seller_name)}</span></div><div class="damage-counts"><b>${items.length}</b><span>produtos</span><b>${pending+analysis+approved}</b><span>em fluxo</span></div></div><div class="detail-grid damage-request-grid"><div class="detail-card"><small>Data</small><strong>${fmtDate(r.occurrence_date)}</strong></div><div class="detail-card"><small>Vendedor</small><strong>${esc(r.seller_name)}</strong></div><div class="detail-card"><small>Código PDV</small><strong>${esc(r.customer_code)}</strong></div><div class="detail-card"><small>Filial</small><strong>${esc(r.branch||'—')}</strong></div></div>${selectableCount?`<div class="damage-selection-bar sales-selection-bar"><label class="check sales-select-all"><input id="salesDamageSelectAll" type="checkbox"> Selecionar tudo</label><span id="salesDamageSelectionSummary">0 selecionados</span><small>${pending&&canReview&&canFinalize?'Pendentes: GV ou decisão final direta. ':pending&&canReview?'Pendentes: decisão do Gerente de Vendas. ':pending&&canFinalize?'Pendentes: decisão final direta disponível. ':''}${analysis&&canFinalize?'Em análise: decisão final. ':''}${approved&&canPost?'Aprovados: prontos para marcar como lançados.':''}</small></div>`:''}${needsJustification?`<div class="sales-review-justification"><div class="field"><label>Justificativa da decisão *</label><textarea id="salesDamageDecisionJustification" rows="3" maxlength="500" placeholder="Descreva o motivo da aprovação ou reprovação."></textarea><small>A justificativa fica registrada na auditoria da solicitação.</small></div></div>`:''}${products}`;
+    const body=`<div class="damage-request-hero sales-request-hero"><div><small>${esc(r.request_code)}</small><strong>PDV ${esc(r.customer_code)} · ${esc(r.customer_name)}</strong><span>${esc(r.city||'—')} • ${esc(r.branch||'—')} • Vendedor: ${esc(r.seller_name)}</span></div><div class="damage-counts"><b>${items.length}</b><span>produtos</span><b>${pending+analysis+approved}</b><span>em fluxo</span></div></div><div class="detail-grid damage-request-grid"><div class="detail-card"><small>Data</small><strong>${fmtDate(r.occurrence_date)}</strong></div><div class="detail-card"><small>Vendedor</small><strong>${esc(r.seller_name)}</strong></div><div class="detail-card"><small>Código PDV</small><strong>${esc(r.customer_code)}</strong></div><div class="detail-card"><small>Filial</small><strong>${esc(r.branch||'—')}</strong></div></div>${selectableCount?`<div class="damage-selection-bar sales-selection-bar"><label class="check sales-select-all"><input id="salesDamageSelectAll" type="checkbox"> Selecionar tudo</label><span id="salesDamageSelectionSummary">0 selecionados</span><small>${pending&&canReview&&canFinalize?'Pendentes: GV ou decisão final direta. ':pending&&canReview?'Pendentes: decisão do Gerente de Vendas. ':pending&&canFinalize?'Pendentes: decisão final direta disponível. ':''}${analysis&&canFinalize?'Em análise: decisão final. ':''}${approved&&canPost?'Aprovados: prontos para marcar como lançados.':''}</small></div>`:''}${products}`;
     const actions=[];if(!sellerView&&canReview&&pending){actions.push({label:'GV • Reprovar selecionados',class:'danger',onClick:()=>reviewSalesDamage('REPROVADO')},{label:'GV • Aprovar selecionados',class:'success',onClick:()=>reviewSalesDamage('APROVADO')});}if(!sellerView&&canFinalize&&(pending||analysis)){actions.push({label:'Final • Reprovar selecionados',class:'danger',onClick:()=>finalizeSalesDamage('REPROVADO')},{label:'Final • Aprovar selecionados',class:'success',onClick:()=>finalizeSalesDamage('APROVADO')});}if(!sellerView&&canPost&&approved){actions.push({label:'✓ Marcar selecionados como lançados',class:'success',onClick:()=>markSalesDamageLaunchedBulk()});}
     openModal(`Avaria de Vendas • ${r.request_code}`,`${fmtDate(r.occurrence_date)} • ${r.seller_name} • ${salesDamageStatusLabel(r.status)}`,body,actions);
     const checks=[...($('modalBody')?.querySelectorAll('.sales-review-check')||[])],selectAll=$('salesDamageSelectAll');const update=()=>{const n=checks.filter(x=>x.checked).length;if($('salesDamageSelectionSummary'))$('salesDamageSelectionSummary').textContent=`${n} selecionado${n===1?'':'s'}`;if(selectAll){selectAll.checked=checks.length>0&&n===checks.length;selectAll.indeterminate=n>0&&n<checks.length;}};checks.forEach(x=>x.addEventListener('change',update));selectAll?.addEventListener('change',()=>{checks.forEach(x=>x.checked=selectAll.checked);update();});$('modalBody')?.querySelectorAll('[data-sales-launch]').forEach(b=>b.addEventListener('click',()=>markSalesDamageLaunched(b.dataset.salesLaunch)));
@@ -2216,12 +2309,20 @@ function selectedSalesReviewIds(kind){
   return selected.filter(id=>{const i=items.find(x=>String(x.id)===String(id));if(!i)return false;if(kind==='pending')return i.status==='PENDENTE';if(kind==='final')return i.status==='PENDENTE'||i.status==='EM_ANALISE';if(kind==='launch')return i.status==='APROVADO';if(kind==='delivered')return i.status==='LANCADO';return false;});
 }
 async function reviewSalesDamage(status,itemId=null){
-  const ids=itemId?[itemId]:selectedSalesReviewIds('pending');if(!ids.length)return toast('Selecione ao menos um produto pendente.','error');const note=String($('salesDamageDecisionJustification')?.value||'').trim();if(status==='REPROVADO'&&!note)return toast('Informe a justificativa da reprovação.','error');
-  try{const {error}=await sb.rpc('review_sales_damage_items',{p_item_ids:ids,p_status:status,p_justification:note});if(error)throw error;toast(status==='APROVADO'?`${ids.length} produto(s) aprovado(s) pelo GV e enviado(s) para análise final.`:`${ids.length} produto(s) reprovado(s) pelo GV.`,'success');closeModal();await loadSalesDamageManage(true);if(hasPerm('SALES_DAMAGE_VIEW_OWN'))await loadSalesDamageMy(true);}catch(e){toast(humanSalesDamageError(e),'error');}
+  const ids=itemId?[itemId]:selectedSalesReviewIds('pending');if(!ids.length)return toast('Selecione ao menos um produto pendente.','error');
+  showDamageDecisionPanel({status,count:ids.length,label:'decisão do Gerente de Vendas',onConfirm:async note=>{
+    const {error}=await sb.rpc('review_sales_damage_items',{p_item_ids:ids,p_status:status,p_justification:note});if(error)throw error;
+    toast(status==='APROVADO'?`${ids.length} produto(s) aprovado(s) pelo GV e enviado(s) para análise final.`:`${ids.length} produto(s) reprovado(s) pelo GV.`,'success');
+    closeModal();await loadSalesDamageManage(true);if(hasPerm('SALES_DAMAGE_VIEW_OWN'))await loadSalesDamageMy(true);
+  },onError:humanSalesDamageError});
 }
 async function finalizeSalesDamage(status,itemId=null){
-  const ids=itemId?[itemId]:selectedSalesReviewIds('final');if(!ids.length)return toast('Selecione ao menos um produto pendente ou em análise.','error');const note=String($('salesDamageDecisionJustification')?.value||'').trim();if(status==='REPROVADO'&&!note)return toast('Informe a justificativa da reprovação final.','error');
-  try{const {error}=await sb.rpc('finalize_sales_damage_items',{p_item_ids:ids,p_status:status,p_justification:note});if(error)throw error;toast(`${ids.length} produto(s) ${status==='APROVADO'?'aprovado(s)':'reprovado(s)'} na decisão final.`,'success');closeModal();await loadSalesDamageManage(true);if(hasPerm('SALES_DAMAGE_VIEW_OWN'))await loadSalesDamageMy(true);}catch(e){toast(humanSalesDamageError(e),'error');}
+  const ids=itemId?[itemId]:selectedSalesReviewIds('final');if(!ids.length)return toast('Selecione ao menos um produto pendente ou em análise.','error');
+  showDamageDecisionPanel({status,count:ids.length,label:'decisão final',onConfirm:async note=>{
+    const {error}=await sb.rpc('finalize_sales_damage_items',{p_item_ids:ids,p_status:status,p_justification:note});if(error)throw error;
+    toast(`${ids.length} produto(s) ${status==='APROVADO'?'aprovado(s)':'reprovado(s)'} na decisão final.`,'success');
+    closeModal();await loadSalesDamageManage(true);if(hasPerm('SALES_DAMAGE_VIEW_OWN'))await loadSalesDamageMy(true);
+  },onError:humanSalesDamageError});
 }
 async function markSalesDamageLaunched(itemId){
   if(!hasPerm('SALES_DAMAGE_POST'))return toast('Seu usuário não possui permissão para marcar a avaria como lançada.','error');if(!confirm('Confirmar que esta avaria já foi lançada no sistema?'))return;
@@ -2900,7 +3001,7 @@ function renderPullDriver(){
   $('pullOccurrenceButtons').innerHTML=pullOccurrenceTypes.map(x=>`<button class="btn secondary" data-occ="${x.id}" ${(!pullIsActiveDriver()||!!openOcc)?'disabled':''}>+ ${esc(x.name)}</button>`).join('');
   const timeline=[...pullDriverEvents.map(x=>({kind:'STEP',at:x.recorded_at,name:pullNumberedStepName(x),user:x.user_name,gps:`${Number(x.latitude).toFixed(5)}, ${Number(x.longitude).toFixed(5)}`,extra:`precisão ±${Math.round(Number(x.gps_accuracy)||0)} m${x.geofence_status==='INSIDE'?` • dentro do raio • ${Math.round(x.distance_factory_m||0)} m`:x.geofence_status==='OUTSIDE'?` • fora do raio • ${Math.round(x.distance_factory_m||0)} m • permitido`:''}`})),...pullDriverOccurrences.map(x=>({kind:'OCC',at:x.started_at,name:x.occurrence_name,user:x.started_by_name,gps:`${Number(x.start_latitude).toFixed(5)}, ${Number(x.start_longitude).toFixed(5)}`,extra:x.status==='OPEN'?'Em andamento':`Encerrada ${fmtDateTime(x.ended_at)}`}))].sort((a,b)=>new Date(a.at)-new Date(b.at));
   const tl=$('pullDriverTimeline');
-  if(!timeline.length){tl.className='pull-timeline empty-state';tl.textContent='Nenhuma etapa.';}else{tl.className='pull-timeline';tl.innerHTML=timeline.map(x=>`<div class="pull-timeline-item ${x.kind==='OCC'?'occurrence':''}"><span class="dot"></span><div><small>${fmtDateTime(x.at)}</small><strong>${esc(x.name)}</strong><span>${esc(x.user)} • ${esc(x.gps)}${x.extra?` • ${esc(x.extra)}`:''}</span></div></div>`).join('');}
+  if(!timeline.length){tl.className='pull-timeline empty-state';tl.textContent='Nenhuma etapa.';}else{tl.className='pull-timeline';tl.innerHTML=timeline.map((x,i)=>`<div class="pull-timeline-item ${x.kind==='OCC'?'occurrence':''}"><span class="dot"></span><div><small>${fmtDateTime(x.at)}</small><strong>${esc(x.name)}</strong><span>${esc(x.user)} • ${esc(x.gps)}${x.extra?` • ${esc(x.extra)}`:''}</span>${pullTimelineDurationHtml(x,timeline[i+1])}</div></div>`).join('');}
   startPullClock();
 }
 function startPullClock(){stopPullClock();const tick=()=>{if(!$('pullActiveElapsed')||!pullActiveTrip)return;const sec=Math.max(0,Math.floor((Date.now()-new Date(pullActiveTrip.started_at).getTime())/1000));$('pullActiveElapsed').textContent=fmtDurationSeconds(sec);};tick();pullClockTimer=setInterval(tick,1000);}
@@ -3099,7 +3200,7 @@ async function openPullTripDetail(id,live=false){
       ...(ev.data||[]).map(x=>({kind:'STEP',mapKey:String(x.id||`${x.action_code||'STEP'}-${x.step_order||''}-${x.recorded_at||''}`),at:x.recorded_at,title:pullNumberedStepName(x,t),detail:`${x.user_name} • ${Number(x.latitude).toFixed(5)}, ${Number(x.longitude).toFixed(5)} • precisão ±${Math.round(x.gps_accuracy||0)} m${x.geofence_status==='INSIDE'?` • dentro do raio de auditoria (${Math.round(x.distance_factory_m||0)} m)`:x.geofence_status==='OUTSIDE'?` • fora do raio de auditoria (${Math.round(x.distance_factory_m||0)} m)${x.exception_reason?` • ${x.exception_reason}`:''}`:''}`})),
       ...(oc.data||[]).map(x=>({kind:'OCC',mapKey:`occ-start-${x.id}`,mapEndKey:x.ended_at&&x.end_latitude!=null&&x.end_longitude!=null?`occ-end-${x.id}`:'',at:x.started_at,title:`Ocorrência: ${x.occurrence_name}`,detail:`${x.started_by_name}${x.ended_at?` • ${fmtDurationMinutes(minutesBetween(x.started_at,x.ended_at))}`:' • em andamento'}${x.note?` • ${x.note}`:''}`}))
     ].sort((a,b)=>new Date(a.at)-new Date(b.at));
-    const body=`<div class="detail-grid"><div class="detail-card"><small>Origem</small><strong>${esc(t.origin_unit||'—')}</strong></div><div class="detail-card"><small>${transfer?'Placa / rota':'Placa / fábrica'}</small><strong>${esc(t.plate)} • ${esc(transfer?'Matriz → Filial → Matriz':t.factory)}</strong></div><div class="detail-card"><small>${transfer?'Tipo':'Parceiro'}</small><strong>${esc(transfer?'Transferência':t.carrier||'Ambev')}</strong></div><div class="detail-card"><small>${transfer||pullTripSolo(t)?'Motorista':'Motoristas'}</small><strong>${esc(t.driver1_name)}${transfer||pullTripSolo(t)?'':` / ${esc(t.driver2_name)}`}${pullTripSolo(t)?' • viagem sozinho':''}</strong></div><div class="detail-card"><small>Início</small><strong>${fmtDateTime(t.started_at)}</strong></div><div class="detail-card"><small>Fim da viagem</small><strong>${fmtDateTime(t.ended_at)}</strong></div></div>${transfer?`<div class="pull-metric-strip"><span>Tipo <b>Transferência</b></span><span>Ciclo Matriz → Filial → Matriz <b>${m.CYCLE==null?'Aguardando':fmtMinutes(m.CYCLE)}</b></span></div>`:`<div class="pull-metric-strip"><span>TMV Ida <b>${fmtMinutes(m.TMV_OUT)}</b></span><span>TMA Fábrica <b>${fmtMinutes(m.FACTORY)}</b></span><span>TMV Volta <b>${fmtMinutes(m.TMV_RETURN)}</b></span><span>TMA Revenda <b>${m.UNIT==null?'Aguardando':fmtMinutes(m.UNIT)}</b></span><span>Ciclo <b>${m.CYCLE==null?'Aguardando':fmtMinutes(m.CYCLE)}</b></span></div>`}${t.tma_adjust_minutes>0?`<div class="notice"><strong>TMA ajustado:</strong> bruto ${fmtMinutes(m.UNIT_RAW)} − ${fmtMinutes(t.tma_adjust_minutes)} = <b>${fmtMinutes(m.UNIT)}</b><br>${esc(t.tma_adjust_reason)} • por ${esc(t.tma_adjusted_by_name||'Admin')} em ${fmtDateTime(t.tma_adjusted_at)}</div>`:''}<div id="${mapId}" class="pull-map"></div><div class="section-title">Linha do tempo</div><div class="pull-timeline">${timeline.map(x=>`<div class="pull-timeline-item ${x.kind==='OCC'?'occurrence':''}"><span class="dot"></span><div><small>${fmtDateTime(x.at)}</small><strong>${esc(x.title)}</strong><span>${esc(x.detail)}</span><div class="pull-timeline-map-actions">${x.mapKey?`<button type="button" class="pull-map-jump ${x.kind==='OCC'?'occurrence':''}" data-pull-map-jump="${esc(x.mapKey)}" data-pull-map-id="${esc(mapId)}">${x.kind==='OCC'?'Início no mapa':'Ver no mapa'}</button>`:''}${x.mapEndKey?`<button type="button" class="pull-map-jump occurrence" data-pull-map-jump="${esc(x.mapEndKey)}" data-pull-map-id="${esc(mapId)}">Fim no mapa</button>`:''}</div></div></div>`).join('')}</div>${transfer?'':`<div class="notice"><strong>NRIs vinculados:</strong> ${(nri.data||[]).length}</div>`}${(aud.data||[]).length?`<details><summary>Auditoria de ajustes TMA (${aud.data.length})</summary>${aud.data.map(a=>`<div class="audit-row">${fmtDateTime(a.changed_at)} • ${esc(a.changed_by_name)} • ${fmtMinutes(a.old_minutes)} → ${fmtMinutes(a.new_minutes)} • ${esc(a.new_reason||'sem ajuste')}</div>`).join('')}</details>`:''}`;
+    const body=`<div class="detail-grid"><div class="detail-card"><small>Origem</small><strong>${esc(t.origin_unit||'—')}</strong></div><div class="detail-card"><small>${transfer?'Placa / rota':'Placa / fábrica'}</small><strong>${esc(t.plate)} • ${esc(transfer?'Matriz → Filial → Matriz':t.factory)}</strong></div><div class="detail-card"><small>${transfer?'Tipo':'Parceiro'}</small><strong>${esc(transfer?'Transferência':t.carrier||'Ambev')}</strong></div><div class="detail-card"><small>${transfer||pullTripSolo(t)?'Motorista':'Motoristas'}</small><strong>${esc(t.driver1_name)}${transfer||pullTripSolo(t)?'':` / ${esc(t.driver2_name)}`}${pullTripSolo(t)?' • viagem sozinho':''}</strong></div><div class="detail-card"><small>Início</small><strong>${fmtDateTime(t.started_at)}</strong></div><div class="detail-card"><small>Fim da viagem</small><strong>${fmtDateTime(t.ended_at)}</strong></div></div>${transfer?`<div class="pull-metric-strip"><span>Tipo <b>Transferência</b></span><span>Ciclo Matriz → Filial → Matriz <b>${m.CYCLE==null?'Aguardando':fmtMinutes(m.CYCLE)}</b></span></div>`:`<div class="pull-metric-strip"><span>TMV Ida <b>${fmtMinutes(m.TMV_OUT)}</b></span><span>TMA Fábrica <b>${fmtMinutes(m.FACTORY)}</b></span><span>TMV Volta <b>${fmtMinutes(m.TMV_RETURN)}</b></span><span>TMA Revenda <b>${m.UNIT==null?'Aguardando':fmtMinutes(m.UNIT)}</b></span><span>Ciclo <b>${m.CYCLE==null?'Aguardando':fmtMinutes(m.CYCLE)}</b></span></div>`}${t.tma_adjust_minutes>0?`<div class="notice"><strong>TMA ajustado:</strong> bruto ${fmtMinutes(m.UNIT_RAW)} − ${fmtMinutes(t.tma_adjust_minutes)} = <b>${fmtMinutes(m.UNIT)}</b><br>${esc(t.tma_adjust_reason)} • por ${esc(t.tma_adjusted_by_name||'Admin')} em ${fmtDateTime(t.tma_adjusted_at)}</div>`:''}<div id="${mapId}" class="pull-map"></div><div class="section-title">Linha do tempo</div><div class="pull-timeline">${timeline.map((x,i)=>`<div class="pull-timeline-item ${x.kind==='OCC'?'occurrence':''}"><span class="dot"></span><div><small>${fmtDateTime(x.at)}</small><strong>${esc(x.title)}</strong><span>${esc(x.detail)}</span><div class="pull-timeline-map-actions">${x.mapKey?`<button type="button" class="pull-map-jump ${x.kind==='OCC'?'occurrence':''}" data-pull-map-jump="${esc(x.mapKey)}" data-pull-map-id="${esc(mapId)}">${x.kind==='OCC'?'Início no mapa':'Ver no mapa'}</button>`:''}${x.mapEndKey?`<button type="button" class="pull-map-jump occurrence" data-pull-map-jump="${esc(x.mapEndKey)}" data-pull-map-id="${esc(mapId)}">Fim no mapa</button>`:''}</div>${pullTimelineDurationHtml(x,timeline[i+1])}</div></div>`).join('')}</div>${transfer?'':`<div class="notice"><strong>NRIs vinculados:</strong> ${(nri.data||[]).length}</div>`}${(aud.data||[]).length?`<details><summary>Auditoria de ajustes TMA (${aud.data.length})</summary>${aud.data.map(a=>`<div class="audit-row">${fmtDateTime(a.changed_at)} • ${esc(a.changed_by_name)} • ${fmtMinutes(a.old_minutes)} → ${fmtMinutes(a.new_minutes)} • ${esc(a.new_reason||'sem ajuste')}</div>`).join('')}</details>`:''}`;
     const actions=[];
     if(hasPerm('PULL_TMA_ADJUST')&&!transfer&&!live&&t.next_started_at)actions.push({label:'Ajustar TMA Revenda',class:'secondary',onClick:()=>{closeModal();openPullTmaAdjust(t.id);}});
     openModal(`${transfer?'TRANSFERÊNCIA':'PUXADA'} • ${t.trip_code} • ${t.plate}`,pullTripStatusLabel(t),body,actions);
@@ -3313,6 +3414,13 @@ function minutesBetween(a,b){if(!a||!b)return null;const n=(new Date(b)-new Date
 function fmtMinutes(v){if(v==null||!Number.isFinite(Number(v)))return '—';const m=Math.max(0,Math.round(Number(v))),h=Math.floor(m/60),mm=m%60;return `${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;}
 function fmtDurationMinutes(v){return fmtMinutes(v);}
 function fmtDurationSeconds(sec){const s=Math.max(0,Math.floor(sec||0)),h=Math.floor(s/3600),m=Math.floor(s%3600/60),ss=s%60;return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;}
+function pullTimelineDurationHtml(current,next){
+  if(!next)return '';
+  const start=Date.parse(current.at),end=Date.parse(next.at);
+  if(!Number.isFinite(start)||!Number.isFinite(end)||end<start)return '';
+  const label=next.kind==='STEP'?'até a próxima etapa':'até o próximo registro';
+  return `<div class="pull-timeline-duration"><span aria-hidden="true">↓</span><small>Tempo ${label}</small><strong>${fmtDurationSeconds(Math.round((end-start)/1000))}</strong></div>`;
+}
 function minutesToInput(v){return fmtMinutes(Number(v)||0);}
 function parseDurationInput(v){const s=String(v||'').trim();if(!s)return 0;const m=s.match(/^(\d{1,4}):([0-5]\d)$/);if(!m)return null;return Number(m[1])*60+Number(m[2]);}
 function distanceMeters(a,b,c,d){const R=6371000,p=x=>x*Math.PI/180,dp=p(c-a),dl=p(d-b),q=Math.sin(dp/2)**2+Math.cos(p(a))*Math.cos(p(c))*Math.sin(dl/2)**2;return 2*R*Math.asin(Math.sqrt(q));}
@@ -4007,6 +4115,29 @@ function humanFefoError(e){
 }
 
 
+function showDamageDecisionPanel({status,count,label,onConfirm,onError}){
+  const body=$('modalBody');if(!body)return;
+  body.querySelector('.damage-decision-panel')?.remove();
+  const reject=status==='REPROVADO',verb=reject?'Reprovar':'Aprovar',trigger=document.activeElement;
+  const panel=document.createElement('section');
+  panel.className=`damage-decision-panel ${reject?'reject':'approve'}`;
+  panel.setAttribute('role','region');
+  panel.setAttribute('aria-label',`${verb} ${count} produto${count===1?'':'s'}`);
+  panel.innerHTML=`<div class="damage-decision-head"><div><small>${esc(label)}</small><strong>${verb} ${count} produto${count===1?'':'s'}</strong></div><button type="button" class="damage-decision-close" data-decision-cancel aria-label="Fechar justificativa">×</button></div><label for="damageDecisionNote">Justificativa ${reject?'*':'(opcional)'}</label><textarea id="damageDecisionNote" rows="3" maxlength="500" placeholder="${reject?'Informe o motivo da reprovação.':'Se desejar, informe o motivo da aprovação.'}"></textarea><small class="damage-decision-help">A decisão e a justificativa ficam registradas na auditoria.</small><div class="damage-decision-actions"><button type="button" class="btn secondary" data-decision-cancel>Cancelar</button><button type="button" class="btn ${reject?'danger':'success'}" data-decision-confirm>Confirmar ${reject?'reprovação':'aprovação'}</button></div>`;
+  const anchor=body.querySelector('.damage-selection-bar');
+  if(anchor)anchor.after(panel);else body.prepend(panel);
+  panel.querySelectorAll('[data-decision-cancel]').forEach(button=>button.addEventListener('click',()=>{panel.remove();trigger?.focus?.();}));
+  const confirmButton=panel.querySelector('[data-decision-confirm]');
+  confirmButton.addEventListener('click',async()=>{
+    const note=String(panel.querySelector('textarea')?.value||'').trim();
+    if(reject&&!note){toast('Informe a justificativa da reprovação.','error');panel.querySelector('textarea')?.focus();return;}
+    confirmButton.disabled=true;
+    try{await onConfirm(note);}catch(error){toast(onError?onError(error):humanError(error),'error');}
+    finally{if(confirmButton.isConnected)confirmButton.disabled=false;}
+  });
+  panel.scrollIntoView({block:'nearest',behavior:'smooth'});
+  panel.querySelector('textarea')?.focus({preventScroll:true});
+}
 function openModal(title,subtitle,body,actions=[]){$('modalTitle').textContent=title;$('modalSubtitle').textContent=subtitle||'';$('modalBody').classList.remove('damage-review-workspace');$('modalBody').innerHTML=body||'';const a=$('modalActions');a.hidden=false;a.innerHTML='';actions.forEach(x=>{const b=document.createElement('button');b.className=`btn ${x.class||'secondary'}`;b.textContent=x.label;b.addEventListener('click',x.onClick);a.appendChild(b);});$('modal').classList.add('open');}
 function closeModal(){closeDamagePhotoViewer();cleanupPullMaps();$('modal').classList.remove('open');$('modalBody').onchange=null;$('modalBody').onclick=null;$('modalBody').classList.remove('damage-review-workspace');$('modalBody').innerHTML='';$('modalActions').hidden=false;$('modalActions').innerHTML='';}
 function damageReviewProductIdentity(item,index){
@@ -4116,6 +4247,7 @@ function setupDamageReviewWorkspace(kind){
     actions.hidden=!actionButtons.some(button=>!button.hidden);
   };
   const setStage=key=>{
+    body.querySelector('.damage-decision-panel')?.remove();
     activeStage=key;
     cards.forEach(card=>{
       const active=card.dataset.damageStage===key;
@@ -4141,7 +4273,7 @@ function setupDamageReviewWorkspace(kind){
     const summary=selection?.querySelector('[id$="SelectionSummary"]');if(summary)summary.textContent='0 selecionados';
     const hint=selection?.querySelector('small');if(hint)hint.textContent='Selecione os produtos desta etapa para usar as ações abaixo.';
   };
-  body.onchange=event=>{if(event.target.matches('.delivery-review-check,.sales-review-check,#deliveryDamageSelectAll,#salesDamageSelectAll'))refreshBulkActions();};
+  body.onchange=event=>{if(event.target.matches('.delivery-review-check,.sales-review-check,#deliveryDamageSelectAll,#salesDamageSelectAll')){body.querySelector('.damage-decision-panel')?.remove();refreshBulkActions();}};
   nav.querySelectorAll('button').forEach(button=>button.addEventListener('click',()=>setStage(button.dataset.damageTab)));
   const initial=stages.find(stage=>(counts.get(stage.key)||0)>0&&actionButtons.some(button=>button.classList.contains(`damage-action-${stage.key}`)))
     ||stages.find(stage=>(counts.get(stage.key)||0)>0)||stages[0];
@@ -4767,7 +4899,7 @@ async function showAvariaDetail(id){
     return `<div class="damage-admin-item" data-item="${i.id}" data-damage-status="${esc(i.status)}"><div class="damage-product-head">${selectable?`<label class="damage-check"><input type="checkbox" class="delivery-review-check" value="${i.id}" data-review-kind="${kind}"><span></span></label>`:''}${damageReviewProductIdentity(i,idx)}${damageReviewControls(i.status,inlineActions)}</div><div class="damage-summary-grid"><div><small>LOTE</small><strong>${esc(i.lot)}</strong></div><div><small>QUANTIDADE</small><strong>${fmtNum(i.quantity)} ${esc(i.quantity_unit)}</strong></div><div><small>MOTIVO</small><strong>${esc(i.reason)}</strong></div><div><small>EVIDÊNCIAS</small><strong>${photos.length} foto(s)</strong></div></div><div class="damage-lot-row">${match.length?`<span class="status approved">Lote compatível</span><span>${match.slice(0,4).map(n=>esc(n.nri)).join(', ')}</span>`:'<span class="status rejected">Lote não encontrado</span>'}</div><details class="damage-evidence"><summary><span>Ver evidências</span><small>${photos.length?`${photos.length} foto(s) • localização por foto`:i.reason==="Não foi no caminhão"?"Foto dispensada pelo motivo":"Sem foto"}</small></summary><div class="damage-photo-grid">${photoHtml||'<div class="empty-state">Sem foto disponível.</div>'}</div></details>${decision}${launched}${delivered}</div>`;
   }).join('');
   const pending=items.filter(i=>i.status==='PENDENTE').length,approved=items.filter(i=>i.status==='APROVADO').length,launched=items.filter(i=>i.status==='LANCADO').length,canDeliverCount=items.filter(i=>i.status==='LANCADO').length,selectableCount=(canReview?pending:0)+(canPost?approved+canDeliverCount:0);
-  const body=`<div class="damage-request-hero"><div><small>OCORRÊNCIA</small><strong>PDV ${esc(r.customer_code)} · ${esc(r.customer_name)}</strong><span>${esc(r.city)} • Mapa ${esc(r.map_number)} • ${esc(r.delivery_name)}</span></div><div class="damage-counts"><b>${items.length}</b><span>produtos</span><b>${pending+approved+launched}</b><span>em fluxo</span></div></div><div class="detail-grid damage-request-grid"><div class="detail-card"><small>PDV</small><strong>${esc(r.customer_name)}</strong></div><div class="detail-card"><small>Código</small><strong>${esc(r.customer_code)}</strong></div><div class="detail-card"><small>Cidade</small><strong>${esc(r.city)}</strong></div><div class="detail-card"><small>Mapa</small><strong>${esc(r.map_number)}</strong></div><div class="detail-card"><small>Motorista</small><strong>${esc(r.delivery_name)}</strong></div></div>${selectableCount?`<div class="damage-selection-bar delivery-selection-bar"><label class="check delivery-select-all"><input id="deliveryDamageSelectAll" type="checkbox"> Selecionar tudo</label><span id="avariaSelectionSummary">0 selecionados</span><small>${pending&&canReview?'Pendentes: aprovação ou reprovação. ':''}${approved&&canPost?'Aprovados: prontos para lançamento. ':''}${canDeliverCount&&canPost?'Lançados: prontos para marcar como entregues.':''}</small></div>`:''}${pending&&canReview?`<div class="sales-review-justification"><div class="field"><label>Justificativa da decisão</label><textarea id="deliveryDamageDecisionJustification" rows="3" maxlength="500" placeholder="Obrigatória ao reprovar; opcional ao aprovar."></textarea></div></div>`:''}${productsHtml}<details class="signature-details"><summary>Ver assinatura do cliente</summary><img src="${esc(signatureUrl)}" alt="Assinatura"></details>`;
+  const body=`<div class="damage-request-hero"><div><small>OCORRÊNCIA</small><strong>PDV ${esc(r.customer_code)} · ${esc(r.customer_name)}</strong><span>${esc(r.city)} • Mapa ${esc(r.map_number)} • ${esc(r.delivery_name)}</span></div><div class="damage-counts"><b>${items.length}</b><span>produtos</span><b>${pending+approved+launched}</b><span>em fluxo</span></div></div><div class="detail-grid damage-request-grid"><div class="detail-card"><small>PDV</small><strong>${esc(r.customer_name)}</strong></div><div class="detail-card"><small>Código</small><strong>${esc(r.customer_code)}</strong></div><div class="detail-card"><small>Cidade</small><strong>${esc(r.city)}</strong></div><div class="detail-card"><small>Mapa</small><strong>${esc(r.map_number)}</strong></div><div class="detail-card"><small>Motorista</small><strong>${esc(r.delivery_name)}</strong></div></div>${selectableCount?`<div class="damage-selection-bar delivery-selection-bar"><label class="check delivery-select-all"><input id="deliveryDamageSelectAll" type="checkbox"> Selecionar tudo</label><span id="avariaSelectionSummary">0 selecionados</span><small>${pending&&canReview?'Pendentes: aprovação ou reprovação. ':''}${approved&&canPost?'Aprovados: prontos para lançamento. ':''}${canDeliverCount&&canPost?'Lançados: prontos para marcar como entregues.':''}</small></div>`:''}${productsHtml}<details class="signature-details"><summary>Ver assinatura do cliente</summary><img src="${esc(signatureUrl)}" alt="Assinatura"></details>`;
   const actions=[];
   if(canReview&&pending)actions.push({label:'Reprovar selecionados',class:'danger damage-action-review',onClick:()=>reviewAvaria('REPROVADO',false)},{label:'Aprovar selecionados',class:'success damage-action-review',onClick:()=>reviewAvaria('APROVADO',false)});
   if(canPost&&approved)actions.push({label:'✓ Marcar como lançada',class:'success damage-action-launch',onClick:markDeliveryDamageLaunchedBulk});
@@ -4780,9 +4912,15 @@ async function showAvariaDetail(id){
   setupDamageReviewWorkspace('delivery');
 }
 async function reviewAvaria(status,all=false,itemId=null){
-  if(!currentAvariaDetail)return;let ids=itemId?[itemId]:all?(currentAvariaDetail.damage_items||[]).filter(i=>i.status==='PENDENTE').map(i=>i.id):selectedDeliveryDamageIds('review');if(!ids.length)return toast('Selecione ao menos um produto pendente.','error');
-  const note=String($('deliveryDamageDecisionJustification')?.value||'').trim();if(status==='REPROVADO'&&!note)return toast('Informe a justificativa da reprovação.','error');
-  try{const {error}=await sb.rpc('review_damage_items',{p_item_ids:ids,p_status:status,p_note:note});if(error)throw error;toast(`${ids.length} produto(s) ${status==='APROVADO'?'aprovado(s)':'reprovado(s)'}.`,'success');closeModal();await loadAdminAvarias(true);}catch(e){toast(humanDeliveryDamageError(e),'error');}
+  if(!currentAvariaDetail)return;
+  const ids=itemId?[itemId]:all?(currentAvariaDetail.damage_items||[]).filter(i=>i.status==='PENDENTE').map(i=>i.id):selectedDeliveryDamageIds('review');
+  if(!ids.length)return toast('Selecione ao menos um produto pendente.','error');
+  showDamageDecisionPanel({status,count:ids.length,label:'avaria de entrega',onConfirm:async note=>{
+    const {error}=await sb.rpc('review_damage_items',{p_item_ids:ids,p_status:status,p_note:note});
+    if(error)throw error;
+    toast(`${ids.length} produto(s) ${status==='APROVADO'?'aprovado(s)':'reprovado(s)'}.`,'success');
+    closeModal();await loadAdminAvarias(true);
+  },onError:humanDeliveryDamageError});
 }
 async function markDeliveryDamageLaunched(itemId){
   if(!hasPerm('DELIVERY_DAMAGE_POST'))return toast('Seu usuário não possui permissão para registrar o lançamento.','error');if(!confirm('Confirmar que esta avaria foi lançada no sistema?'))return;
@@ -4836,7 +4974,7 @@ async function showSalesDamageDetail(id){
     const needsJustification=!sellerView&&((canReview&&pending)||(canFinalize&&(pending||analysis)));
     const requestObservation=String(r.observation||'').trim();
     const observationHtml=requestObservation?`<div class="sales-request-observation-card"><div><small>OBSERVAÇÃO DO VENDEDOR</small><strong>Informação para análise</strong></div><p>${esc(requestObservation)}</p></div>`:'';
-    const body=`<div class="damage-request-hero sales-request-hero"><div><small>${esc(r.request_code)}</small><strong>PDV ${esc(r.customer_code)} · ${esc(r.customer_name)}</strong><span>${esc(r.city||'—')} • ${esc(r.branch||'—')} • Vendedor: ${esc(r.seller_name)}</span></div><div class="damage-counts"><b>${items.length}</b><span>produtos</span><b>${pending+analysis+approved+launched}</b><span>em fluxo</span></div></div><div class="detail-grid damage-request-grid"><div class="detail-card"><small>Data</small><strong>${fmtDate(r.occurrence_date)}</strong></div><div class="detail-card"><small>Vendedor</small><strong>${esc(r.seller_name)}</strong></div><div class="detail-card"><small>Código PDV</small><strong>${esc(r.customer_code)}</strong></div><div class="detail-card"><small>Filial</small><strong>${esc(r.branch||'—')}</strong></div></div>${observationHtml}${selectableCount?`<div class="damage-selection-bar sales-selection-bar"><label class="check sales-select-all"><input id="salesDamageSelectAll" type="checkbox"> Selecionar tudo</label><span id="salesDamageSelectionSummary">0 selecionados</span><small>${pending&&canReview&&canFinalize?'Pendentes: GV ou decisão final direta. ':pending&&canReview?'Pendentes: decisão do Gerente de Vendas. ':pending&&canFinalize?'Pendentes: decisão final direta disponível. ':''}${analysis&&canFinalize?'Em análise: decisão final. ':''}${approved&&canPost?'Aprovados: prontos para lançamento. ':''}${deliverable&&canPost?'Lançados: prontos para entrega.':''}</small></div>`:''}${needsJustification?`<div class="sales-review-justification"><div class="field"><label>Justificativa da decisão</label><textarea id="salesDamageDecisionJustification" rows="3" maxlength="500" placeholder="Obrigatória ao reprovar; opcional ao aprovar."></textarea><small>A justificativa fica registrada na auditoria da solicitação.</small></div></div>`:''}${products}`;
+    const body=`<div class="damage-request-hero sales-request-hero"><div><small>${esc(r.request_code)}</small><strong>PDV ${esc(r.customer_code)} · ${esc(r.customer_name)}</strong><span>${esc(r.city||'—')} • ${esc(r.branch||'—')} • Vendedor: ${esc(r.seller_name)}</span></div><div class="damage-counts"><b>${items.length}</b><span>produtos</span><b>${pending+analysis+approved+launched}</b><span>em fluxo</span></div></div><div class="detail-grid damage-request-grid"><div class="detail-card"><small>Data</small><strong>${fmtDate(r.occurrence_date)}</strong></div><div class="detail-card"><small>Vendedor</small><strong>${esc(r.seller_name)}</strong></div><div class="detail-card"><small>Código PDV</small><strong>${esc(r.customer_code)}</strong></div><div class="detail-card"><small>Filial</small><strong>${esc(r.branch||'—')}</strong></div></div>${observationHtml}${selectableCount?`<div class="damage-selection-bar sales-selection-bar"><label class="check sales-select-all"><input id="salesDamageSelectAll" type="checkbox"> Selecionar tudo</label><span id="salesDamageSelectionSummary">0 selecionados</span><small>${pending&&canReview&&canFinalize?'Pendentes: GV ou decisão final direta. ':pending&&canReview?'Pendentes: decisão do Gerente de Vendas. ':pending&&canFinalize?'Pendentes: decisão final direta disponível. ':''}${analysis&&canFinalize?'Em análise: decisão final. ':''}${approved&&canPost?'Aprovados: prontos para lançamento. ':''}${deliverable&&canPost?'Lançados: prontos para entrega.':''}</small></div>`:''}${products}`;
     const actions=[];if(!sellerView&&canReview&&pending)actions.push({label:'GV • Reprovar selecionados',class:'danger damage-action-review',onClick:()=>reviewSalesDamage('REPROVADO')},{label:'GV • Aprovar selecionados',class:'success damage-action-review',onClick:()=>reviewSalesDamage('APROVADO')});if(!sellerView&&canFinalize&&(pending||analysis))actions.push({label:'Final • Reprovar selecionados',class:'danger damage-action-review damage-action-final',onClick:()=>finalizeSalesDamage('REPROVADO')},{label:'Final • Aprovar selecionados',class:'success damage-action-review damage-action-final',onClick:()=>finalizeSalesDamage('APROVADO')});if(!sellerView&&canPost&&approved)actions.push({label:'✓ Marcar selecionados como lançados',class:'success damage-action-launch',onClick:markSalesDamageLaunchedBulk});if(!sellerView&&canPost&&deliverable)actions.push({label:'✓ Marcar selecionados como entregues',class:'primary damage-action-deliver',onClick:markSalesDamageDeliveredBulk});
     openModal(`Avaria de Vendas • ${r.request_code}`,`${fmtDate(r.occurrence_date)} • ${r.seller_name} • ${salesDamageStatusLabel(r.status)}`,body,actions);
     const checks=[...($('modalBody')?.querySelectorAll('.sales-review-check')||[])],selectAll=$('salesDamageSelectAll');const update=()=>{const visible=checks.filter(x=>!x.closest('.damage-admin-item')?.hidden),n=visible.filter(x=>x.checked).length;if($('salesDamageSelectionSummary'))$('salesDamageSelectionSummary').textContent=`${n} selecionado${n===1?'':'s'}`;if(selectAll){selectAll.checked=visible.length>0&&n===visible.length;selectAll.indeterminate=n>0&&n<visible.length;}};checks.forEach(x=>x.addEventListener('change',update));selectAll?.addEventListener('change',()=>{checks.filter(x=>!x.closest('.damage-admin-item')?.hidden).forEach(x=>x.checked=selectAll.checked);update();});$('modalBody')?.querySelectorAll('[data-sales-launch]').forEach(b=>b.addEventListener('click',()=>markSalesDamageLaunched(b.dataset.salesLaunch)));$('modalBody')?.querySelectorAll('[data-sales-delivered]').forEach(b=>b.addEventListener('click',()=>markSalesDamageDelivered(b.dataset.salesDelivered)));

@@ -1149,6 +1149,27 @@ button[data-sales-delivered]:hover{
 .home-shortcut-picker{margin-top:16px;padding:18px;border:1px solid #d1e0ea;border-radius:17px;background:#f8fbfd;box-shadow:0 10px 25px rgba(22,59,88,.05)}.home-picker-head{display:flex;align-items:start;justify-content:space-between;gap:12px}.home-picker-head strong,.home-picker-head small{display:block}.home-picker-head strong{font-size:14px;color:#203b53}.home-picker-head small{margin-top:3px;font-size:10px;color:#6b8295}.home-search{display:block;margin:15px 0 11px}.home-search input{width:100%;height:41px;padding:0 13px;border:1px solid #cbdce7;border-radius:10px;background:#fff;color:#19334a;outline:0}.home-search input:focus{border-color:#338cbd;box-shadow:0 0 0 3px rgba(51,140,189,.12)}.home-shortcut-options{display:grid;grid-template-columns:repeat(auto-fill,minmax(245px,1fr));gap:8px;max-height:350px;overflow:auto}.home-option{display:flex;align-items:center;gap:10px;min-width:0;padding:10px;border:1px solid #dce7ee;border-radius:11px;background:#fff}.home-option-icon{width:33px;height:33px;font-size:17px}.home-option>div{min-width:0;flex:1}.home-option small,.home-option strong{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.home-option small{color:#7590a3;font-size:9px}.home-option strong{margin-top:2px;color:#294259;font-size:11px}.home-option .mini-btn:disabled{opacity:.58;cursor:default}.home-options-empty{grid-column:1/-1;padding:18px;color:#72869a;text-align:center;font-size:11px}.home-sync-status{min-height:16px;margin:10px 0;color:#71879a;font-size:10px}.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @media(max-width:620px){.home-hero{min-height:175px;padding:23px 20px}.home-hero-mark{display:none}.home-section-head{align-items:flex-start;flex-direction:column}.home-section-head .btn{width:100%}.home-shortcut-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.home-shortcut-card{min-height:180px;padding:12px}.home-shortcut-area{font-size:8px}.home-shortcut-open strong{font-size:12px}.home-shortcut-open small{font-size:9px}.home-shortcut-options{grid-template-columns:1fr}}
 @media(max-width:390px){.home-shortcut-grid{grid-template-columns:1fr}.home-shortcut-card{min-height:155px}}
+
+/* Configuração global de módulos */
+.module-settings-note{margin:0 0 16px;color:#60788c;font-size:12px;line-height:1.5}
+.module-settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.module-setting-card{display:flex;align-items:center;gap:14px;min-width:0;padding:15px;border:1px solid #d8e4ed;border-radius:14px;background:linear-gradient(135deg,#fff,#f8fbfd)}
+.module-setting-card.inactive{background:#f6f8fa;border-color:#dce2e8}
+.module-setting-icon{display:grid;place-items:center;width:43px;height:43px;flex:0 0 43px;border-radius:12px;background:#e7f2fb;color:#0e639b;font-size:21px;font-weight:900}
+.module-setting-card.inactive .module-setting-icon{background:#e7eaee;color:#738292}
+.module-setting-copy{flex:1;min-width:0}.module-setting-copy strong{display:block;color:#193a54;font-size:13px}.module-setting-copy p{margin:4px 0 7px;color:#647d90;font-size:10px;line-height:1.4}
+.module-setting-state{display:inline-flex;padding:4px 7px;border-radius:999px;font-size:9px;font-weight:900}.module-setting-state.active{background:#e8f7ee;color:#147749}.module-setting-state.inactive{background:#eceff2;color:#67798a}
+.module-setting-card .btn{min-width:80px;padding:8px 11px;font-size:10px}
+@media(max-width:850px){.module-settings-grid{grid-template-columns:1fr}}
+@media(max-width:460px){.module-setting-card{flex-wrap:wrap}.module-setting-card .btn{margin-left:57px}}
+
+/* Justificativa exibida somente depois de escolher a decisão */
+.damage-decision-panel{margin:14px 0;padding:17px;border:1px solid #b9d9ef;border-left:4px solid #1682bb;border-radius:13px;background:#f5fbff;box-shadow:0 8px 20px rgba(26,87,124,.08)}
+.damage-decision-panel.reject{border-color:#efc4c4;border-left-color:#d34444;background:#fff8f8}
+.damage-decision-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:13px}.damage-decision-head small{display:block;margin-bottom:3px;color:#657e91;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.05em}.damage-decision-head strong{display:block;color:#173b59;font-size:15px}.damage-decision-panel.reject .damage-decision-head strong{color:#9d3030}
+.damage-decision-close{width:30px;height:30px;border:0;border-radius:8px;background:#e9f1f7;color:#425e72;font-size:21px;cursor:pointer}
+.damage-decision-panel>label{display:block;margin-bottom:6px;color:#26435b;font-size:11px;font-weight:900}.damage-decision-panel textarea{display:block;width:100%;min-height:82px;padding:10px 11px;border:1px solid #cbdce7;border-radius:9px;background:#fff;color:#1c3144;resize:vertical;font:inherit;font-size:12px}.damage-decision-panel textarea:focus{outline:2px solid #66a7d2;outline-offset:1px}.damage-decision-help{display:block;margin-top:6px;color:#73899b;font-size:10px}
+.damage-decision-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:14px}.damage-decision-actions .btn{font-size:11px}
 .pull-map-legend{display:flex;flex-wrap:wrap;gap:7px 15px;margin:9px 0 12px;color:#4f6377;font-size:11px}
 .pull-map-legend span{display:inline-flex;align-items:center;gap:6px}
 .pull-map-legend i{display:inline-block;width:20px;height:0;border-top:4px solid #2563eb}
@@ -1161,6 +1182,10 @@ button[data-sales-delivered]:hover{
 .pull-map-jump.occurrence{border-color:#ead18b;background:#fff9e8;color:#775600}
 .pull-map-jump.occurrence:hover{background:#fff0bd}
 .pull-timeline-map-actions{display:flex;gap:7px;flex-wrap:wrap}
+.pull-timeline-duration{display:inline-flex!important;align-items:center;gap:8px;width:max-content;max-width:100%;margin:12px 0 2px;padding:7px 10px;border:1px solid #cfe3f3;border-radius:9px;background:#f1f8fe;color:#1e5f90!important;font-size:10px;line-height:1.2}
+.pull-timeline-duration>span{display:inline!important;color:#1670b7!important;font-size:13px;font-weight:900}
+.pull-timeline-duration small{display:inline!important;color:#557991!important;font-size:10px;font-weight:700}
+.pull-timeline-duration strong{display:inline!important;margin:0!important;color:#0e5b93!important;font-size:11px;font-variant-numeric:tabular-nums}
 
 /* Avarias de entrega: acompanhamento do motorista */
 .delivery-my-filters{margin-bottom:14px}
