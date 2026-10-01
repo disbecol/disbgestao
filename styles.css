@@ -1187,6 +1187,20 @@ button[data-sales-delivered]:hover{
 .pull-timeline-duration small{display:inline!important;color:#557991!important;font-size:10px;font-weight:700}
 .pull-timeline-duration strong{display:inline!important;margin:0!important;color:#0e5b93!important;font-size:11px;font-variant-numeric:tabular-nums}
 
+/* Planejamento, agendamento e anexos da Puxada */
+.pull-plan-form-card{border-top:3px solid #2769df}
+.pull-plan-list-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}.pull-plan-list-head .section-title{margin:0}.pull-plan-list-head .muted-text{margin:4px 0 0}
+.pull-plan-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}.pull-plan-list.empty-state{display:block}
+.pull-plan-card{padding:17px;border:1px solid #ccdaed;border-left:4px solid #2b70d8;border-radius:15px;background:linear-gradient(135deg,#fff,#f5f9ff);box-shadow:0 7px 20px rgba(34,69,117,.055)}
+.pull-plan-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.pull-plan-card-top>div{min-width:0}.pull-plan-card-top small,.pull-plan-card-top strong{display:block}.pull-plan-card-top small{color:#657d96;font-size:10px;font-weight:800}.pull-plan-card-top strong{margin-top:5px;color:#183b60;font-size:15px;line-height:1.35}.pull-plan-card-top .status{flex-shrink:0}
+.pull-plan-meta{display:grid;gap:5px;margin-top:12px;color:#4c657e;font-size:11px}.pull-plan-meta b{color:#263f5a}.pull-plan-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px}.pull-plan-wait{color:#6c7c8e;font-size:11px;font-weight:700}
+.pull-appointment-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:13px 0;padding:14px;border:1px solid #bfd9ee;border-radius:14px;background:#f0f8ff}.pull-appointment-summary>div{min-width:0;padding:10px;border-radius:10px;background:#fff}.pull-appointment-summary small,.pull-appointment-summary strong{display:block}.pull-appointment-summary small{color:#55748e;font-size:9px;font-weight:900;letter-spacing:.04em}.pull-appointment-summary strong{margin-top:5px;color:#174b75;font-size:13px;line-height:1.35}.pull-appointment-summary p{grid-column:1/-1;margin:0;color:#607d97;font-size:10px;line-height:1.45}
+.pull-detail-extras{margin-top:18px}.pull-detail-extras>.section-title{margin-top:20px}
+.pull-attachment-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(195px,1fr));gap:11px;margin-top:14px}.pull-attachment-grid.empty-state{display:block}
+.pull-attachment-card{overflow:hidden;border:1px solid #d7e4ed;border-radius:12px;background:#fff}.pull-attachment-card>a{display:block;height:160px;background:#eaf1f5}.pull-attachment-card img{display:block;width:100%;height:100%;object-fit:cover}.pull-attachment-card>div{padding:10px}.pull-attachment-card small{color:#778da0;font-size:9px}.pull-attachment-card p{margin:5px 0 0;color:#2b4257;font-size:11px;line-height:1.4;overflow-wrap:anywhere}
+@media(max-width:800px){.pull-appointment-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:500px){.pull-plan-list{grid-template-columns:1fr}.pull-plan-card-top{flex-wrap:wrap}.pull-appointment-summary{grid-template-columns:1fr 1fr;padding:9px;gap:7px}.pull-appointment-summary strong{font-size:11px}}
+
 /* Avarias de entrega: acompanhamento do motorista */
 .delivery-my-filters{margin-bottom:14px}
 .delivery-my-heading{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 2px 12px;color:#183b5d}

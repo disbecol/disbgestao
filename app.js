@@ -22,7 +22,7 @@ const PERMISSION_CATALOG = [
   ['Conferência','CONF_CREATE','Realizar conferência'],['Conferência','CONF_OWN_HISTORY','Minhas conferências'],['Conferência','CONF_HISTORY','Histórico completo'],['Conferência','CONF_DASHBOARD','Dashboard'],
   ['Contagem FEFO','FEFO_CREATE','Nova contagem'],['Contagem FEFO','FEFO_ACTIVE','Contagens em andamento'],['Contagem FEFO','FEFO_REPORT','Relatórios'],
   ['Materiais','MATERIAL_INVENTORY','Contagem'],['Materiais','MATERIAL_STOCK_VIEW','Estoque'],['Materiais','MATERIAL_CATALOG','Cadastro de Materiais'],['Materiais','MATERIAL_MOVEMENT','Movimentação do estoque'],
-  ['Puxada','PULL_TRIP','Viagem'],['Puxada','PULL_FAROL','Farol de andamento'],['Puxada','PULL_HISTORY','Histórico'],['Puxada','PULL_DASHBOARD','Dashboards'],['Puxada','PULL_GOALS','Metas'],['Puxada','PULL_CONFIG','Configurações'],['Puxada','PULL_TMA_ADJUST','Ajustar TMA'],
+  ['Puxada','PULL_PLAN','Cadastrar viagens'],['Puxada','PULL_TRIP','Viagem'],['Puxada','PULL_FAROL','Farol de andamento'],['Puxada','PULL_HISTORY','Histórico'],['Puxada','PULL_DASHBOARD','Dashboards'],['Puxada','PULL_GOALS','Metas'],['Puxada','PULL_CONFIG','Configurações'],['Puxada','PULL_TMA_ADJUST','Ajustar TMA'],
   ['Administração','ADMIN_USERS','Usuários e permissões'],['Administração','ADMIN_BASES','Bases / importação']
 ].map(([module,code,name],sort)=>({module,code,name,sort}));
 
@@ -177,6 +177,7 @@ const viewMeta = {
   'ativo-giro-historico':['Histórico de Ativo de Giro','Totais consolidados por contagem'],
   'nri-carretas':['Recebimentos pendentes','Puxada e Marketplace aguardando NRI'],
   'marketplace-recebimento':['Recebimento Marketplace','Cronômetro, fornecedor e fila para NRI'],
+  'puxada-cadastrar':['Cadastrar viagens','Planejamento e atribuição aos motoristas'],
   'puxada-viagem':['Minha Puxada','Etapas, GPS e ocorrências'],
   'puxada-farol':['Farol de andamento','Carretas em viagem e localização'],
   'puxada-historico':['Relatório / Histórico','Ciclos, percurso e tempos'],
@@ -200,7 +201,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.11-timeline-modules-decisions',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.12-pull-plans',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -1062,7 +1063,7 @@ function canAvaria(){return hasAnyPerm('DELIVERY_DAMAGE_CREATE,DELIVERY_DAMAGE_V
 function canConference(){return hasAnyPerm('CONF_CREATE,CONF_OWN_HISTORY,CONF_HISTORY,CONF_DASHBOARD');}
 function canFefo(){return hasAnyPerm('FEFO_CREATE,FEFO_ACTIVE,FEFO_REPORT');}
 function canRotatingAsset(){return hasAnyPerm('ROTATING_ASSET_CREATE,ROTATING_ASSET_HISTORY');}
-function canPull(){return hasAnyPerm('PULL_TRIP,PULL_FAROL,PULL_HISTORY,PULL_DASHBOARD,PULL_GOALS,PULL_CONFIG,PULL_TMA_ADJUST');}
+function canPull(){return hasAnyPerm('PULL_PLAN,PULL_TRIP,PULL_FAROL,PULL_HISTORY,PULL_DASHBOARD,PULL_GOALS,PULL_CONFIG,PULL_TMA_ADJUST');}
 function canSalesDamage(){return hasAnyPerm('SALES_DAMAGE_CREATE,SALES_DAMAGE_VIEW_OWN,SALES_DAMAGE_VIEW_ALL,SALES_DAMAGE_REVIEW,SALES_DAMAGE_OVERRIDE,SALES_DAMAGE_POST');}
 function applyRole(){
   document.querySelectorAll('[data-permission]').forEach(el=>el.classList.toggle('hidden',!hasPerm(el.dataset.permission)));
@@ -2768,6 +2769,9 @@ let pullSettings=null;
 let pullDriverEvents=[];
 let pullDriverOccurrences=[];
 let pullHistory=[];
+let pullPlans=[];
+let pullAssignedPlans=[];
+let pullTripAttachments=[];
 let pullHistoryEvents=[];
 let pullDashTrips=[];
 let pullGoals=null;
@@ -2783,7 +2787,17 @@ let pullMapInstances=[];
 let pullMapContexts=new Map();
 
 function bindPullEvents(){
-  $('formPullStart')?.addEventListener('submit',startPullTrip);
+  $('formPullPlan')?.addEventListener('submit',savePullPlan);
+  $('pullPlanType')?.addEventListener('change',updatePullPlanFields);
+  $('pullPlanSolo')?.addEventListener('change',updatePullPlanFields);
+  $('pullPlanDriver1')?.addEventListener('change',updatePullPlanFields);
+  $('pullPlanClear')?.addEventListener('click',clearPullPlanForm);
+  $('pullPlansRefresh')?.addEventListener('click',()=>loadPullPlans());
+  $('pullPlansList')?.addEventListener('click',onPullPlansClick);
+  $('pullAssignedPlans')?.addEventListener('click',onPullAssignedPlanClick);
+  $('pullAssignedRefresh')?.addEventListener('click',()=>loadAssignedPullPlans());
+  $('formPullAttachment')?.addEventListener('submit',submitPullAttachment);
+  $('formPullStart')?.addEventListener('submit',event=>event.preventDefault());
   $('btnPullNextStep')?.addEventListener('click',recordPullNextStep);
   $('pullOccurrenceButtons')?.addEventListener('click',onPullOccurrenceClick);
   $('pullCycleChoice')?.addEventListener('click',onPullCycleChoice);
@@ -2832,6 +2846,7 @@ async function initPullModule(){
 
 function pullOnView(name){
   if(name==='nri-carretas') return loadPullNriPending();
+  if(name==='puxada-cadastrar') return loadPullPlans();
   if(name==='puxada-viagem') return loadPullActiveTrip();
   if(name==='puxada-farol') return loadPullFarol();
   if(name==='puxada-historico') return loadPullHistory();
@@ -2912,6 +2927,209 @@ function populatePullReferenceInputs(){
   const factoryOptions='<option value="">Todas</option>'+pullFactories.map(x=>`<option>${esc(x.name)}</option>`).join('');
   if($('pullHistFactory'))$('pullHistFactory').innerHTML=factoryOptions;
   if($('pullFactoryName'))$('pullFactoryName').innerHTML='<option value="">Selecione</option>'+pullFactories.map(x=>`<option>${esc(x.name)}</option>`).join('');
+  populatePullPlanInputs();
+}
+
+function fillPullPlanSelect(id,rows,valueKey,label){
+  const select=$(id);if(!select)return;
+  const old=select.value;
+  select.innerHTML='<option value="">Selecione</option>'+rows.map(row=>`<option value="${esc(row[valueKey])}">${esc(label(row))}</option>`).join('');
+  if(rows.some(row=>String(row[valueKey])===old))select.value=old;
+}
+function populatePullPlanInputs(){
+  fillPullPlanSelect('pullPlanPlate',pullVehicles.filter(x=>x.active!==false),'plate',x=>`${x.plate}${x.carrier?` • ${x.carrier}`:''}`);
+  fillPullPlanSelect('pullPlanOrigin',(refs.units||[]).filter(x=>x.active!==false),'name',x=>x.name);
+  fillPullPlanSelect('pullPlanFactory',pullFactories,'name',x=>x.name);
+  fillPullPlanSelect('pullPlanDriver1',pullProfiles,'id',x=>x.name);
+  if($('pullPlanOrigin')&&!$('pullPlanOrigin').value&&activeUnit)$('pullPlanOrigin').value=activeUnit;
+  updatePullPlanFields();
+}
+function updatePullPlanFields(){
+  const type=$('pullPlanType')?.value||'PULL',transfer=type==='TRANSFER';
+  const solo=$('pullPlanSolo');if(solo){if(transfer)solo.checked=true;solo.disabled=transfer;}
+  const origin=$('pullPlanOrigin'),factory=$('pullPlanFactory');
+  if(origin){if(transfer)origin.value='Matriz Caicó';origin.disabled=transfer;}
+  if(factory){if(transfer)factory.value='Filial Pau dos Ferros';factory.disabled=transfer;factory.required=!transfer;}
+  const scheduled=$('pullPlanScheduled');if(scheduled){scheduled.required=!transfer;if(transfer)scheduled.value='';}
+  $('pullPlanScheduledField')?.classList.toggle('hidden',transfer);
+  const alone=transfer||!!solo?.checked;
+  $('pullPlanDriver2Field')?.classList.toggle('hidden',alone);
+  const driver2=$('pullPlanDriver2');
+  if(driver2){
+    const old=driver2.value;
+    const rows=pullProfiles.filter(x=>x.id!==$('pullPlanDriver1')?.value);
+    driver2.innerHTML='<option value="">Selecione</option>'+rows.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
+    if(!alone&&rows.some(x=>x.id===old))driver2.value=old;
+    driver2.required=!alone;
+    if(alone)driver2.value='';
+  }
+}
+function clearPullPlanForm(){
+  const form=$('formPullPlan');if(!form)return;
+  form.reset();$('pullPlanId').value='';
+  $('pullPlanType').value='PULL';
+  $('pullPlanOrigin').disabled=false;$('pullPlanFactory').disabled=false;
+  $('pullPlanOrigin').value=activeUnit||'';
+  $('pullPlanSave').textContent='Cadastrar viagem';
+  updatePullPlanFields();
+}
+function pullPlanStatusLabel(plan){return plan.status==='STARTED'?'Ciclo iniciado':plan.status==='CANCELLED'?'Cancelada':'Pronta para iniciar';}
+function humanPullPlanError(error){
+  const message=String(error?.message||error||'');
+  const labels={AGENDAMENTO_OBRIGATORIO:'Informe o horário agendado na fábrica.',MOTORISTA_1_INVALIDO:'Selecione um Motorista 1 ativo.',MOTORISTA_2_INVALIDO:'Selecione um Motorista 2 ativo e diferente do primeiro.',MOTORISTA_1_SEM_ACESSO_UNIDADE:'O Motorista 1 precisa ter acesso à unidade de origem.',MOTORISTA_2_SEM_ACESSO_UNIDADE:'O Motorista 2 precisa ter acesso à unidade de origem.',VIAGEM_INDISPONIVEL:'Esta viagem já foi iniciada ou cancelada.',VIAGEM_NAO_EDITAVEL:'Esta viagem não pode mais ser editada.',VIAGEM_NAO_CANCELAVEL:'Esta viagem não pode mais ser cancelada.',APENAS_MOTORISTA_1_INICIA:'Somente o Motorista 1 pode iniciar esta viagem.',LIMITE_FOTOS_PUXADA:'O ciclo já possui o limite de 10 fotos.',FOTO_NAO_ENCONTRADA:'A foto não foi encontrada no armazenamento.',PLACA_INVALIDA:'Selecione um veículo ativo.',UNIDADE_SEM_ACESSO:'Seu usuário não tem acesso à unidade desta viagem.'};
+  const code=Object.keys(labels).find(key=>message.includes(key));
+  return code?labels[code]:humanGpsOrPullError(error);
+}
+function pullPlanCardHtml(plan,analyst=false){
+  const canStart=plan.status==='PLANNED'&&plan.driver1_id===authUser?.id;
+  const type=plan.cycle_type==='TRANSFER'?'Transferência':'Puxada';
+  const appointment=plan.scheduled_at?`Agendamento: <b>${fmtDateTime(plan.scheduled_at)}</b>`:'Sem agendamento de fábrica';
+  const driverNames=plan.solo_trip||plan.cycle_type==='TRANSFER'?`${esc(plan.driver1_name)} • sozinho`:`${esc(plan.driver1_name)} + ${esc(plan.driver2_name||'—')}`;
+  return `<article class="pull-plan-card"><div class="pull-plan-card-top"><div><small>${esc(type)} • ${esc(plan.origin_unit)}</small><strong>${esc(plan.plate)} → ${esc(plan.factory)}</strong></div><span class="status ${plan.status==='PLANNED'?'pending':plan.status==='STARTED'?'approved':'rejected'}">${pullPlanStatusLabel(plan)}</span></div><div class="pull-plan-meta"><span>${appointment}</span><span>Motoristas: <b>${driverNames}</b></span></div><div class="pull-plan-actions">${analyst&&plan.status==='PLANNED'?`<button type="button" class="mini-btn" data-pull-plan-edit="${plan.id}">Editar</button><button type="button" class="mini-btn" data-pull-plan-cancel="${plan.id}">Cancelar viagem</button>`:!analyst&&plan.status==='PLANNED'?canStart?`<button type="button" class="btn primary" data-pull-plan-start="${plan.id}">Iniciar viagem</button>`:'<span class="pull-plan-wait">Aguardando o Motorista 1 iniciar</span>':''}</div></article>`;
+}
+async function loadPullPlans(silent=false){
+  if(!hasPerm('PULL_PLAN'))return;
+  try{
+    await loadPullReferenceData();
+    const {data,error}=await sb.from('pull_trip_plans').select('*').eq('origin_unit',activeUnit).order('created_at',{ascending:false}).limit(200);
+    if(error)throw error;
+    pullPlans=data||[];
+    const box=$('pullPlansList');
+    if(box){box.className=pullPlans.length?'pull-plan-list':'pull-plan-list empty-state';box.innerHTML=pullPlans.length?pullPlans.map(x=>pullPlanCardHtml(x,true)).join(''):'Nenhuma viagem cadastrada para esta unidade.';}
+  }catch(error){if(!silent)toast(humanPullPlanError(error),'error');const box=$('pullPlansList');if(box)box.textContent='Não foi possível carregar as viagens. Confira se o SQL 45 foi aplicado.';}
+}
+async function savePullPlan(event){
+  event.preventDefault();if(!hasPerm('PULL_PLAN'))return;
+  const type=$('pullPlanType').value,scheduledRaw=$('pullPlanScheduled').value;
+  const scheduledAt=scheduledRaw?new Date(scheduledRaw).toISOString():null;
+  if(type==='PULL'&&!scheduledAt)return toast('Informe a data e o horário de agendamento na fábrica.','error');
+  const args={p_plan_id:$('pullPlanId').value||null,p_cycle_type:type,p_origin_unit:$('pullPlanOrigin').value,p_plate:$('pullPlanPlate').value,p_factory:$('pullPlanFactory').value,p_driver1:$('pullPlanDriver1').value,p_driver2:$('pullPlanDriver2').value||null,p_solo_trip:type==='TRANSFER'||$('pullPlanSolo').checked,p_scheduled_at:scheduledAt};
+  const button=$('pullPlanSave');button.disabled=true;button.textContent='Salvando…';
+  try{const {error}=await sb.rpc('save_pull_trip_plan',args);if(error)throw error;toast('Viagem cadastrada e atribuída aos motoristas.','success');clearPullPlanForm();await loadPullPlans(true);}catch(error){toast(humanPullPlanError(error),'error');}
+  finally{button.disabled=false;button.textContent=$('pullPlanId').value?'Salvar alterações':'Cadastrar viagem';}
+}
+async function onPullPlansClick(event){
+  const edit=event.target.closest('[data-pull-plan-edit]'),cancel=event.target.closest('[data-pull-plan-cancel]');
+  if(!edit&&!cancel)return;
+  const plan=pullPlans.find(x=>x.id===(edit?.dataset.pullPlanEdit||cancel?.dataset.pullPlanCancel));
+  if(!plan||plan.status!=='PLANNED')return;
+  if(cancel){
+    if(!confirm(`Cancelar a viagem ${plan.plate} para ${plan.factory}?`))return;
+    cancel.disabled=true;
+    try{const {error}=await sb.rpc('cancel_pull_trip_plan',{p_plan_id:plan.id});if(error)throw error;toast('Viagem cancelada.','success');await loadPullPlans(true);}catch(error){cancel.disabled=false;toast(humanPullPlanError(error),'error');}
+    return;
+  }
+  $('pullPlanId').value=plan.id;$('pullPlanType').value=plan.cycle_type;
+  populatePullPlanInputs();
+  $('pullPlanPlate').value=plan.plate;$('pullPlanOrigin').value=plan.origin_unit;$('pullPlanFactory').value=plan.factory;
+  $('pullPlanDriver1').value=plan.driver1_id;$('pullPlanSolo').checked=plan.solo_trip;
+  updatePullPlanFields();$('pullPlanDriver2').value=plan.driver2_id||'';
+  $('pullPlanScheduled').value=plan.scheduled_at?`${localIsoDate(new Date(plan.scheduled_at))}T${localTime(new Date(plan.scheduled_at))}`:'';
+  $('pullPlanSave').textContent='Salvar alterações';
+  $('formPullPlan').scrollIntoView({behavior:'smooth',block:'start'});
+}
+async function loadAssignedPullPlans(){
+  const box=$('pullAssignedPlans');if(!box||!isPullDriver())return;
+  if(!navigator.onLine){box.className='pull-plan-list empty-state';box.textContent='Conecte-se à internet para consultar e iniciar viagens cadastradas.';return;}
+  try{
+    const {data,error}=await sb.from('pull_trip_plans').select('*').eq('origin_unit',activeUnit).eq('status','PLANNED').or(`driver1_id.eq.${authUser.id},driver2_id.eq.${authUser.id}`).order('scheduled_at',{ascending:true}).limit(100);
+    if(error)throw error;
+    pullAssignedPlans=data||[];
+    box.className=pullAssignedPlans.length?'pull-plan-list':'pull-plan-list empty-state';
+    box.innerHTML=pullAssignedPlans.length?pullAssignedPlans.map(x=>pullPlanCardHtml(x)).join(''):'Nenhuma viagem atribuída a você nesta unidade.';
+  }catch(error){box.className='pull-plan-list empty-state';box.textContent='Não foi possível consultar suas viagens. Confira a conexão e a atualização do banco.';console.warn('Viagens atribuídas',error);}
+}
+async function onPullAssignedPlanClick(event){
+  const button=event.target.closest('[data-pull-plan-start]');if(!button||button.disabled)return;
+  const plan=pullAssignedPlans.find(x=>x.id===button.dataset.pullPlanStart);
+  if(!plan||plan.driver1_id!==authUser?.id)return toast('Apenas o Motorista 1 pode iniciar esta viagem.','error');
+  button.disabled=true;button.textContent='Consultando GPS…';
+  const status=$('pullAssignedGps');
+  try{
+    const target=await refreshPullGpsTarget();
+    const gps=await captureGps({maxAccuracy:target,maxWaitMs:15000,onProgress:s=>{status.textContent=`GPS atual ±${Math.round(s.accuracy)} m • limite ≤ ${target} m…`;}});
+    button.textContent='Iniciando…';
+    const {error}=await sb.rpc('start_planned_pull_trip',{p_plan_id:plan.id,p_latitude:gps.latitude,p_longitude:gps.longitude,p_accuracy:gps.accuracy,p_device_at:gps.capturedAt});
+    if(error)throw error;
+    status.className='gps-status ok';status.textContent='Viagem iniciada com GPS validado.';
+    toast('Viagem iniciada. Os dois motoristas já podem acompanhar o ciclo.','success');
+    await loadPullActiveTrip();
+  }catch(error){button.disabled=false;button.textContent='Iniciar viagem';status.className='gps-status error';status.textContent=humanPullPlanError(error);toast(humanPullPlanError(error),'error');}
+}
+function pullAppointmentMetrics(trip){
+  if(!trip?.appointment_at||!trip?.arrived_factory_at)return null;
+  const minutes=Math.max(0,Math.round((Date.parse(trip.appointment_at)-Date.parse(trip.arrived_factory_at))/60000));
+  if(!Number.isFinite(minutes))return null;
+  return {actual:minutes,factory:minutes>=120?Math.min(minutes,120):0};
+}
+function renderPullActiveSchedule(){
+  const box=$('pullActiveSchedule'),trip=pullActiveTrip;if(!box)return;
+  if(!trip?.appointment_at){box.classList.add('hidden');box.innerHTML='';return;}
+  const m=pullAppointmentMetrics(trip);
+  box.classList.remove('hidden');
+  box.innerHTML=`<div><small>AGENDAMENTO</small><strong>${fmtDateTime(trip.appointment_at)}</strong></div><div><small>CHEGADA À FÁBRICA</small><strong>${fmtDateTime(trip.arrived_factory_at)}</strong></div><div><small>ANTECEDÊNCIA REAL</small><strong>${m?fmtMinutes(m.actual):'Aguardando'}</strong></div><div><small>CONSIDERADA PELA FÁBRICA</small><strong>${m?fmtMinutes(m.factory):'Aguardando'}</strong></div>`;
+}
+function pullAttachmentCard(row){
+  return `<article class="pull-attachment-card"><a href="${esc(row.url||'#')}" target="_blank" rel="noopener" aria-label="Abrir foto do ciclo em tamanho maior"><img src="${esc(row.url||'')}" alt="Foto anexada ao ciclo" loading="lazy"></a><div><small>${fmtDateTime(row.created_at)}</small><p>${esc(row.observation||'Sem observação.')}</p></div></article>`;
+}
+async function fetchPullTripAttachments(tripId){
+  const {data,error}=await sb.from('pull_trip_attachments').select('*').eq('trip_id',tripId).order('created_at');
+  if(error)throw error;
+  return await Promise.all((data||[]).map(async row=>{
+    const signed=await sb.storage.from('puxada-anexos').createSignedUrl(row.photo_path,3600);
+    return {...row,url:signed.data?.signedUrl||''};
+  }));
+}
+async function loadPullTripAttachments(tripId,boxId='pullAttachmentList',driverView=false){
+  const box=$(boxId);if(!box)return;
+  if(!navigator.onLine){box.className='pull-attachment-grid empty-state';box.textContent='Conecte-se à internet para consultar as fotos do ciclo.';return;}
+  try{
+    const rows=await fetchPullTripAttachments(tripId);
+    if(driverView&&pullActiveTrip?.id!==tripId)return;
+    if(driverView)pullTripAttachments=rows;
+    box.className=rows.length?'pull-attachment-grid':'pull-attachment-grid empty-state';
+    box.innerHTML=rows.length?rows.map(pullAttachmentCard).join(''):'Nenhuma foto anexada.';
+    if(driverView){
+      $('pullAttachmentCount').textContent=`${rows.length} / 10`;
+      $('pullAttachmentSave').disabled=rows.length>=10;
+      $('formPullAttachment').classList.toggle('hidden',rows.length>=10);
+    }
+  }catch(error){box.className='pull-attachment-grid empty-state';box.textContent='Não foi possível carregar as fotos. Confira se o SQL 45 foi aplicado.';console.warn('Fotos do ciclo',error);}
+}
+async function submitPullAttachment(event){
+  event.preventDefault();
+  const trip=pullActiveTrip,file=$('pullAttachmentFile')?.files?.[0],note=$('pullAttachmentNote')?.value?.trim()||'';
+  if(!trip||!file)return;
+  if(!navigator.onLine)return toast('Conecte-se à internet para anexar uma foto.','error');
+  if(!file.type.startsWith('image/'))return toast('Selecione uma imagem.','error');
+  if(pullTripAttachments.length>=10)return toast('Este ciclo já possui 10 fotos.','error');
+  if(note.length>500)return toast('A observação deve ter até 500 caracteres.','error');
+  const button=$('pullAttachmentSave');button.disabled=true;button.textContent='Enviando foto…';
+  let path='',uploaded=false;
+  try{
+    const blob=await compressImage(file,1600,.8);
+    path=`${trip.id}/${authUser.id}/${uuid()}.jpg`;
+    const up=await sb.storage.from('puxada-anexos').upload(path,blob,{contentType:'image/jpeg',upsert:false});
+    if(up.error)throw up.error;
+    uploaded=true;
+    const saved=await sb.rpc('register_pull_trip_attachment',{p_trip_id:trip.id,p_photo_path:path,p_observation:note});
+    if(saved.error)throw saved.error;
+    $('formPullAttachment').reset();
+    toast('Foto anexada ao ciclo.','success');
+    await loadPullTripAttachments(trip.id,'pullAttachmentList',true);
+  }catch(error){
+    if(uploaded)await sb.storage.from('puxada-anexos').remove([path]).catch(()=>{});
+    toast(humanPullPlanError(error),'error');
+  }finally{button.disabled=pullTripAttachments.length>=10;button.textContent='Anexar foto';}
+}
+async function renderPullTripDetailExtras(trip){
+  const body=$('modalBody');if(!body)return;
+  const m=pullAppointmentMetrics(trip);
+  const section=document.createElement('section');
+  section.className='pull-detail-extras';
+  section.innerHTML=`${trip.appointment_at?`<div class="pull-appointment-summary"><div><small>AGENDAMENTO NA FÁBRICA</small><strong>${fmtDateTime(trip.appointment_at)}</strong></div><div><small>CHEGADA REAL</small><strong>${fmtDateTime(trip.arrived_factory_at)}</strong></div><div><small>ANTECEDÊNCIA REAL</small><strong>${m?fmtMinutes(m.actual):'Aguardando chegada'}</strong></div><div><small>CONSIDERADA PELA FÁBRICA</small><strong>${m?fmtMinutes(m.factory):'Aguardando chegada'}</strong></div><p>A fábrica considera até 2h de antecedência quando a carreta chega pelo menos 2h antes do agendamento. O TMA Fábrica continua medindo chegada → saída.</p></div>`:''}<div class="section-title">Fotos e documentos do ciclo</div><div id="pullDetailAttachments" class="pull-attachment-grid empty-state">Carregando fotos…</div>`;
+  body.append(section);
+  await loadPullTripAttachments(trip.id,'pullDetailAttachments');
 }
 
 function setupPullRealtime(){
@@ -3204,6 +3422,7 @@ async function openPullTripDetail(id,live=false){
     const actions=[];
     if(hasPerm('PULL_TMA_ADJUST')&&!transfer&&!live&&t.next_started_at)actions.push({label:'Ajustar TMA Revenda',class:'secondary',onClick:()=>{closeModal();openPullTmaAdjust(t.id);}});
     openModal(`${transfer?'TRANSFERÊNCIA':'PUXADA'} • ${t.trip_code} • ${t.plate}`,pullTripStatusLabel(t),body,actions);
+    void renderPullTripDetailExtras(t);
     setTimeout(()=>{
       renderPullMap(mapId,t,tp.data||[],ev.data||[],oc.data||[]);
       const modalBody=$('modalBody');
@@ -3570,7 +3789,7 @@ function prefillNriFromMarketplace(r){clearNriRequest();nriMarketplaceLocked=tru
 
 function pullStepsForCycle(type,trip=null){const flow=type==='TRANSFER'?'TRANSFER':'PULL',solo=flow==='PULL'&&pullTripSolo(trip);return pullAllMainSteps.filter(x=>(x.flow_type||'PULL')===flow&&(!solo||x.skip_when_solo!==true)).sort((a,b)=>a.sort_order-b.sort_order);}
 loadPullReferenceData = async function(){
-  const promises=[sb.from('pull_steps').select('*').order('step_type').order('sort_order'),sb.from('pull_settings').select('*').eq('singleton',true).maybeSingle(),sb.from('factories').select('name,active,latitude,longitude,radius_meters').eq('active',true).order('name'),sb.from('pull_vehicles').select('*').order('plate')];if(hasPerm('PULL_TRIP')||hasPerm('PULL_CONFIG'))promises.push(sb.from('profiles').select('id,username,name,role,active').eq('role','MOTORISTA_PUXADOR').eq('active',true).order('name'));const rows=await Promise.all(promises),err=rows.find(x=>x.error)?.error;if(err)throw err;const [steps,settings,factories,vehicles,profilesRes]=rows;const all=steps.data||[];pullConfigSteps=all.map(x=>({...x,flow_type:x.flow_type||(x.step_type==='OCCURRENCE'?'BOTH':'PULL')}));pullAllMainSteps=pullConfigSteps.filter(x=>x.step_type==='MAIN'&&x.active).sort((a,b)=>a.sort_order-b.sort_order);pullMainSteps=pullStepsForCycle(pullActiveTrip?.cycle_type||'PULL',pullActiveTrip);pullOccurrenceTypes=pullConfigSteps.filter(x=>x.step_type==='OCCURRENCE'&&x.active).sort((a,b)=>a.sort_order-b.sort_order);pullSettings=settings.data||{singleton:true,gps_max_accuracy_m:200,track_interval_seconds:60,track_min_distance_m:50};pullFactories=factories.data||[];pullVehicles=vehicles.data||[];pullProfiles=profilesRes?.data||pullProfiles;populatePullReferenceInputs();
+  const promises=[sb.from('pull_steps').select('*').order('step_type').order('sort_order'),sb.from('pull_settings').select('*').eq('singleton',true).maybeSingle(),sb.from('factories').select('name,active,latitude,longitude,radius_meters').eq('active',true).order('name'),sb.from('pull_vehicles').select('*').order('plate')];if(hasPerm('PULL_PLAN')||hasPerm('PULL_TRIP')||hasPerm('PULL_CONFIG'))promises.push(sb.from('profiles').select('id,username,name,role,active').eq('role','MOTORISTA_PUXADOR').eq('active',true).order('name'));const rows=await Promise.all(promises),err=rows.find(x=>x.error)?.error;if(err)throw err;const [steps,settings,factories,vehicles,profilesRes]=rows;const all=steps.data||[];pullConfigSteps=all.map(x=>({...x,flow_type:x.flow_type||(x.step_type==='OCCURRENCE'?'BOTH':'PULL')}));pullAllMainSteps=pullConfigSteps.filter(x=>x.step_type==='MAIN'&&x.active).sort((a,b)=>a.sort_order-b.sort_order);pullMainSteps=pullStepsForCycle(pullActiveTrip?.cycle_type||'PULL',pullActiveTrip);pullOccurrenceTypes=pullConfigSteps.filter(x=>x.step_type==='OCCURRENCE'&&x.active).sort((a,b)=>a.sort_order-b.sort_order);pullSettings=settings.data||{singleton:true,gps_max_accuracy_m:200,track_interval_seconds:60,track_min_distance_m:50};pullFactories=factories.data||[];pullVehicles=vehicles.data||[];pullProfiles=profilesRes?.data||pullProfiles;populatePullReferenceInputs();
 };
 function updatePullSoloChoice(){
   const solo=!!$('pullStartSolo')?.checked;
@@ -5839,6 +6058,13 @@ loadPullActiveTrip = async function(silent=false){
 
     renderPullDriver();
     syncPullTracking();
+    if(pullActiveTrip){
+      if($('pullAttachmentList')?.dataset.tripId!==pullActiveTrip.id){pullTripAttachments=[];$('pullAttachmentList').dataset.tripId=pullActiveTrip.id;}
+      void loadPullTripAttachments(pullActiveTrip.id,'pullAttachmentList',true);
+    }else{
+      pullTripAttachments=[];
+      if(activeView==='puxada-viagem')void loadAssignedPullPlans();
+    }
 
     await cachePullOfflineSnapshot();
 
@@ -6348,6 +6574,8 @@ recordPullNextStep = async function(){
 };
 const renderPullDriverV151=renderPullDriver;
 renderPullDriver = function(){renderPullDriverV151();const tl=$('pullDriverTimeline');if(tl){tl.querySelectorAll('.pull-timeline-item').forEach((el,i)=>{const ordered=[...pullDriverEvents.map(x=>({kind:'STEP',raw:x})),...pullDriverOccurrences.map(x=>({kind:'OCC',raw:x}))].sort((a,b)=>new Date(a.raw.recorded_at||a.raw.started_at)-new Date(b.raw.recorded_at||b.raw.started_at));if(ordered[i]?.raw?._offline)el.classList.add('offline-pending-row');});}const hint=$('pullNextStepHint');if(hint&&!navigator.onLine&&pullActiveTrip)hint.textContent+=` • OFFLINE: a etapa ficará salva neste aparelho até a conexão voltar.`;};
+const renderPullDriverBeforePlans=renderPullDriver;
+renderPullDriver=function(){renderPullDriverBeforePlans();renderPullActiveSchedule();};
 
 const syncPullTrackingV151=syncPullTracking;
 syncPullTracking = function(){if(!navigator.onLine){stopPullTracking();return;}return syncPullTrackingV151();};

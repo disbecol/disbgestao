@@ -7,7 +7,7 @@
   <title>Disb Gestão</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=1.7.11-timeline-modules-decisions">
+  <link rel="stylesheet" href="styles.css?v=1.7.12-pull-plans">
   <link rel="stylesheet" href="visual-refresh.css?v=1.7.1-visual">
   <link rel="stylesheet" href="pull-dashboard.css?v=1.7.1-pull-dashboard">
 </head>
@@ -18,7 +18,7 @@
         <div class="login-logo"><img src="assets/icon-192.png" alt="Disb Gestão"></div>
         <span class="eyebrow light">ARMAZÉM • ENTREGA • CONFERÊNCIA</span>
         <h1>Disb Gestão</h1>
-        <p>NRI, Ativo de Giro, avarias, vendas, conferência, FEFO e Puxada em um único aplicativo.</p><div class="login-version">v1.7.11</div>
+        <p>NRI, Ativo de Giro, avarias, vendas, conferência, FEFO e Puxada em um único aplicativo.</p><div class="login-version">v1.7.12</div>
         <div class="feature-list">
           <span>✓ Cadastro por carreta e impressão de NRIs</span>
           <span>✓ Avarias de entrega e vendas com evidências</span>
@@ -45,7 +45,7 @@
 
   <div id="appShell" class="app-shell hidden">
     <aside id="sidebar" class="sidebar">
-      <div class="brand-row"><div class="brand-box"><img src="assets/icon-192.png" alt="Disb Gestão"></div><div><strong>Disb Gestão</strong><span>Supabase • tempo real</span></div></div><div class="app-version-badge">v1.7.11</div>
+      <div class="brand-row"><div class="brand-box"><img src="assets/icon-192.png" alt="Disb Gestão"></div><div><strong>Disb Gestão</strong><span>Supabase • tempo real</span></div></div><div class="app-version-badge">v1.7.12</div>
       <button class="nav-item home-nav-item" data-view="home"><span aria-hidden="true">⌂</span>Home</button>
       <div class="nav-area open" data-area="armazem" data-permission-any="NRI_PENDING_VIEW,MARKETPLACE_RECEIVE,NRI_CREATE,NRI_PRINT,NRI_HISTORY,NRI_DAMAGE_HISTORY,CONF_CREATE,CONF_OWN_HISTORY,CONF_HISTORY,CONF_DASHBOARD,FEFO_CREATE,FEFO_ACTIVE,FEFO_REPORT,ROTATING_ASSET_CREATE,ROTATING_ASSET_HISTORY,MATERIAL_INVENTORY,MATERIAL_STOCK_VIEW,MATERIAL_CATALOG,MATERIAL_MOVEMENT">
         <button type="button" class="nav-area-toggle" aria-expanded="true"><span class="area-icon">▦</span><span class="area-name">Armazém</span><span class="area-chevron">⌄</span></button>
@@ -126,12 +126,13 @@
         </div>
       </div>
 
-      <div class="nav-area" data-area="puxada" data-permission-any="PULL_TRIP,PULL_FAROL,PULL_HISTORY,PULL_DASHBOARD,PULL_TMA_ADJUST">
+      <div class="nav-area" data-area="puxada" data-permission-any="PULL_PLAN,PULL_TRIP,PULL_FAROL,PULL_HISTORY,PULL_DASHBOARD,PULL_TMA_ADJUST">
         <button type="button" class="nav-area-toggle" aria-expanded="false"><span class="area-icon">↗</span><span class="area-name">Puxada</span><span class="area-chevron">⌄</span></button>
         <div class="nav-area-items">
-          <div class="nav-module role-puxada" data-module="puxada" data-permission-any="PULL_TRIP,PULL_FAROL,PULL_HISTORY,PULL_DASHBOARD,PULL_TMA_ADJUST">
+          <div class="nav-module role-puxada" data-module="puxada" data-permission-any="PULL_PLAN,PULL_TRIP,PULL_FAROL,PULL_HISTORY,PULL_DASHBOARD,PULL_TMA_ADJUST">
             <button type="button" class="nav-module-toggle" aria-expanded="false"><span class="module-icon">↗</span><span class="module-name">Operação de Puxada</span><span class="module-chevron">⌄</span></button>
             <div class="nav-module-items">
+              <button class="nav-item" data-view="puxada-cadastrar" data-permission="PULL_PLAN"><span>＋</span>Cadastrar viagens</button>
               <button class="nav-item puxador-only" data-view="puxada-viagem" data-permission="PULL_TRIP"><span>▶</span>Viagem</button>
               <button class="nav-item admin-only" data-view="puxada-farol" data-permission="PULL_FAROL"><span>◉</span>Farol de andamento <b id="badgePullAtivos" class="badge">0</b></button>
               <button class="nav-item admin-only" data-view="puxada-historico" data-permission-any="PULL_HISTORY,PULL_TMA_ADJUST"><span>▤</span>Relatório / Histórico</button>
@@ -509,11 +510,28 @@
         <div class="ranking-grid"><div class="card dashboard-section-card"><div class="section-title">Ranking de motoristas</div><div class="table-wrap"><table><thead><tr><th>#</th><th>Motorista</th><th>Mapas divergentes</th><th>Valor positivo</th><th>Valor negativo</th></tr></thead><tbody id="rankMotoristas"></tbody></table></div></div><div class="card dashboard-section-card"><div class="section-title">Ranking de ajudantes</div><div class="table-wrap"><table><thead><tr><th>#</th><th>Ajudante</th><th>Mapas divergentes</th><th>Valor positivo</th><th>Valor negativo</th></tr></thead><tbody id="rankAjudantes"></tbody></table></div></div></div>
       </section>
 
+      <!-- PUXADA - PLANEJAMENTO -->
+      <section id="view-puxada-cadastrar" class="view role-puxada" data-permission="PULL_PLAN">
+        <div class="page-head"><div><div class="breadcrumb">Puxada / Planejamento</div><h1>Cadastrar viagens</h1><p>Prepare a viagem e atribua os motoristas. Habilite a permissão “Cadastrar viagens” para o analista na tela Usuários.</p></div><span class="page-chip">PLANEJAMENTO</span></div>
+        <div class="card pull-plan-form-card"><div class="section-title">Dados da viagem</div><form id="formPullPlan"><input id="pullPlanId" type="hidden"><div class="grid grid-3">
+          <div class="field"><label for="pullPlanType">Tipo *</label><select id="pullPlanType" required><option value="PULL">Puxada</option><option value="TRANSFER">Transferência</option></select></div>
+          <div class="field"><label for="pullPlanPlate">Placa *</label><select id="pullPlanPlate" required><option value="">Selecione</option></select></div>
+          <div class="field"><label for="pullPlanOrigin">Origem *</label><select id="pullPlanOrigin" required><option value="">Selecione</option></select></div>
+          <div class="field"><label for="pullPlanFactory">Fábrica *</label><select id="pullPlanFactory" required><option value="">Selecione</option></select></div>
+          <div class="field"><label for="pullPlanDriver1">Motorista 1 *</label><select id="pullPlanDriver1" required><option value="">Selecione</option></select></div>
+          <div class="field" id="pullPlanDriver2Field"><label for="pullPlanDriver2">Motorista 2 *</label><select id="pullPlanDriver2"><option value="">Selecione</option></select></div>
+          <div class="field" id="pullPlanScheduledField"><label for="pullPlanScheduled">Data e horário de agendamento na fábrica *</label><input id="pullPlanScheduled" type="datetime-local"></div>
+        </div><label class="pull-solo-choice"><input id="pullPlanSolo" type="checkbox"><span><strong>Viagem sozinho</strong><small>O Motorista 1 executará as etapas aplicáveis, sem Motorista 2.</small></span></label>
+        <div class="actions right"><button id="pullPlanClear" type="button" class="btn secondary">Limpar</button><button id="pullPlanSave" type="submit" class="btn primary">Cadastrar viagem</button></div></form></div>
+        <div class="card"><div class="pull-plan-list-head"><div class="section-title">Viagens cadastradas</div><button id="pullPlansRefresh" type="button" class="btn secondary">Atualizar</button></div><div id="pullPlansList" class="pull-plan-list empty-state">Carregando viagens…</div></div>
+      </section>
+
       <!-- PUXADA - MOTORISTA -->
       <section id="view-puxada-viagem" class="view role-puxada puxador-only" data-permission="PULL_TRIP">
-        <div class="page-head"><div><div class="breadcrumb">Puxada / Motorista</div><h1>Minha Operação</h1><p>Escolha Puxada ou Transferência antes de iniciar. As etapas registram GPS, data e hora automaticamente.</p></div><span class="page-chip">PUXADA / TRANSFERÊNCIA</span></div>
+        <div class="page-head"><div><div class="breadcrumb">Puxada / Motorista</div><h1>Minha Operação</h1><p>Suas viagens cadastradas ficam prontas para iniciar. As etapas registram GPS, data e hora automaticamente.</p></div><span class="page-chip">PUXADA / TRANSFERÊNCIA</span></div>
         <div id="pullDriverStartCard" class="card">
-          <form id="formPullStart">
+          <div class="pull-plan-list-head"><div><div class="section-title">Minhas viagens cadastradas</div><p class="muted-text">Somente o Motorista 1 pode iniciar. O Motorista 2 acompanha a viagem e registra suas etapas após o início.</p></div><button id="pullAssignedRefresh" type="button" class="btn secondary">Atualizar</button></div><div id="pullAssignedPlans" class="pull-plan-list empty-state">Carregando viagens atribuídas…</div><div id="pullAssignedGps" class="gps-status">A localização será capturada ao iniciar.</div>
+          <form id="formPullStart" class="hidden" aria-hidden="true">
             <div class="form-block accent"><div class="block-head"><span class="step">▶</span><div><strong>Iniciar ciclo</strong><small>Selecione o tipo de operação antes de preencher os dados.</small></div></div>
               <div class="field"><label>Tipo do ciclo *</label><div id="pullCycleChoice" class="choice-toggle cycle-choice"><button type="button" class="choice-btn active" data-pull-cycle="PULL">Puxada</button><button type="button" class="choice-btn" data-pull-cycle="TRANSFER">Transferência</button></div><input id="pullStartCycleType" type="hidden" value="PULL"></div>
               <div class="grid grid-3"><div class="field"><label>Placa do veículo *</label><select id="pullStartPlate" required><option value="">Selecione</option></select></div></div>
@@ -532,8 +550,10 @@
         <div id="pullDriverActive" class="hidden">
           <div class="pull-trip-hero card"><div><small id="pullActiveTypeLabel">CICLO EM ANDAMENTO</small><h2 id="pullActiveCode">—</h2><span id="pullActiveSummary">—</span></div><div class="pull-live-time"><small>TEMPO EM VIAGEM</small><strong id="pullActiveElapsed">00:00:00</strong></div></div>
           <div class="grid grid-3 pull-driver-info"><div class="detail-card"><small>PLACA</small><strong id="pullActivePlate">—</strong></div><div class="detail-card"><small>FÁBRICA</small><strong id="pullActiveFactory">—</strong></div><div class="detail-card"><small>MOTORISTA ATUAL</small><strong id="pullActiveDriver">—</strong></div></div>
+          <div id="pullActiveSchedule" class="pull-appointment-summary hidden"></div>
           <div class="card pull-next-card"><small>PRÓXIMA ETAPA</small><h2 id="pullNextStepName">—</h2><p id="pullNextStepHint">O GPS será capturado no apontamento.</p><button id="btnPullNextStep" class="btn primary wide">Registrar próxima etapa</button></div>
           <div class="card"><div class="section-title">Ocorrências</div><p class="muted-text">Descanso, abastecimento e outras exceções podem ser apontadas sem alterar a sequência principal.</p><div id="pullOpenOccurrence" class="pull-open-occurrence hidden"></div><div id="pullOccurrenceButtons" class="pull-occurrence-buttons"></div></div>
+          <div class="card"><div class="pull-plan-list-head"><div><div class="section-title">Fotos do ciclo</div><p class="muted-text">Até 10 fotos de notas e documentos, com observação individual.</p></div><span id="pullAttachmentCount" class="status pending">0 / 10</span></div><form id="formPullAttachment"><div class="grid grid-2"><div class="field"><label for="pullAttachmentFile">Foto</label><input id="pullAttachmentFile" type="file" accept="image/*" required></div><div class="field"><label for="pullAttachmentNote">Observação da foto</label><input id="pullAttachmentNote" maxlength="500" placeholder="Ex.: Nota fiscal da fábrica"></div></div><div class="actions right"><button id="pullAttachmentSave" type="submit" class="btn primary">Anexar foto</button></div></form><div id="pullAttachmentList" class="pull-attachment-grid empty-state">Nenhuma foto anexada.</div></div>
           <div class="card"><div class="section-title">Etapas já apontadas</div><div id="pullDriverTimeline" class="pull-timeline empty-state">Nenhuma etapa.</div></div>
         </div>
       </section>
@@ -807,6 +827,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="config.js?v=1.7.0"></script>
   <script src="share-reports.js?v=1.7.3"></script>
-  <script src="app.js?v=1.7.11-timeline-modules-decisions"></script>
+  <script src="app.js?v=1.7.12-pull-plans"></script>
 </body>
 </html>
