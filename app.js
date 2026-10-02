@@ -201,7 +201,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.12-damage-geofence',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.12-geo-icons-100m',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -2768,6 +2768,7 @@ function dedupeImport(type,rows){
 function normalizeImport(type,rows){const h=(r,...aliases)=>{for(const a of aliases){const k=Object.keys(r).find(k=>normHeader(k)===normHeader(a));if(k!==undefined)return r[k];}return '';};if(type==='products')return rows.map(r=>({code:String(h(r,'Código','Codigo','Code')).trim(),name:sanitizeRefText(h(r,'Nome','Produto','Descrição','Descricao'))})).filter(x=>x.code&&x.name);if(type==='units')return rows.map(r=>({name:sanitizeRefText(h(r,'Unidade','Nome'))})).filter(x=>x.name);if(type==='drivers')return rows.map(r=>({name:sanitizeRefText(h(r,'Motorista','Nome'))})).filter(x=>x.name);if(type==='factories')return rows.map(r=>({name:sanitizeRefText(h(r,'Fábrica','Fabrica','Nome'))})).filter(x=>x.name);if(type==='customers')return rows.map(r=>({code:normalizeCode(h(r,'Código PDV','Cód PDV','Codigo PDV','Código','Codigo')),name:sanitizeRefText(h(r,'Nome','Nome Fantasia','Cliente','Razão Social','Razao Social')),city:sanitizeRefText(h(r,'Cidade')),branch:sanitizeRefText(h(r,'Filial'))})).filter(x=>x.code&&x.name);if(type==='maps')return rows.map(r=>({map_number:normalizeCode(h(r,'MAPAS','MAPA')),map_date:parseAnyDate(h(r,'DATA')),city:sanitizeRefText(h(r,'CIDADE')),driver:sanitizeRefText(h(r,'MOTORISTA')),helper1:sanitizeRefText(h(r,'AJUDANTE 1')),helper2:sanitizeRefText(h(r,'AJUDANTE 2')),g300:num(h(r,'GARRAFEIRAS DE 300ML')),g600_green:num(h(r,'GARRAFEIRAS DE 600 ML VERDE','GARRAFEIRAS DE 600ML VERDE')),g600_brown:num(h(r,'GARRAFEIRAS DE 600ML MARROM','GARRAFEIRAS DE 600 ML MARROM')),g_litrao:num(h(r,'GARRAFEIRAS DE LITRÃO','GARRAFEIRAS DE LITRAO')),keg30:num(h(r,'BARRIS DE CHOPP 30L')),keg50:num(h(r,'BARRIS DE CHOPP 50L'))})).filter(x=>x.map_number&&x.map_date);if(type==='nris')return rows.map(r=>({nri:String(h(r,'NRI')).trim(),request_id:null,product_code:String(h(r,'Código Produto','Codigo Produto')).trim(),product_name:sanitizeRefText(h(r,'Nome Produto','Produto')),unit:sanitizeRefText(h(r,'Unidade')),request_type:String(h(r,'Tipo')||'AMBEV').trim().toUpperCase()==='MARKETPLACE'?'MARKETPLACE':'AMBEV',validity_date:/sem\s*validade/i.test(String(h(r,'Validade')||''))?null:parseAnyDate(h(r,'Validade')),lot:String(h(r,'Lote')).trim().toUpperCase(),receipt_date:parseAnyDate(h(r,'Recebimento')),block_date:parseAnyDate(h(r,'Bloqueio')),checker_name:sanitizeRefText(h(r,'Conferente')),receipt_time:normalizeTime(h(r,'Hora')),driver:sanitizeRefText(h(r,'Motorista')),plate:String(h(r,'Placa')).trim().toUpperCase(),factory:sanitizeRefText(h(r,'Fábrica','Fabrica')),quantity:num(h(r,'Quantidade','Caixas')),status:String(h(r,'Status')||'PENDENTE').trim().toUpperCase(),created_by:null,created_by_username:sanitizeRefText(h(r,'Usuário Cadastro','Usuario Cadastro')),created_by_name:sanitizeRefText(h(r,'Nome Usuário Cadastro','Nome Usuario Cadastro')),created_at:parseAnyDateTime(h(r,'Criado em ISO','Criado em'))||new Date().toISOString(),printed_at:parseAnyDateTime(h(r,'Impresso em'))||null,removed_at:parseAnyDateTime(h(r,'Removido em'))||null})).filter(x=>x.nri&&x.product_code);if(type==='conferences')return rows.map(r=>({conference_date:parseAnyDate(h(r,'Data')),conference_time:normalizeTime(h(r,'Hora')),checker_id:null,checker_username:sanitizeRefText(h(r,'Conferente Usuário','Conferente Usuario')),checker_name:sanitizeRefText(h(r,'Conferente Nome','Conferente')),map_number:normalizeCode(h(r,'Mapa')),g300:num(h(r,'Garrafeiras de 300ml')),g600_green:num(h(r,'Garrafeiras de 600ml Verde')),g600_brown:num(h(r,'Garrafeiras de 600ml Marrom')),g_litrao:num(h(r,'Garrafeiras de Litrão','Garrafeiras de Litrao')),keg30:num(h(r,'Barris de Chopp 30L')),keg50:num(h(r,'Barris de Chopp 50L')),created_at:parseAnyDateTime(h(r,'Criado em ISO','Data/Hora'))||new Date().toISOString()})).filter(x=>x.conference_date&&x.map_number);return [];}
 
 // Coordenadas de PDVs: o CSV de origem tem muitas colunas adicionais, que não são enviadas.
+const DAMAGE_GEO_RADIUS_METERS=100;
 function validDamageCoordinate(lat,lon){return lat!==null&&lat!==undefined&&lat!==''&&lon!==null&&lon!==undefined&&lon!==''&&Number.isFinite(Number(lat))&&Number.isFinite(Number(lon))&&Number(lat)>=-90&&Number(lat)<=90&&Number(lon)>=-180&&Number(lon)<=180;}
 async function refreshCustomerGeoForCapture(customer){
   if(!customer?.id||!navigator.onLine)return;
@@ -2776,10 +2777,10 @@ async function refreshCustomerGeoForCapture(customer){
 }
 function damageCaptureSummary(customer,photos){
   const gps=(photos||[]).map(p=>p.gps).filter(p=>p&&validDamageCoordinate(p.latitude,p.longitude));
-  if(!validDamageCoordinate(customer?.latitude,customer?.longitude))return {outside:false,text:`${gps.length} foto(s) com GPS. ${customer?'PDV sem coordenadas cadastradas.':'Selecione um PDV para comparar o raio de 50 m.'}`};
+  if(!validDamageCoordinate(customer?.latitude,customer?.longitude))return {outside:false,text:`${gps.length} foto(s) com GPS. ${customer?'PDV sem coordenadas cadastradas.':`Selecione um PDV para comparar o raio de ${DAMAGE_GEO_RADIUS_METERS} m.`}`};
   const distances=gps.map(p=>distanceMeters(Number(customer.latitude),Number(customer.longitude),Number(p.latitude),Number(p.longitude)));
-  const outside=distances.filter(d=>d>50).length,inside=distances.length-outside;
-  return {outside:outside>0,text:`GPS das fotos: ${inside} dentro e ${outside} fora do raio de 50 m do PDV. ${distances.length?`Distância da última foto: ${Math.round(distances.at(-1))} m.`:''} Confira a precisão do GPS.`};
+  const outside=distances.filter(d=>d>DAMAGE_GEO_RADIUS_METERS).length,inside=distances.length-outside;
+  return {outside:outside>0,text:`GPS das fotos: ${inside} dentro e ${outside} fora do raio de ${DAMAGE_GEO_RADIUS_METERS} m do PDV. ${distances.length?`Distância da última foto: ${Math.round(distances.at(-1))} m.`:''} Confira a precisão do GPS.`};
 }
 function parseDamageCoordinate(value){const text=String(value??'').trim().replace(',','.');return /^-?\d+(?:\.\d+)?$/.test(text)?Number(text):null;}
 function csvGeoValue(row,...names){for(const name of names){const key=Object.keys(row).find(x=>normHeader(x)===normHeader(name));if(key!==undefined)return row[key];}return '';}
@@ -3531,7 +3532,7 @@ function renderPullMap(mapId,t,track,events){
     const boundsPts=[...trackPts,...eventPts];
     if(boundsPts.length)map.fitBounds(L.latLngBounds(boundsPts).pad(.15));else map.setView([-6.5,-36.5],6);
     const f=pullFactories.find(x=>x.name===t.factory);
-    if(f?.latitude!=null&&f?.longitude!=null){L.marker([f.latitude,f.longitude]).addTo(map).bindPopup(`Fábrica ${esc(f.name)}`);if(f.radius_meters)L.circle([f.latitude,f.longitude],{radius:Number(f.radius_meters)}).addTo(map);}
+    if(f?.latitude!=null&&f?.longitude!=null){L.marker([f.latitude,f.longitude],{icon:mapSymbolIcon('factory')}).addTo(map).bindPopup(`Fábrica ${esc(f.name)}`);if(f.radius_meters)L.circle([f.latitude,f.longitude],{radius:Number(f.radius_meters)}).addTo(map);}
     const ctx={map,markers,container:el};
     pullMapContexts.set(mapId,ctx);
     return ctx;
@@ -5180,6 +5181,15 @@ function renderAdminAvarias(){
 }
 let damageGeoMapInstance=null;
 function cleanupDamageGeoMap(){if(damageGeoMapInstance){try{damageGeoMapInstance.remove();}catch(_e){}damageGeoMapInstance=null;}}
+function mapSymbolMarkup(kind){
+  const drawings={
+    truck:'<path d="M2.5 6.5h11v10h-11zM13.5 9h4l3.5 3.5v4h-7.5z"/><circle cx="7" cy="18" r="1.8"/><circle cx="17.5" cy="18" r="1.8"/>',
+    shop:'<path d="M3 10 12 3l9 7v10H3zM9 20v-7h6v7"/>',
+    factory:'<path d="M3 20V9l6 3V9l6 3V5h6v15zM18 5V2h3v3M6.5 16h1m4 0h1m4 0h1"/>'
+  };
+  return `<span class="map-symbol map-symbol--${kind}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${drawings[kind]}</svg></span>`;
+}
+function mapSymbolIcon(kind){return L.divIcon({className:'map-symbol-marker',html:mapSymbolMarkup(kind),iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-20]});}
 async function customerGeoForDamage(r,kind){
   const code=normalizeCode(r.customer_code),cols='id,code,name,city,branch,latitude,longitude';
   if(!code)return null;
@@ -5205,11 +5215,11 @@ function damageGeoPhotos(items,kind,request=null){
 function damageGeoSection(customer,points){
   const hasCustomer=validDamageCoordinate(customer?.latitude,customer?.longitude),lat=Number(customer?.latitude),lon=Number(customer?.longitude);
   const checked=hasCustomer?points.map(p=>({...p,distance:distanceMeters(lat,lon,p.latitude,p.longitude)})):[];
-  const inside=checked.filter(p=>p.distance<=50).length,outside=checked.length-inside;
-  const summary=hasCustomer?(points.length?`${inside} dentro · ${outside} fora do raio de 50 m`:'Sem GPS da avaria'):'Coordenadas do PDV não cadastradas';
-  const rows=hasCustomer?checked.map(p=>`<div class="damage-geo-point"><span>${esc(p.label)} · ${Math.round(p.distance)} m do PDV${Number.isFinite(p.accuracy)?` · GPS ±${Math.round(p.accuracy)} m`:''}</span><span class="damage-geo-pill ${p.distance<=50?'inside':'outside'}">${p.distance<=50?'Dentro':'Fora'}</span></div>`).join(''):'';
+  const inside=checked.filter(p=>p.distance<=DAMAGE_GEO_RADIUS_METERS).length,outside=checked.length-inside;
+  const summary=hasCustomer?(points.length?`${inside} dentro · ${outside} fora do raio de ${DAMAGE_GEO_RADIUS_METERS} m`:'Sem GPS da avaria'):'Coordenadas do PDV não cadastradas';
+  const rows=hasCustomer?checked.map(p=>`<div class="damage-geo-point"><span>${esc(p.label)} · ${Math.round(p.distance)} m do PDV${Number.isFinite(p.accuracy)?` · GPS ±${Math.round(p.accuracy)} m`:''}</span><span class="damage-geo-pill ${p.distance<=DAMAGE_GEO_RADIUS_METERS?'inside':'outside'}">${p.distance<=DAMAGE_GEO_RADIUS_METERS?'Dentro':'Fora'}</span></div>`).join(''):'';
   const info=hasCustomer?'O resultado usa o ponto capturado pelo GPS. A precisão informada pelo aparelho pode afetar a posição real.':'Peça ao administrador para importar ou corrigir as coordenadas do PDV em Bases e importações.';
-  return `<details id="damageGeoDetails" class="damage-geo-details"><summary><span>Localização da avaria · raio de 50 m</span><span class="damage-geo-pill ${!hasCustomer||!points.length?'unknown':outside?'outside':'inside'}">${esc(summary)}</span></summary><div class="damage-geo-content"><div class="damage-geo-result"><strong>PDV ${hasCustomer?`${lat.toFixed(6)}, ${lon.toFixed(6)}`:'sem coordenadas'}</strong><span>${points.length} ponto(s) GPS</span></div><div id="damageGeoMap" class="damage-geo-map" role="img" aria-label="Mapa com ponto de venda, raio de 50 metros e locais das fotos"></div><div class="damage-geo-legend">${hasCustomer?'<span><i></i>Ponto de venda e círculo de 50 m</span>':''}<span class="gps"><i></i>GPS do motorista ou vendedor</span></div><div class="damage-geo-points">${rows||(points.length?'<small>GPS registrado. Cadastre o PDV para calcular a distância.</small>':'<small>Não há GPS para comparar com o PDV nesta avaria.</small>')}</div><small>${esc(info)}</small></div></details>`;
+  return `<details id="damageGeoDetails" class="damage-geo-details"><summary><span>Localização da avaria · raio de ${DAMAGE_GEO_RADIUS_METERS} m</span><span class="damage-geo-pill ${!hasCustomer||!points.length?'unknown':outside?'outside':'inside'}">${esc(summary)}</span></summary><div class="damage-geo-content"><div class="damage-geo-result"><strong>PDV ${hasCustomer?`${lat.toFixed(6)}, ${lon.toFixed(6)}`:'sem coordenadas'}</strong><span>${points.length} ponto(s) GPS</span></div><div id="damageGeoMap" class="damage-geo-map" role="img" aria-label="Mapa com ponto de venda, raio de ${DAMAGE_GEO_RADIUS_METERS} metros e locais das fotos"></div><div class="damage-geo-legend">${hasCustomer?`<span>${mapSymbolMarkup('shop')}Ponto de venda e círculo de ${DAMAGE_GEO_RADIUS_METERS} m</span>`:''}<span class="gps">${mapSymbolMarkup('truck')}GPS do motorista ou vendedor</span></div><div class="damage-geo-points">${rows||(points.length?'<small>GPS registrado. Cadastre o PDV para calcular a distância.</small>':'<small>Não há GPS para comparar com o PDV nesta avaria.</small>')}</div><small>${esc(info)}</small></div></details>`;
 }
 function setupDamageGeoMap(customer,points){
   const details=$('damageGeoDetails');if(!details)return;
@@ -5223,8 +5233,8 @@ function setupDamageGeoMap(customer,points){
     const center=hasCustomer?[Number(customer.latitude),Number(customer.longitude)]:[points[0].latitude,points[0].longitude];
     const map=L.map(el,{scrollWheelZoom:false}).setView(center,hasCustomer?17:14);damageGeoMapInstance=map;
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
-    if(hasCustomer){const spot=[Number(customer.latitude),Number(customer.longitude)];L.circle(spot,{radius:50,color:'#2563eb',weight:2,fillColor:'#60a5fa',fillOpacity:.18}).addTo(map);L.circleMarker(spot,{radius:8,color:'#fff',weight:2,fillColor:'#1d4ed8',fillOpacity:1}).addTo(map).bindPopup(`PDV ${esc(customer.code||'')} · ${esc(customer.name||'')}`);coords.push(spot);}
-    points.forEach(p=>{const spot=[p.latitude,p.longitude],distance=hasCustomer?distanceMeters(Number(customer.latitude),Number(customer.longitude),p.latitude,p.longitude):null;L.circleMarker(spot,{radius:7,color:'#fff',weight:2,fillColor:distance!=null&&distance>50?'#dc2626':'#e95837',fillOpacity:1}).addTo(map).bindPopup(`${esc(p.label)}${distance!=null?` · ${Math.round(distance)} m do PDV`:''}`);coords.push(spot);});
+    if(hasCustomer){const spot=[Number(customer.latitude),Number(customer.longitude)];L.circle(spot,{radius:DAMAGE_GEO_RADIUS_METERS,color:'#2563eb',weight:2,fillColor:'#60a5fa',fillOpacity:.18}).addTo(map);L.marker(spot,{icon:mapSymbolIcon('shop')}).addTo(map).bindPopup(`PDV ${esc(customer.code||'')} · ${esc(customer.name||'')}`);coords.push(spot);}
+    points.forEach(p=>{const spot=[p.latitude,p.longitude],distance=hasCustomer?distanceMeters(Number(customer.latitude),Number(customer.longitude),p.latitude,p.longitude):null;L.marker(spot,{icon:mapSymbolIcon('truck')}).addTo(map).bindPopup(`${esc(p.label)}${distance!=null?` · ${Math.round(distance)} m do PDV`:''}`);coords.push(spot);});
     if(coords.length>1)map.fitBounds(L.latLngBounds(coords).pad(.25),{maxZoom:18});
     setTimeout(()=>map.invalidateSize(),80);
   });
@@ -8972,15 +8982,9 @@ renderPullMap=function(mapId,t,track,events,occurrences=[]){
     const latest=allTrack.at(-1)||null;
 
     if(latest){
-      L.circleMarker(
+      L.marker(
         [Number(latest.latitude),Number(latest.longitude)],
-        {
-          radius:9,
-          color:'#ffffff',
-          weight:3,
-          fillColor:'#dc2626',
-          fillOpacity:1
-        }
+        {icon:mapSymbolIcon('truck')}
       )
       .addTo(map)
       .bindPopup(
@@ -9001,7 +9005,7 @@ renderPullMap=function(mapId,t,track,events,occurrences=[]){
     const f=pullFactories.find(x=>x.name===t.factory);
 
     if(f?.latitude!=null&&f?.longitude!=null){
-      L.marker([f.latitude,f.longitude]).addTo(map).bindPopup(`Fábrica ${esc(f.name)}`);
+      L.marker([f.latitude,f.longitude],{icon:mapSymbolIcon('factory')}).addTo(map).bindPopup(`Fábrica ${esc(f.name)}`);
       if(f.radius_meters){
         L.circle([f.latitude,f.longitude],{radius:Number(f.radius_meters)}).addTo(map);
       }
@@ -9096,7 +9100,7 @@ openPullTripDetail=async function(id,live=false){
 
       const legend=document.createElement('div');
       legend.className='pull-map-legend';
-      legend.innerHTML='<span><i></i>Trajeto GPS real</span><span class="gap"><i></i>Trecho sem sinal</span><span class="stage"><i></i>Etapa</span><span class="occ"><i></i>Ocorrência</span><span class="current"><i></i>Última posição</span>';
+      legend.innerHTML='<span><i></i>Trajeto GPS real</span><span class="gap"><i></i>Trecho sem sinal</span><span class="stage"><i></i>Etapa</span><span class="occ"><i></i>Ocorrência</span><span class="current">'+mapSymbolMarkup('truck')+'Última posição</span><span class="factory">'+mapSymbolMarkup('factory')+'Fábrica</span>';
       mapEl.before(title,status,legend);
     }
 

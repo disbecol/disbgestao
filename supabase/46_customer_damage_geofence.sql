@@ -1,4 +1,4 @@
--- Coordenadas dos PDVs para auditoria visual de avarias (raio fixo de 50 m).
+-- Coordenadas dos PDVs para auditoria visual de avarias (raio de 100 m definido no aplicativo).
 -- Aplicar antes de importar o CSV pela tela Bases e importações.
 begin;
 
