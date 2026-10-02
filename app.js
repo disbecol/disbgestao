@@ -201,7 +201,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.13-pull-report-no-gps',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.14-pull-track-pages',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -3612,18 +3612,39 @@ async function downloadPullTripSummary(tripId,button){
   finally{pullPdfBusy.delete(tripId);if(button){button.disabled=false;button.textContent=oldText;}}
 }
 
+// Lê todo o trajeto por páginas estáveis. A API limita cada resposta a 1.000 linhas;
+// pedir 10.000 de uma vez fazia o mapa perder parte do caminho após atualizar.
+async function loadPullTripTrackRowsV171(tripId,afterId=0){
+  const pageSize=500,rows=[];
+  let cursor=Number(afterId)||0;
+  for(;;){
+    const {data,error}=await sb.from('pull_track_points')
+      .select('id,trip_id,recorded_at,device_at,latitude,longitude,gps_accuracy,source')
+      .eq('trip_id',tripId).gt('id',cursor).order('id',{ascending:true}).limit(pageSize);
+    if(error)throw error;
+    const page=data||[];
+    if(!page.length)break;
+    const next=Number(page.at(-1).id);
+    if(!Number.isSafeInteger(next)||next<=cursor)throw new Error('Não foi possível paginar o trajeto GPS.');
+    rows.push(...page);
+    cursor=next;
+    if(page.length<pageSize)break;
+  }
+  return rows;
+}
+
 async function openPullTripDetail(id,live=false){
   try{
     const t=(pullHistory.find(x=>x.id===id)||($('pullFarolCards')?._rows||[]).find(x=>x.id===id))||((await sb.from('pull_trips').select('*').eq('id',id).single()).data);
     if(!t)throw new Error('CICLO_NAO_ENCONTRADO');
-    const [ev,oc,tp,aud,nri]=await Promise.all([
+    const [ev,oc,trackRows,aud,nri]=await Promise.all([
       sb.from('pull_events').select('*').eq('trip_id',id).order('recorded_at'),
       sb.from('pull_occurrences').select('*').eq('trip_id',id).order('started_at'),
-      sb.from('pull_track_points').select('*').eq('trip_id',id).order('id',{ascending:false}).limit(10000),
+      loadPullTripTrackRowsV171(id),
       sb.from('pull_tma_adjust_audit').select('*').eq('trip_id',id).order('changed_at',{ascending:false}),
       sb.from('nri_requests').select('id,created_at').eq('pull_trip_id',id)
     ]);
-    [ev,oc,tp,aud,nri].forEach(r=>{if(r.error)throw r.error;});
+    [ev,oc,aud,nri].forEach(r=>{if(r.error)throw r.error;});
     const m=pullTripMetrics(t);
     const transfer=t.cycle_type==='TRANSFER';
     const mapId=`pullMap-${String(id).replace(/-/g,'')}`;
@@ -3638,7 +3659,7 @@ async function openPullTripDetail(id,live=false){
     openModal(`${transfer?'TRANSFERÊNCIA':'PUXADA'} • ${t.trip_code} • ${t.plate}`,pullTripStatusLabel(t),body,actions);
     void renderPullTripDetailExtras(t);
     setTimeout(()=>{
-      renderPullMap(mapId,t,tp.data||[],ev.data||[],oc.data||[]);
+      renderPullMap(mapId,t,trackRows,ev.data||[],oc.data||[]);
       const modalBody=$('modalBody');
       if(modalBody)modalBody.onclick=e=>{const b=e.target.closest('[data-pull-map-jump]');if(b)focusPullMapPoint(b.dataset.pullMapId,b.dataset.pullMapJump);};
     },120);
@@ -8932,10 +8953,10 @@ function cleanPullTrackV170(track){
       &&Number.isFinite(Number(x.longitude))
       &&(
         x.gps_accuracy==null
-        ||Number(x.gps_accuracy)<=200
+        ||Number(x.gps_accuracy)<=300
       )
     )
-    .sort((a,b)=>pullTrackMomentV170(a)-pullTrackMomentV170(b));
+    .sort((a,b)=>pullTrackMomentV170(a)-pullTrackMomentV170(b)||Number(a.id||0)-Number(b.id||0));
 
   const out=[];
   let prev=null;
@@ -8952,7 +8973,6 @@ function cleanPullTrackV170(track){
       const sec=Math.max(0,(cur.at-prev.at)/1000);
       const dist=distanceMeters(cur.lat,cur.lon,prev.lat,prev.lon);
 
-      if(sec>0&&dist/sec>60)continue;
       if(sec<3&&dist<2)continue;
     }
 
@@ -8982,7 +9002,7 @@ function pullTrackSegmentsV170(track){
       const dist=distanceMeters(cur.lat,cur.lon,prev.lat,prev.lon);
 
       // Nao inventa uma reta durante grande periodo sem sinal.
-      if(sec>180||dist>5000){
+      if(sec>180||dist>5000||(sec>0&&dist/sec>60)||(sec===0&&dist>30)){
         if(current.length)segments.push(current);
         current=[];
       }
@@ -9019,8 +9039,8 @@ function pullTrackStatusTextV170(track){
 function updatePullMapStatusV170(mapId,track){
   const el=$(mapId+'-track-status');
   if(!el)return;
-  const points=cleanPullTrackV170(track).length;
-  el.textContent=pullTrackStatusTextV170(track)+(points>1?` • ${points} posições no trajeto azul.`:' • Ainda sem posições suficientes para traçar o trajeto azul.');
+  const points=cleanPullTrackV170(track).length,loaded=track?.length||0;
+  el.textContent=pullTrackStatusTextV170(track)+(points>1?` • ${loaded} posições carregadas, ${points} válidas no mapa.`:` • ${loaded} posições carregadas; ainda sem pontos suficientes para traçar o trajeto azul.`);
 }
 
 renderPullMap=function(mapId,t,track,events,occurrences=[]){
@@ -9066,7 +9086,7 @@ renderPullMap=function(mapId,t,track,events,occurrences=[]){
       if(!before||!after)continue;
       L.polyline([[Number(before.latitude),Number(before.longitude)],[Number(after.latitude),Number(after.longitude)]],{
         color:'#94a3b8',weight:3,opacity:.75,dashArray:'6 8'
-      }).addTo(map).bindPopup('Trecho sem rastreio contínuo; a linha pontilhada não representa a estrada percorrida.');
+      }).addTo(map).bindPopup('Intervalo sem rastreio contínuo ou com GPS inconsistente; a linha pontilhada não representa a estrada percorrida.');
     }
 
     const eventRows=(events||[])
@@ -9167,9 +9187,9 @@ renderPullMap=function(mapId,t,track,events,occurrences=[]){
       }
     }
 
-    const ctx={map,markers,container:el};
+    const ctx={map,markers,container:el,trackRows:[...(track||[])]};
     pullMapContexts.set(mapId,ctx);
-    updatePullMapStatusV170(mapId,track);
+    updatePullMapStatusV170(mapId,ctx.trackRows);
     return ctx;
 
   }catch(e){
@@ -9290,155 +9310,39 @@ cleanupPullMaps=function(){
 // Busca novamente tanto o GPS real quanto os apontamentos das etapas.
 // -----------------------------------------------------------------------------
 
-refreshPullLiveMapV170=
-  async function(
-    mapId,
-    tripId,
-    trip
-  ){
-
-  if(
-    !$(mapId)
-    ||
-    !sb
-  ){
-    return false;
-  }
-
-
+const pullLiveMapRefreshBusyV171=new Set();
+refreshPullLiveMapV170=async function(mapId,tripId,trip){
+  if(!$(mapId)||!sb||pullLiveMapRefreshBusyV171.has(mapId))return false;
+  pullLiveMapRefreshBusyV171.add(mapId);
   try{
+    const old=pullMapContexts.get(mapId);
+    const previous=old?.trackRows||[];
+    const lastId=previous.length?Number(previous.at(-1).id)||0:0;
+    const [newRows,eventResult,occurrenceResult]=await Promise.all([
+      loadPullTripTrackRowsV171(tripId,lastId),
+      sb.from('pull_events').select('*').eq('trip_id',tripId).order('recorded_at'),
+      sb.from('pull_occurrences').select('*').eq('trip_id',tripId).order('started_at')
+    ]);
+    if(eventResult.error)throw eventResult.error;
+    if(occurrenceResult.error)throw occurrenceResult.error;
+    // O modal pode ter sido fechado ou aberto novamente durante a consulta.
+    if(!$(mapId)||pullMapContexts.get(mapId)!==old)return false;
 
-    const [
-      trackResult,
-      eventResult,
-      occurrenceResult
-    ]=
-      await Promise.all([
-
-        sb
-          .from(
-            'pull_track_points'
-          )
-          .select('*')
-          .eq(
-            'trip_id',
-            tripId
-          )
-          .order('id',{ascending:false})
-          .limit(10000),
-
-        sb
-          .from(
-            'pull_events'
-          )
-          .select('*')
-          .eq(
-            'trip_id',
-            tripId
-          )
-          .order(
-            'recorded_at'
-          ),
-
-        sb
-          .from('pull_occurrences')
-          .select('*')
-          .eq('trip_id',tripId)
-          .order('started_at')
-
-      ]);
-
-
-    if(trackResult.error){
-      throw trackResult.error;
+    const trackRows=previous.concat(newRows);
+    const center=old?.map?.getCenter?.();
+    const zoom=old?.map?.getZoom?.();
+    // Apenas pontos reais do GPS compõem a linha azul. Não substitui o histórico
+    // por uma página de resultados durante a atualização do mapa ao vivo.
+    const fresh=renderPullMap(mapId,trip,trackRows,eventResult.data||[],occurrenceResult.data||[]);
+    if(center&&Number.isFinite(Number(zoom))){
+      fresh?.map?.setView(center,Number(zoom),{animate:false});
     }
-
-
-    if(eventResult.error){
-      throw eventResult.error;
-    }
-    if(occurrenceResult.error){
-      throw occurrenceResult.error;
-    }
-
-
-    const old=
-      pullMapContexts.get(
-        mapId
-      );
-
-
-    const center=
-      old?.map
-        ?.getCenter?.();
-
-
-    const zoom=
-      old?.map
-        ?.getZoom?.();
-
-
-    // IMPORTANTE:
-    // trackResult = linha real do GPS
-    // eventResult = marcadores das etapas
-    //
-    // A linha continua sendo formada SOMENTE
-    // pelos pontos reais do GPS.
-    renderPullMap(
-      mapId,
-      trip,
-      trackResult.data||[],
-      eventResult.data||[],
-      occurrenceResult.data||[]
-    );
-
-
-    const fresh=
-      pullMapContexts.get(
-        mapId
-      );
-
-
-    // Se o usuario estava olhando uma determinada
-    // regiao do mapa, o refresh nao arranca o mapa
-    // daquele ponto.
-    if(
-      center
-      &&
-      Number.isFinite(
-        Number(zoom)
-      )
-    ){
-
-      fresh?.map?.setView(
-        center,
-        Number(zoom),
-        {
-          animate:false
-        }
-      );
-
-    }
-
-
-    updatePullMapStatusV170(
-      mapId,
-      trackResult.data||[]
-    );
-
-
-    return true;
-
-  }
-  catch(e){
-
-    console.warn(
-      '[PUXADA MAPA TEMPO REAL]',
-      e
-    );
-
+    return Boolean(fresh);
+  }catch(e){
+    console.warn('[PUXADA MAPA TEMPO REAL]',e);
     return false;
-
+  }finally{
+    pullLiveMapRefreshBusyV171.delete(mapId);
   }
 };
 
