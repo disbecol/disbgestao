@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="styles.css?v=1.7.12-pull-plans">
   <link rel="stylesheet" href="visual-refresh.css?v=1.7.1-visual">
   <link rel="stylesheet" href="pull-dashboard.css?v=1.7.1-pull-dashboard">
+  <link rel="stylesheet" href="damage-geofence.css?v=1">
 </head>
 <body>
   <section id="loginScreen" class="login-screen">
@@ -814,6 +815,14 @@
           <div class="actions right"><button id="btnImportarBase" class="btn primary">Importar para Supabase</button></div>
           <div id="importResult" class="import-result"></div>
         </div>
+        <div class="card geo-admin-card">
+          <div class="section-title">Coordenadas dos pontos de venda</div>
+          <p class="muted-text">Importe somente código PDV, latitude e longitude. Linhas sem coordenadas são ignoradas. A importação atualiza clientes já cadastrados e informa quantos códigos não foram encontrados.</p>
+          <div class="grid grid-3"><div class="field span-2"><label>CSV de coordenadas</label><input id="geoImportFile" type="file" accept=".csv,text/csv"></div><div class="actions end"><button id="btnGeoImport" type="button" class="btn primary">Importar coordenadas</button></div></div>
+          <div id="geoImportResult" class="import-result" aria-live="polite"></div>
+          <div class="field"><label>Corrigir um PDV manualmente</label><input id="geoCustomerSearch" placeholder="Pesquise pelo código ou nome do cliente"></div>
+          <div id="geoCustomerResults" class="geo-admin-results"></div>
+        </div>
       </section>
     </main>
   </div>
@@ -827,6 +836,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="config.js?v=1.7.0"></script>
   <script src="share-reports.js?v=1.7.3"></script>
-  <script src="app.js?v=1.7.12-pull-plans"></script>
+  <script src="app.js?v=1.7.12-damage-geofence"></script>
 </body>
 </html>
