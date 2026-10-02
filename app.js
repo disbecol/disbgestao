@@ -201,7 +201,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.13-pull-report',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.13-pull-report-no-gps',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -3528,7 +3528,7 @@ async function ensurePullPdfLibrary(){
   if(window.PDFLib&&window.DISB_PULL_REPORT)return;
   if(!pullPdfLibraryPromise)pullPdfLibraryPromise=(async()=>{
     if(!window.PDFLib)await loadPullPdfScript('vendor/pdf-lib.min.js');
-    if(!window.DISB_PULL_REPORT)await loadPullPdfScript('pull-report.js');
+    if(!window.DISB_PULL_REPORT)await loadPullPdfScript('pull-report.js?v=2');
   })().catch(error=>{pullPdfLibraryPromise=null;throw error;});
   await pullPdfLibraryPromise;
 }
@@ -3595,17 +3595,16 @@ async function downloadPullTripSummary(tripId,button){
     await ensurePullPdfLibrary();
     const {data:trip,error:tripError}=await sb.from('pull_trips').select('*').eq('id',tripId).eq('origin_unit',activeUnit).single();
     if(tripError)throw tripError;
-    const [events,occurrences,track,tmaAudit,nriRequests,appointmentChanges,attachments]=await Promise.all([
+    const [events,occurrences,tmaAudit,nriRequests,appointmentChanges,attachments]=await Promise.all([
       fetchPullReportRows('pull_events',tripId,'recorded_at'),
       fetchPullReportRows('pull_occurrences',tripId,'started_at'),
-      fetchPullReportRows('pull_track_points',tripId,'id'),
       fetchPullReportRows('pull_tma_adjust_audit',tripId,'changed_at'),
       fetchPullReportRows('nri_requests',tripId,'created_at','pull_trip_id'),
       fetchPullReportRows('pull_appointment_changes',tripId,'changed_at'),
       fetchPullReportAttachments(tripId)
     ]);
     const nris=await fetchPullReportNris(nriRequests);
-    const report={trip,statusLabel:pullTripStatusLabel(trip),solo:pullTripSolo(trip),metrics:pullTripMetrics(trip),appointmentMetrics:pullAppointmentMetrics(trip),events:events.map(row=>({...row,report_name:pullNumberedStepName(row,trip)})),occurrences,track,tmaAudit,nriRequests,nris,appointmentChanges,attachments,generatedAt:new Date().toISOString()};
+    const report={trip,statusLabel:pullTripStatusLabel(trip),solo:pullTripSolo(trip),metrics:pullTripMetrics(trip),appointmentMetrics:pullAppointmentMetrics(trip),events:events.map(row=>({...row,report_name:pullNumberedStepName(row,trip)})),occurrences,tmaAudit,nriRequests,nris,appointmentChanges,attachments,generatedAt:new Date().toISOString()};
     const bytes=await window.DISB_PULL_REPORT.buildPdf(report,window.PDFLib);
     const name=`resumo-${String(trip.trip_code||trip.id).replace(/[^A-Za-z0-9_-]/g,'_')}.pdf`;
     await savePullReportPdf(name,bytes);

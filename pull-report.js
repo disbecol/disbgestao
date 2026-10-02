@@ -10,22 +10,13 @@
     return Number.isNaN(parsed.getTime())?'—':parsed.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
   };
   const duration=minutes=>minutes==null||!Number.isFinite(Number(minutes))?'Aguardando':`${String(Math.floor(Math.max(0,Number(minutes))/60)).padStart(2,'0')}:${String(Math.round(Math.max(0,Number(minutes)))%60).padStart(2,'0')}`;
-  const coord=(lat,lon,accuracy)=>{
-    if(lat==null||lon==null||!Number.isFinite(Number(lat))||!Number.isFinite(Number(lon)))return 'Sem GPS';
-    return `${Number(lat).toFixed(6)}, ${Number(lon).toFixed(6)}${accuracy==null?'':` | precisão ±${Math.round(Number(accuracy))} m`}`;
-  };
-  const meters=(a,b,c,d)=>{
-    const rad=Math.PI/180,dp=(c-a)*rad,dl=(d-b)*rad;
-    const h=Math.sin(dp/2)**2+Math.cos(a*rad)*Math.cos(c*rad)*Math.sin(dl/2)**2;
-    return 12742000*Math.asin(Math.sqrt(h));
-  };
   const rgbFrom=(lib,hex)=>lib.rgb(...[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255));
 
   async function buildPdf(report,lib=globalThis.PDFLib){
     if(!lib?.PDFDocument)throw new Error('Biblioteca de PDF indisponível. Recarregue a página e tente novamente.');
     const doc=await lib.PDFDocument.create(),normal=await doc.embedFont(lib.StandardFonts.Helvetica),bold=await doc.embedFont(lib.StandardFonts.HelveticaBold);
     const color={navy:rgbFrom(lib,NAVY),blue:rgbFrom(lib,BLUE),muted:rgbFrom(lib,MUTED),pale:rgbFrom(lib,PALE),line:rgbFrom(lib,LINE),white:lib.rgb(1,1,1)};
-    const trip=report.trip||{},metrics=report.metrics||{},events=report.events||[],occurrences=report.occurrences||[],track=report.track||[],changes=report.appointmentChanges||[],adjustments=report.tmaAudit||[],requests=report.nriRequests||[],nris=report.nris||[],photos=report.attachments||[];
+    const trip=report.trip||{},metrics=report.metrics||{},events=report.events||[],occurrences=report.occurrences||[],changes=report.appointmentChanges||[],adjustments=report.tmaAudit||[],requests=report.nriRequests||[],nris=report.nris||[],photos=report.attachments||[];
     const pages=[];let page,y;
     const line=(value,x,at,size=10,heavy=false,tint=color.navy)=>page.drawText(safe(value),{x,y:at,size,font:heavy?bold:normal,color:tint});
     const newPage=()=>{
@@ -93,8 +84,6 @@
     field('Encerrado por',trip.ended_by_name||'—');
     field('Próxima saída',date(trip.next_started_at));
     field('Situação NRI',trip.nri_status||'—');
-    field('GPS inicial',coord(trip.start_latitude,trip.start_longitude,trip.start_accuracy));
-    field('GPS final',coord(trip.end_latitude,trip.end_longitude,trip.end_accuracy));
     if(trip.cycle_type!=='TRANSFER'){
       section('Agendamento e fábrica');
       field('Agendamento atual',date(trip.appointment_at));
@@ -118,15 +107,14 @@
     if(!events.length)paragraph('Nenhuma etapa registrada.');
     events.forEach((row,index)=>card(`${index+1}. ${row.report_name||row.step_name||row.action_code||'Etapa'}`,[
       `Registro: ${date(row.recorded_at)} | aparelho: ${date(row.device_at)} | por ${row.user_name||'—'}`,
-      `Código: ${row.action_code||'—'} | ordem: ${row.step_order??'—'} | GPS: ${coord(row.latitude,row.longitude,row.gps_accuracy)}`,
-      `Auditoria da fábrica: ${row.geofence_status||'—'} | distância: ${row.distance_factory_m==null?'—':`${Math.round(Number(row.distance_factory_m))} m`} | raio: ${row.factory_radius_m==null?'—':`${row.factory_radius_m} m`}`,
+      `Código: ${row.action_code||'—'} | ordem: ${row.step_order??'—'}`,
       row.exception_reason?`Justificativa da exceção: ${row.exception_reason}`:'Sem justificativa de exceção.'
     ]));
     section(`Ocorrências (${occurrences.length})`);
     if(!occurrences.length)paragraph('Nenhuma ocorrência registrada.');
     occurrences.forEach((row,index)=>card(`${index+1}. ${row.occurrence_name||'Ocorrência'} | ${row.status||'—'}`,[
-      `Início: ${date(row.started_at)} | por ${row.started_by_name||'—'} | GPS ${coord(row.start_latitude,row.start_longitude,row.start_accuracy)}`,
-      `Fim: ${date(row.ended_at)} | por ${row.ended_by_name||'—'} | GPS ${coord(row.end_latitude,row.end_longitude,row.end_accuracy)}`,
+      `Início: ${date(row.started_at)} | por ${row.started_by_name||'—'}`,
+      `Fim: ${date(row.ended_at)} | por ${row.ended_by_name||'—'}`,
       `Duração: ${row.ended_at?duration((Date.parse(row.ended_at)-Date.parse(row.started_at))/60000):'Em andamento'} | modo: ${row.duration_mode||'—'} | sugere desconto TMA: ${row.suggest_tma_discount?'sim':'não'}`,
       `Observação: ${row.note||'—'}`
     ]));
@@ -156,20 +144,6 @@
       `Lote: ${row.lot||'—'} | validade: ${row.validity_date||'—'} | bloqueio: ${row.block_date||'—'}`,
       `Criado: ${date(row.created_at)} | impresso: ${date(row.printed_at)} | removido: ${date(row.removed_at)}`
     ]));
-    section(`Rastro GPS (${track.length} pontos)`);
-    if(track.length){
-      const sorted=[...track].sort((a,b)=>Date.parse(a.recorded_at)-Date.parse(b.recorded_at));
-      let total=0,previous=null;
-      sorted.forEach(row=>{if(previous){const seconds=(Date.parse(row.recorded_at)-Date.parse(previous.recorded_at))/1000,delta=meters(Number(previous.latitude),Number(previous.longitude),Number(row.latitude),Number(row.longitude));if(seconds>0&&delta/seconds<=60)total+=delta;}previous=row;});
-      field('Primeiro / último',`${date(sorted[0].recorded_at)} / ${date(sorted.at(-1).recorded_at)}`);
-      field('Distância aproximada',`${(total/1000).toFixed(1).replace('.',',')} km (GPS; saltos improváveis desconsiderados)`);
-      paragraph('Registro cronológico completo: data/hora, coordenadas, precisão e origem do ponto.',{size:9,tint:color.muted});
-      sorted.forEach((row,index)=>{
-        ensure(13);
-        line(`${String(index+1).padStart(5,'0')}  ${date(row.device_at||row.recorded_at)}  ${coord(row.latitude,row.longitude,row.gps_accuracy)}${row.source?` | ${row.source}`:''}`,MARGIN,y,8,false,color.navy);
-        y-=13;
-      });
-    }else paragraph('Nenhum ponto de rastreio registrado.');
     section(`Anexos (${photos.length})`);
     paragraph('As fotos originais estão incorporadas neste PDF. Toque no clipe de cada foto para abrir ou salvar. Se o leitor não mostrar o clipe, use o painel Anexos do leitor de PDF.',{size:9,tint:color.muted});
     if(!photos.length)paragraph('Nenhuma foto anexada ao ciclo.');
