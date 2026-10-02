@@ -1,7 +1,7 @@
-const CACHE='disb-gestao-v1.7.12-geo-icons-100m';
+const CACHE='disb-gestao-v1.7.13-pull-report';
 const IMAGE_CACHE=`${CACHE}-images`;
 const IMAGE_CACHE_LIMIT=200;
-const STATIC=['./','index.html','styles.css?v=1.7.12-pull-plans','visual-refresh.css?v=1.7.1-visual','pull-dashboard.css?v=1.7.1-pull-dashboard','damage-geofence.css?v=2','share-reports.js?v=1.7.3','app.js?v=1.7.12-geo-icons-100m','config.js?v=1.7.0','manifest.webmanifest','assets/icon-192.png','assets/icon-512.png'];
+const STATIC=['./','index.html','styles.css?v=1.7.13-pull-report','visual-refresh.css?v=1.7.1-visual','pull-dashboard.css?v=1.7.1-pull-dashboard','damage-geofence.css?v=2','share-reports.js?v=1.7.3','pull-report.js','vendor/pdf-lib.min.js','app.js?v=1.7.13-pull-report','config.js?v=1.7.0','manifest.webmanifest','assets/icon-192.png','assets/icon-512.png'];
 const STATIC_URLS=new Set(STATIC.map(path=>new URL(path,self.registration.scope).href));
 const EXTERNAL_STATIC_URLS=new Set(['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2','https://unpkg.com/leaflet@1.9.4/dist/leaflet.css','https://unpkg.com/leaflet@1.9.4/dist/leaflet.js']);
 const IMAGE_PATHS=['assets/','imagens_produtos/'].map(path=>new URL(path,self.registration.scope).pathname);

@@ -1,6 +1,6 @@
 {
   "name": "disb-gestao",
-  "version": "1.7.12",
+  "version": "1.7.13",
   "private": true,
   "scripts": {
     "prepare:web": "node scripts/copy-web.mjs",
@@ -13,10 +13,13 @@
   "dependencies": {
     "@capacitor/android": "latest",
     "@capacitor/core": "latest",
+    "@capacitor/filesystem": "8.1.3",
     "@capacitor/geolocation": "latest",
     "@capacitor/local-notifications": "latest",
     "@capacitor/push-notifications": "latest",
-    "@capgo/background-geolocation": "^8.4.7"
+    "@capacitor/share": "8.0.2",
+    "@capgo/background-geolocation": "^8.4.7",
+    "pdf-lib": "1.17.1"
   },
   "devDependencies": {
     "@capacitor/cli": "latest"
