@@ -206,7 +206,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.18-refugo-user',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.19-refugo-map',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -10201,18 +10201,20 @@ function scheduleBindMaterialsV171(){
 }
 scheduleBindMaterialsV171();
 
-// Armazem > Refugo: dados persistidos no Supabase; nenhuma planilha externa.
+// Armazem > Refugo: limites extraidos da base MAPAS importada do Google Sheets.
 let refugoCatalog=[],refugoSessions=[],refugoHistory=[],refugoCurrentSession=null,refugoItems=[];
 let refugoTimer=null,refugoBusy=false,refugoEventsBound=false;
 const REFUGO_KIND_LABEL={TYPE:'Tipos de vasilhame',REASON:'Motivos de refugo'};
+const REFUGO_MAP_FIELDS={g300:'300ml',g600_green:'600ml Verde',g600_brown:'600ml Âmbar / Marrom',g_litrao:'1L / Litrão',keg30:'Barril 30L',keg50:'Barril 50L'};
 
 function refugoError(error){
   const message=String(error?.message||error||'');
-  const known={REFUGO_MAPA_INVALIDO:'Informe um número de mapa válido.',REFUGO_AJUDANTE_INVALIDO:'Execute o SQL 49_refugo_usuario_afericao.sql no Supabase para usar o usuário do sistema.',REFUGO_TIPO_INVALIDO:'Selecione um tipo de vasilhame ativo.',REFUGO_MOTIVO_INVALIDO:'Um motivo foi inativado. Atualize a tela e tente novamente.',REFUGO_MOTIVOS_INVALIDOS:'Confira as quantidades por motivo.',REFUGO_QUANTIDADE_INVALIDA:'Informe uma quantidade aferida maior que zero.',REFUGO_OBSERVACAO_LONGA:'A observação deve ter até 1.000 caracteres.',REFUGO_CADASTRO_NAO_ENCONTRADO:'Cadastro não encontrado nesta unidade.',REFUGO_ITEM_NAO_ENCONTRADO:'Vasilhame não encontrado. Atualize a tela.',REFUGO_ITEM_EM_ANDAMENTO:'Finalize ou cancele o vasilhame em andamento.',REFUGO_ITEM_FINALIZADO:'Este vasilhame já foi finalizado.',REFUGO_TOTAL_SUPERA_AFERIDO:'A quantidade refugada não pode superar a quantidade aferida.',REFUGO_MAPA_SEM_ITENS:'Registre ao menos um vasilhame antes de finalizar o mapa.',REFUGO_MAPA_FINALIZADO:'Este mapa já foi finalizado.',REFUGO_NOME_INVALIDO:'Informe um nome de 1 a 100 caracteres.'};
+  const known={REFUGO_MAPA_INVALIDO:'Informe um número de mapa válido.',REFUGO_MAPA_NAO_ENCONTRADO:'Este mapa não está na base MAPAS importada da planilha. Confira o número ou atualize a base.',REFUGO_AJUDANTE_INVALIDO:'Execute o SQL 49_refugo_usuario_afericao.sql no Supabase para usar o usuário do sistema.',REFUGO_TIPO_INVALIDO:'Selecione um tipo de vasilhame ativo.',REFUGO_TIPO_SEM_VINCULO:'Este tipo de vasilhame precisa ser associado a uma coluna da base MAPAS no cadastro do Refugo.',REFUGO_LIMITE_MAPA_ATINGIDO:'A quantidade disponível deste tipo no mapa já foi toda aferida.',REFUGO_QUANTIDADE_EXCEDE_MAPA:'A quantidade aferida supera o saldo deste tipo no mapa. Atualize a tela e confira o limite.',REFUGO_MOTIVO_INVALIDO:'Um motivo foi inativado. Atualize a tela e tente novamente.',REFUGO_MOTIVOS_INVALIDOS:'Confira as quantidades por motivo.',REFUGO_QUANTIDADE_INVALIDA:'Informe uma quantidade aferida maior que zero.',REFUGO_OBSERVACAO_LONGA:'A observação deve ter até 1.000 caracteres.',REFUGO_CADASTRO_NAO_ENCONTRADO:'Cadastro não encontrado nesta unidade.',REFUGO_ITEM_NAO_ENCONTRADO:'Vasilhame não encontrado. Atualize a tela.',REFUGO_ITEM_EM_ANDAMENTO:'Finalize ou cancele o vasilhame em andamento.',REFUGO_ITEM_FINALIZADO:'Este vasilhame já foi finalizado.',REFUGO_TOTAL_SUPERA_AFERIDO:'A quantidade refugada não pode superar a quantidade aferida.',REFUGO_MAPA_SEM_ITENS:'Registre ao menos um vasilhame antes de finalizar o mapa.',REFUGO_MAPA_FINALIZADO:'Este mapa já foi finalizado.',REFUGO_NOME_INVALIDO:'Informe um nome de 1 a 100 caracteres.'};
   const key=Object.keys(known).find(x=>message.includes(x));
   if(key)return known[key];
   if(error?.code==='23505')return 'Este cadastro ou mapa em andamento já existe.';
-  if(/PGRST205|PGRST202|42P01|42883|relation .*refugo_.* does not exist|function .*refugo_.* does not exist/i.test(message))return 'O módulo Refugo ainda não está disponível no banco. Execute o SQL 48_refugo_afericoes.sql no Supabase.';
+  if(/start_refugo_session_v2|start_refugo_item_v2|save_refugo_catalog_v2|column .*map_field.*does not exist/i.test(message))return 'Execute o SQL 50_refugo_limites_mapas.sql no Supabase para ativar a validação dos mapas.';
+  if(/PGRST205|PGRST202|42P01|42883|relation .*refugo_.* does not exist|function .*refugo_.* does not exist/i.test(message))return 'O módulo Refugo ainda não está disponível no banco. Execute os SQLs 48 a 50 no Supabase.';
   return humanError(error);
 }
 function refugoDuration(start,end){
@@ -10220,6 +10222,19 @@ function refugoDuration(start,end){
   return [Math.floor(seconds/3600),Math.floor(seconds%3600/60),seconds%60].map(n=>String(n).padStart(2,'0')).join(':');
 }
 function refugoCatalogFor(kind,activeOnly=true){return refugoCatalog.filter(row=>row.kind===kind&&(!activeOnly||row.active)).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));}
+function refugoRemaining(mapField,session=refugoCurrentSession,items=refugoItems){
+  if(!session?.map_limits||!mapField)return null;
+  const cap=Number(session.map_limits[mapField]||0);
+  const used=items.filter(item=>item.status==='COMPLETED'&&item.map_field===mapField)
+    .reduce((sum,item)=>sum+Number(item.quantity_checked||0),0);
+  return Math.max(0,cap-used);
+}
+function refugoMapLimitSummary(session){
+  if(!session?.map_limits)return '<div class="notice warning">Este mapa em andamento não tem base MAPAS vinculada. Importe a planilha e inicie uma nova aferição.</div>';
+  const limits=Object.entries(REFUGO_MAP_FIELDS).filter(([field])=>Number(session.map_limits[field]||0)>0)
+    .map(([field,label])=>`${label}: ${Number(session.map_limits[field])} un.`);
+  return `<div class="notice">Base MAPAS${session.map_date?` · ${esc(fmtDate(session.map_date))}`:''} — limites em unidades: ${esc(limits.join(' • ')||'nenhuma quantidade cadastrada')}.</div>`;
+}
 async function refugoFetchAll(makeQuery){
   const rows=[];const size=500;
   for(let from=0;;from+=size){
@@ -10231,7 +10246,7 @@ async function refugoFetchAll(makeQuery){
   return rows;
 }
 async function loadRefugoCatalog(){
-  refugoCatalog=await refugoFetchAll(()=>sb.from('refugo_catalog').select('id,kind,unit,name,active').in('kind',['TYPE','REASON']).order('id'));
+  refugoCatalog=await refugoFetchAll(()=>sb.from('refugo_catalog').select('id,kind,unit,name,active,map_field').in('kind',['TYPE','REASON']).order('id'));
   renderRefugoCatalog();
 }
 async function loadRefugoOpenSessions(){
@@ -10248,7 +10263,7 @@ async function refugoResume(session){
   renderRefugoCurrent();
 }
 function refugoStartHtml(){
-  return `<div class="card refugo-start-card"><div class="list-head"><div><strong>Iniciar aferição do mapa</strong><small>Os dados são salvos no banco por unidade e podem ser retomados.</small></div></div><div class="grid grid-3"><div class="field"><label>Unidade</label><input value="${esc(activeUnit)}" readonly></div><div class="field"><label>Aferido por</label><input value="${esc(profile?.name||'Usuário atual')}" readonly></div><div class="field"><label>Número do mapa *</label><input id="refugoMap" inputmode="numeric" pattern="[0-9]*" maxlength="30" placeholder="Ex.: 122117"></div></div><div class="actions right"><button type="button" class="btn primary" data-refugo-action="start">Iniciar aferição</button></div></div>`;
+  return `<div class="card refugo-start-card"><div class="list-head"><div><strong>Iniciar aferição do mapa</strong><small>O mapa precisa constar na base MAPAS importada da planilha.</small></div></div><div class="grid grid-3"><div class="field"><label>Unidade</label><input value="${esc(activeUnit)}" readonly></div><div class="field"><label>Aferido por</label><input value="${esc(profile?.name||'Usuário atual')}" readonly></div><div class="field"><label>Número do mapa *</label><input id="refugoMap" inputmode="numeric" pattern="[0-9]*" maxlength="30" placeholder="Ex.: 122117"></div></div><div class="actions right"><button type="button" class="btn primary" data-refugo-action="start">Iniciar aferição</button></div></div>`;
 }
 function renderRefugoCurrent(){
   clearInterval(refugoTimer);refugoTimer=null;
@@ -10260,20 +10275,33 @@ function renderRefugoCurrent(){
   const checked=completed.reduce((n,x)=>n+Number(x.quantity_checked||0),0);
   const rejected=completed.reduce((n,x)=>n+Number(x.quantity_rejected||0),0);
   const types=refugoCatalogFor('TYPE'),reasons=refugoCatalogFor('REASON');
-  box.innerHTML=`<div class="card"><div class="refugo-session-head"><div><span class="refugo-kicker">Aferição em andamento</span><h2>Mapa ${esc(session.map_number)}</h2><p>${esc(session.unit)} • Aferido por: ${esc(session.created_by_name)} • Início: ${esc(fmtDateTime(session.started_at))}</p></div><button type="button" class="btn secondary" data-refugo-action="leave">Voltar aos mapas</button></div><div class="refugo-session-stats"><span><b>${completed.length}</b> vasilhame${completed.length===1?'':'s'}</span><span><b>${checked}</b> aferidos</span><span><b>${rejected}</b> refugados</span><span><b>${checked-rejected}</b> aproveitados</span></div></div>
-  <div class="card"><div class="list-head"><div><strong>${running?'Aferindo '+esc(running.type_name):'Novo vasilhame'}</strong><small>${running?'O início já foi salvo. Você pode retomar esta etapa depois.':'Selecione o tipo para iniciar um cronômetro individual.'}</small></div></div>${running?`<div class="refugo-timer"><div><small>Tempo deste vasilhame</small><strong id="refugoClock">${refugoDuration(running.started_at)}</strong><span>Iniciado em ${esc(fmtDateTime(running.started_at))}</span></div><button type="button" class="btn secondary" data-refugo-action="cancel-item">Cancelar este vasilhame</button></div><div class="grid grid-2"><div class="field"><label>Quantidade aferida *</label><input id="refugoQuantity" type="number" min="1" step="1" inputmode="numeric" placeholder="Ex.: 10"></div><div class="field"><label>Observação</label><textarea id="refugoNote" maxlength="1000" placeholder="Opcional"></textarea></div></div><span class="refugo-kicker">Quantidade refugada por motivo</span>${reasons.length?`<div class="refugo-reasons">${reasons.map(r=>`<label class="refugo-reason"><span>${esc(r.name)}</span><input type="number" min="0" step="1" inputmode="numeric" value="0" data-refugo-reason="${esc(r.id)}"></label>`).join('')}</div>`:'<div class="notice">Nenhum motivo cadastrado. Você pode finalizar com zero refugo.</div>'}<div class="refugo-total" id="refugoLiveTotals"></div><div class="actions right"><button type="button" class="btn primary" data-refugo-action="finish-item">Finalizar este vasilhame</button></div>`:`<div class="field"><label>Tipo de vasilhame *</label><select id="refugoType"><option value="">Selecione</option>${types.map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></div>${types.length?'':'<div class="notice">Cadastre ao menos um tipo de vasilhame antes de continuar.</div>'}<div class="actions right"><button type="button" class="btn primary" data-refugo-action="start-item" ${types.length?'':'disabled'}>Iniciar este vasilhame</button></div>`}</div>
+  const availableTypes=session.map_limits?types.filter(type=>type.map_field&&refugoRemaining(type.map_field)>0):[];
+  const runningAvailable=running?refugoRemaining(running.map_field):null;
+  const typeOptions=availableTypes.map(type=>`<option value="${esc(type.id)}">${esc(type.name)}${session.map_limits?` — ${refugoRemaining(type.map_field)} un. disponíveis`:''}</option>`).join('');
+  box.innerHTML=`<div class="card"><div class="refugo-session-head"><div><span class="refugo-kicker">Aferição em andamento</span><h2>Mapa ${esc(session.map_number)}</h2><p>${esc(session.unit)} • Aferido por: ${esc(session.created_by_name)} • Início: ${esc(fmtDateTime(session.started_at))}</p></div><button type="button" class="btn secondary" data-refugo-action="leave">Voltar aos mapas</button></div><div class="refugo-session-stats"><span><b>${completed.length}</b> vasilhame${completed.length===1?'':'s'}</span><span><b>${checked}</b> aferidos</span><span><b>${rejected}</b> refugados</span><span><b>${checked-rejected}</b> aproveitados</span></div>${refugoMapLimitSummary(session)}</div>
+  <div class="card"><div class="list-head"><div><strong>${running?'Aferindo '+esc(running.type_name):'Novo vasilhame'}</strong><small>${running?'O início já foi salvo. Você pode retomar esta etapa depois.':'Selecione o tipo e a quantidade em unidades para iniciar o cronômetro.'}</small></div></div>${running?`<div class="refugo-timer"><div><small>Tempo deste vasilhame</small><strong id="refugoClock">${refugoDuration(running.started_at)}</strong><span>Iniciado em ${esc(fmtDateTime(running.started_at))}</span></div><button type="button" class="btn secondary" data-refugo-action="cancel-item">Cancelar este vasilhame</button></div><div class="grid grid-2"><div class="field"><label>Quantidade aferida *${runningAvailable===null?'':` · disponível: ${runningAvailable} un.`}</label><input id="refugoQuantity" type="number" min="1" ${runningAvailable===null?'':`max="${runningAvailable}"`} step="1" inputmode="numeric" value="${esc(running.planned_quantity??'')}" placeholder="Ex.: 10"></div><div class="field"><label>Observação</label><textarea id="refugoNote" maxlength="1000" placeholder="Opcional"></textarea></div></div><span class="refugo-kicker">Quantidade refugada por motivo</span>${reasons.length?`<div class="refugo-reasons">${reasons.map(r=>`<label class="refugo-reason"><span>${esc(r.name)}</span><input type="number" min="0" step="1" inputmode="numeric" value="0" data-refugo-reason="${esc(r.id)}"></label>`).join('')}</div>`:'<div class="notice">Nenhum motivo cadastrado. Você pode finalizar com zero refugo.</div>'}<div class="refugo-total" id="refugoLiveTotals"></div><div class="actions right"><button type="button" class="btn primary" data-refugo-action="finish-item">Finalizar este vasilhame</button></div>`:`<div class="grid grid-2"><div class="field"><label>Tipo de vasilhame *</label><select id="refugoType"><option value="">Selecione</option>${typeOptions}</select></div><div class="field"><label>Quantidade a aferir (unidades) *</label><input id="refugoStartQuantity" type="number" min="1" step="1" inputmode="numeric" placeholder="Ex.: 10"></div></div><div class="refugo-total" id="refugoStartLimit"></div>${availableTypes.length?'':`<div class="notice">Nenhum tipo com saldo disponível neste mapa. Confira os limites do mapa e a associação dos tipos no cadastro.</div>`}<div class="actions right"><button type="button" class="btn primary" data-refugo-action="start-item" ${availableTypes.length?'':'disabled'}>Iniciar este vasilhame</button></div>`}</div>
   <div class="card"><div class="list-head"><div><strong>Vasilhames registrados</strong><small>Cada passagem fica separada no histórico do mapa.</small></div><span class="counter">${completed.length} item${completed.length===1?'':'s'}</span></div><div class="refugo-item-list">${completed.length?completed.map(x=>`<div class="refugo-item-card"><div><strong>${esc(x.type_name)}</strong><small>${esc(fmtDateTime(x.started_at))} → ${esc(fmtDateTime(x.ended_at))} • ${refugoDuration(x.started_at,x.ended_at)}</small><p>${(x.refugo_item_reasons||[]).map(r=>`${esc(r.reason_name)}: ${Number(r.quantity)}`).join(' • ')||'Sem refugo'}${x.note?` • ${esc(x.note)}`:''}</p></div><span class="refugo-pill">${Number(x.quantity_checked)} aferidos · ${Number(x.quantity_rejected)} refugados</span></div>`).join(''):'<div class="refugo-empty">Nenhum vasilhame concluído neste mapa.</div>'}</div><div class="actions right"><button type="button" class="btn primary" data-refugo-action="complete" ${running||!completed.length?'disabled':''}>Finalizar mapa</button></div></div>`;
   box.querySelector('[data-refugo-action="complete"]')?.insertAdjacentHTML('beforebegin',`<button type="button" class="btn secondary" data-refugo-action="cancel-session" ${running?'disabled':''}>Cancelar mapa</button>`);
+  if(!session.map_limits){const finish=box.querySelector('[data-refugo-action="finish-item"]');if(finish)finish.disabled=true;}
   if(running){
     refugoTimer=setInterval(()=>{const clock=$('refugoClock');if(clock)clock.textContent=refugoDuration(running.started_at);else clearInterval(refugoTimer);},1000);
     refugoUpdateTotals();
-  }
+  }else refugoUpdateStartLimit();
+}
+function refugoUpdateStartLimit(){
+  const el=$('refugoStartLimit');if(!el)return;
+  const type=refugoCatalog.find(row=>row.id===$('refugoType')?.value);
+  const available=type?refugoRemaining(type.map_field):null;
+  const quantity=Number($('refugoStartQuantity')?.value||0);
+  el.innerHTML=available===null?'':`<span>Disponível no mapa: ${available} un.</span>${quantity>available?'<span class="refugo-rejected">Quantidade acima do saldo do mapa</span>':''}`;
 }
 function refugoUpdateTotals(){
   const el=$('refugoLiveTotals');if(!el)return;
   const checked=Number($('refugoQuantity')?.value||0);
   const rejected=[...document.querySelectorAll('[data-refugo-reason]')].reduce((n,input)=>n+Number(input.value||0),0);
-  el.innerHTML=`<span>Aferidos: ${checked}</span><span class="refugo-rejected">Refugados: ${rejected}</span><span>Aproveitados: ${Math.max(0,checked-rejected)}</span>${rejected>checked?'<span class="refugo-rejected">Refugados excedem aferidos</span>':''}`;
+  const running=refugoItems.find(item=>item.status==='RUNNING');
+  const available=running?refugoRemaining(running.map_field):null;
+  el.innerHTML=`<span>Aferidos: ${checked}</span><span class="refugo-rejected">Refugados: ${rejected}</span><span>Aproveitados: ${Math.max(0,checked-rejected)}</span>${available===null?'':`<span>Disponível no mapa: ${available} un.</span>`}${checked>available&&available!==null?'<span class="refugo-rejected">Quantidade acima do saldo do mapa</span>':''}${rejected>checked?'<span class="refugo-rejected">Refugados excedem aferidos</span>':''}`;
 }
 async function refugoRun(work){
   if(refugoBusy)return;
@@ -10288,13 +10316,19 @@ function onRefugoCurrentClick(event){
   if(action==='start')return void refugoRun(async()=>{
     const map=String($('refugoMap')?.value||'').trim();
     if(!/^\d{1,30}$/.test(map))throw new Error('Informe um número de mapa válido.');
-    const session=await refugoRpc('start_refugo_session',{p_unit:activeUnit,p_map_number:map,p_helper_id:null});
+    const session=await refugoRpc('start_refugo_session_v2',{p_unit:activeUnit,p_map_number:map});
     refugoCurrentSession=session;refugoItems=[];renderRefugoCurrent();await loadRefugoOpenSessions();toast('Aferição iniciada.','success');
   });
   if(!refugoCurrentSession)return;
   if(action==='start-item')return void refugoRun(async()=>{
     const type=$('refugoType')?.value;if(!type)throw new Error('Selecione o tipo de vasilhame.');
-    await refugoRpc('start_refugo_item',{p_session_id:refugoCurrentSession.id,p_type_id:type});
+    const quantity=Number($('refugoStartQuantity')?.value);
+    if(!Number.isSafeInteger(quantity)||quantity<=0)throw new Error('Informe a quantidade a aferir, maior que zero.');
+    const typeRow=refugoCatalog.find(row=>row.id===type);
+    if(!typeRow?.map_field)throw new Error('Este tipo precisa ser associado à base MAPAS no cadastro do Refugo.');
+    const available=refugoRemaining(typeRow?.map_field);
+    if(available!==null&&quantity>available)throw new Error(`A quantidade supera o saldo do mapa para ${typeRow.name}. Disponível: ${available} unidade(s).`);
+    await refugoRpc('start_refugo_item_v2',{p_session_id:refugoCurrentSession.id,p_type_id:type,p_quantity_planned:quantity});
     refugoItems=await refugoItemsFor(refugoCurrentSession.id);renderRefugoCurrent();
   });
   if(action==='cancel-item')return void refugoRun(async()=>{
@@ -10306,6 +10340,8 @@ function onRefugoCurrentClick(event){
     const quantity=Number($('refugoQuantity')?.value);
     const inputs=[...document.querySelectorAll('[data-refugo-reason]')];
     if(!Number.isSafeInteger(quantity)||quantity<=0)throw new Error('Informe a quantidade aferida, maior que zero.');
+    const available=refugoRemaining(running.map_field);
+    if(available!==null&&quantity>available)throw new Error(`A quantidade aferida supera o saldo do mapa para ${running.type_name}. Disponível: ${available} unidade(s).`);
     if(inputs.some(input=>!Number.isSafeInteger(Number(input.value))||Number(input.value)<0))throw new Error('As quantidades por motivo devem ser inteiros não negativos.');
     const reasons=inputs.map(input=>({id:input.dataset.refugoReason,quantity:Number(input.value||0)}));
     if(reasons.reduce((n,r)=>n+r.quantity,0)>quantity)throw new Error('O total refugado não pode ser maior que a quantidade aferida.');
@@ -10385,18 +10421,26 @@ function renderRefugoCatalog(){
   const box=$('refugoCatalogRows');if(!box)return;
   box.innerHTML=Object.entries(REFUGO_KIND_LABEL).map(([kind,label])=>{
     const rows=refugoCatalogFor(kind,false);
-    return `<div><h3 class="refugo-catalog-group">${label}</h3>${rows.length?rows.map(row=>`<div class="refugo-catalog-card"><div><strong>${esc(row.name)}</strong><small>Todas as unidades</small></div><div class="refugo-inline-actions"><span class="refugo-pill ${row.active?'':'inactive'}">${row.active?'Ativo':'Inativo'}</span><button type="button" class="mini-btn" data-refugo-edit="${esc(row.id)}">Editar</button></div></div>`).join(''):'<div class="refugo-empty">Nenhum cadastro.</div>'}</div>`;
+    return `<div><h3 class="refugo-catalog-group">${label}</h3>${rows.length?rows.map(row=>`<div class="refugo-catalog-card"><div><strong>${esc(row.name)}</strong><small>${kind==='TYPE'?(row.map_field?`Base MAPAS: ${esc(REFUGO_MAP_FIELDS[row.map_field]||row.map_field)}`:'Associe este tipo à base MAPAS para aferir'):'Todas as unidades'}</small></div><div class="refugo-inline-actions"><span class="refugo-pill ${row.active?'':'inactive'}">${row.active?'Ativo':'Inativo'}</span><button type="button" class="mini-btn" data-refugo-edit="${esc(row.id)}">Editar</button></div></div>`).join(''):'<div class="refugo-empty">Nenhum cadastro.</div>'}</div>`;
   }).join('');
 }
 function refugoClearCatalog(){
-  $('refugoCatalogId').value='';$('refugoCatalogName').value='';$('refugoCatalogActive').value='true';
+  $('refugoCatalogId').value='';$('refugoCatalogName').value='';$('refugoCatalogActive').value='true';$('refugoMapField').value='';
+  refugoToggleMapField();
+}
+function refugoToggleMapField(){
+  const isType=$('refugoCatalogKind').value==='TYPE';
+  $('refugoMapFieldWrap').classList.toggle('hidden',!isType);
+  $('refugoMapField').required=isType;
 }
 async function refugoSaveCatalog(event){
   event.preventDefault();
   return refugoRun(async()=>{
     const kind=$('refugoCatalogKind').value,name=$('refugoCatalogName').value.trim();
     if(!name)throw new Error('Informe o nome.');
-    await refugoRpc('save_refugo_catalog',{p_id:$('refugoCatalogId').value||null,p_kind:kind,p_unit:null,p_name:name,p_active:$('refugoCatalogActive').value==='true'});
+    const field=kind==='TYPE'?$('refugoMapField').value:null;
+    if(kind==='TYPE'&&!field)throw new Error('Associe o tipo de vasilhame a uma coluna da base MAPAS.');
+    await refugoRpc('save_refugo_catalog_v2',{p_id:$('refugoCatalogId').value||null,p_kind:kind,p_name:name,p_active:$('refugoCatalogActive').value==='true',p_map_field:field});
     refugoClearCatalog();await loadRefugoCatalog();toast('Cadastro salvo.','success');
   });
 }
@@ -10404,7 +10448,8 @@ function bindRefugoEvents(){
   if(refugoEventsBound||!$('refugoCurrent'))return;
   refugoEventsBound=true;
   $('refugoCurrent').addEventListener('click',onRefugoCurrentClick);
-  $('refugoCurrent').addEventListener('input',event=>{if(event.target.id==='refugoQuantity'||event.target.hasAttribute('data-refugo-reason'))refugoUpdateTotals();});
+  $('refugoCurrent').addEventListener('input',event=>{if(event.target.id==='refugoQuantity'||event.target.hasAttribute('data-refugo-reason'))refugoUpdateTotals();if(event.target.id==='refugoStartQuantity')refugoUpdateStartLimit();});
+  $('refugoCurrent').addEventListener('change',event=>{if(event.target.id==='refugoType')refugoUpdateStartLimit();});
   $('refugoOpenSessions').addEventListener('click',event=>{const button=event.target.closest('[data-refugo-resume]');if(!button)return;const session=refugoSessions.find(s=>s.id===button.dataset.refugoResume);if(session)void refugoRun(()=>refugoResume(session));});
   $('refugoRefresh').addEventListener('click',()=>void loadRefugoView('refugo-afericao').catch(e=>toast(refugoError(e),'error')));
   $('refugoHistoryRefresh').addEventListener('click',()=>void loadRefugoHistory().catch(e=>toast(refugoError(e),'error')));
@@ -10413,8 +10458,9 @@ function bindRefugoEvents(){
   $('refugoCatalogForm').addEventListener('submit',refugoSaveCatalog);
   $('refugoCatalogClear').addEventListener('click',refugoClearCatalog);
   $('refugoCatalogKind').addEventListener('change',refugoClearCatalog);
+  refugoToggleMapField();
   $('refugoCatalogRefresh').addEventListener('click',()=>void loadRefugoCatalog().catch(e=>toast(refugoError(e),'error')));
-  $('refugoCatalogRows').addEventListener('click',event=>{const button=event.target.closest('[data-refugo-edit]');if(!button)return;const row=refugoCatalog.find(x=>x.id===button.dataset.refugoEdit);if(!row)return;$('refugoCatalogId').value=row.id;$('refugoCatalogKind').value=row.kind;$('refugoCatalogName').value=row.name;$('refugoCatalogActive').value=String(row.active);$('refugoCatalogForm').scrollIntoView({behavior:'smooth',block:'start'});});
+  $('refugoCatalogRows').addEventListener('click',event=>{const button=event.target.closest('[data-refugo-edit]');if(!button)return;const row=refugoCatalog.find(x=>x.id===button.dataset.refugoEdit);if(!row)return;$('refugoCatalogId').value=row.id;$('refugoCatalogKind').value=row.kind;$('refugoCatalogName').value=row.name;$('refugoCatalogActive').value=String(row.active);$('refugoMapField').value=row.map_field||'';refugoToggleMapField();$('refugoCatalogForm').scrollIntoView({behavior:'smooth',block:'start'});});
 }
 
 // V1.7.1 - PUSH_RELIABILITY_FIX4
