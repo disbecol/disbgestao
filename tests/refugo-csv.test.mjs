@@ -30,7 +30,7 @@ test('tempo individual é calculado entre início e fim do item',()=>{
 });
 
 test('CSV de um mapa traz uma linha por vasilhame e colunas de motivos',async()=>{
-  const session={unit:'Matriz Caicó',map_number:'122117',helper_name:'Ana',created_by_name:'João',started_at:'2026-10-05T10:00:00Z',completed_at:'2026-10-05T11:00:00Z'};
+  const session={unit:'Matriz Caicó',map_number:'122117',created_by_name:'João',started_at:'2026-10-05T10:00:00Z',completed_at:'2026-10-05T11:00:00Z'};
   const items=[
     {type_name:'Garrafeira',started_at:'2026-10-05T10:00:00Z',ended_at:'2026-10-05T10:10:00Z',quantity_checked:10,quantity_rejected:3,note:'=SOMA(1;2)',refugo_item_reasons:[{reason_name:'Quebrado',quantity:2},{reason_name:'Trincado',quantity:1}]},
     {type_name:'Barril',started_at:'2026-10-05T10:15:00Z',ended_at:'2026-10-05T10:20:00Z',quantity_checked:5,quantity_rejected:1,note:'Conferido',refugo_item_reasons:[{reason_name:'Quebrado',quantity:1}]}
@@ -39,6 +39,8 @@ test('CSV de um mapa traz uma linha por vasilhame e colunas de motivos',async()=
   assert.equal(exported.name,'refugo_mapa_122117_2026-10-05.csv');
   assert.equal(exported.matrix.length,3);
   const header=exported.matrix[0],first=exported.matrix[1],second=exported.matrix[2];
+  assert.equal(first[header.indexOf('Aferido por')],'João');
+  assert.equal(header.includes('Ajudante'),false);
   assert.equal(first[header.indexOf('Duração')],'00:10:00');
   assert.equal(first[header.indexOf('Quantidade aproveitada')],'7');
   assert.equal(first[header.indexOf('Motivo: Quebrado')],'2');
@@ -65,7 +67,7 @@ test('APK salva o CSV em cache e abre o compartilhamento nativo',async()=>{
   }}};
   try{
     await context.downloadRefugoCsv(
-      {unit:'Matriz Caicó',map_number:'122117',status:'COMPLETED',helper_name:'Ana',created_by_name:'João',started_at:'2026-10-05T10:00:00Z'},
+      {unit:'Matriz Caicó',map_number:'122117',status:'COMPLETED',created_by_name:'João',started_at:'2026-10-05T10:00:00Z'},
       [{type_name:'Barril',started_at:'2026-10-05T10:00:00Z',ended_at:'2026-10-05T10:10:00Z',quantity_checked:5,quantity_rejected:0,note:'Conferido',refugo_item_reasons:[]}]
     );
     assert.equal(written.directory,'CACHE');

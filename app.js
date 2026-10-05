@@ -177,7 +177,7 @@ const viewMeta = {
   'materiais-movimentacoes':['Movimentações de Materiais','Entradas, saídas e ajustes de inventário'],
   'refugo-afericao':['Aferição de Refugo','Mapa, vasilhames e tempo individual'],
   'refugo-historico':['Histórico de Refugo','Consulte e baixe o CSV de cada aferição'],
-  'refugo-cadastros':['Cadastros de Refugo','Tipos, motivos e ajudantes'],
+  'refugo-cadastros':['Cadastros de Refugo','Tipos e motivos'],
   'ativo-giro-contagem':['Ativo de Giro','Contagem diária com adições cumulativas'],
   'ativo-giro-historico':['Histórico de Ativo de Giro','Totais consolidados por contagem'],
   'nri-carretas':['Recebimentos pendentes','Puxada e Marketplace aguardando NRI'],
@@ -206,7 +206,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.17-pull-driver',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.18-refugo-user',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -10204,11 +10204,11 @@ scheduleBindMaterialsV171();
 // Armazem > Refugo: dados persistidos no Supabase; nenhuma planilha externa.
 let refugoCatalog=[],refugoSessions=[],refugoHistory=[],refugoCurrentSession=null,refugoItems=[];
 let refugoTimer=null,refugoBusy=false,refugoEventsBound=false;
-const REFUGO_KIND_LABEL={TYPE:'Tipos de vasilhame',REASON:'Motivos de refugo',HELPER:'Ajudantes'};
+const REFUGO_KIND_LABEL={TYPE:'Tipos de vasilhame',REASON:'Motivos de refugo'};
 
 function refugoError(error){
   const message=String(error?.message||error||'');
-  const known={REFUGO_MAPA_INVALIDO:'Informe um número de mapa válido.',REFUGO_AJUDANTE_INVALIDO:'Selecione um ajudante ativo desta unidade.',REFUGO_TIPO_INVALIDO:'Selecione um tipo de vasilhame ativo.',REFUGO_MOTIVO_INVALIDO:'Um motivo foi inativado. Atualize a tela e tente novamente.',REFUGO_MOTIVOS_INVALIDOS:'Confira as quantidades por motivo.',REFUGO_QUANTIDADE_INVALIDA:'Informe uma quantidade aferida maior que zero.',REFUGO_OBSERVACAO_LONGA:'A observação deve ter até 1.000 caracteres.',REFUGO_CADASTRO_NAO_ENCONTRADO:'Cadastro não encontrado nesta unidade.',REFUGO_ITEM_NAO_ENCONTRADO:'Vasilhame não encontrado. Atualize a tela.',REFUGO_ITEM_EM_ANDAMENTO:'Finalize ou cancele o vasilhame em andamento.',REFUGO_ITEM_FINALIZADO:'Este vasilhame já foi finalizado.',REFUGO_TOTAL_SUPERA_AFERIDO:'A quantidade refugada não pode superar a quantidade aferida.',REFUGO_MAPA_SEM_ITENS:'Registre ao menos um vasilhame antes de finalizar o mapa.',REFUGO_MAPA_FINALIZADO:'Este mapa já foi finalizado.',REFUGO_NOME_INVALIDO:'Informe um nome de 1 a 100 caracteres.'};
+  const known={REFUGO_MAPA_INVALIDO:'Informe um número de mapa válido.',REFUGO_AJUDANTE_INVALIDO:'Execute o SQL 49_refugo_usuario_afericao.sql no Supabase para usar o usuário do sistema.',REFUGO_TIPO_INVALIDO:'Selecione um tipo de vasilhame ativo.',REFUGO_MOTIVO_INVALIDO:'Um motivo foi inativado. Atualize a tela e tente novamente.',REFUGO_MOTIVOS_INVALIDOS:'Confira as quantidades por motivo.',REFUGO_QUANTIDADE_INVALIDA:'Informe uma quantidade aferida maior que zero.',REFUGO_OBSERVACAO_LONGA:'A observação deve ter até 1.000 caracteres.',REFUGO_CADASTRO_NAO_ENCONTRADO:'Cadastro não encontrado nesta unidade.',REFUGO_ITEM_NAO_ENCONTRADO:'Vasilhame não encontrado. Atualize a tela.',REFUGO_ITEM_EM_ANDAMENTO:'Finalize ou cancele o vasilhame em andamento.',REFUGO_ITEM_FINALIZADO:'Este vasilhame já foi finalizado.',REFUGO_TOTAL_SUPERA_AFERIDO:'A quantidade refugada não pode superar a quantidade aferida.',REFUGO_MAPA_SEM_ITENS:'Registre ao menos um vasilhame antes de finalizar o mapa.',REFUGO_MAPA_FINALIZADO:'Este mapa já foi finalizado.',REFUGO_NOME_INVALIDO:'Informe um nome de 1 a 100 caracteres.'};
   const key=Object.keys(known).find(x=>message.includes(x));
   if(key)return known[key];
   if(error?.code==='23505')return 'Este cadastro ou mapa em andamento já existe.';
@@ -10219,7 +10219,7 @@ function refugoDuration(start,end){
   const seconds=Math.max(0,Math.floor((new Date(end||Date.now())-new Date(start))/1000));
   return [Math.floor(seconds/3600),Math.floor(seconds%3600/60),seconds%60].map(n=>String(n).padStart(2,'0')).join(':');
 }
-function refugoCatalogFor(kind,activeOnly=true){return refugoCatalog.filter(row=>row.kind===kind&&(!activeOnly||row.active)&&(kind!=='HELPER'||row.unit===activeUnit)).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));}
+function refugoCatalogFor(kind,activeOnly=true){return refugoCatalog.filter(row=>row.kind===kind&&(!activeOnly||row.active)).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));}
 async function refugoFetchAll(makeQuery){
   const rows=[];const size=500;
   for(let from=0;;from+=size){
@@ -10231,12 +10231,12 @@ async function refugoFetchAll(makeQuery){
   return rows;
 }
 async function loadRefugoCatalog(){
-  refugoCatalog=await refugoFetchAll(()=>sb.from('refugo_catalog').select('id,kind,unit,name,active').order('id'));
+  refugoCatalog=await refugoFetchAll(()=>sb.from('refugo_catalog').select('id,kind,unit,name,active').in('kind',['TYPE','REASON']).order('id'));
   renderRefugoCatalog();
 }
 async function loadRefugoOpenSessions(){
   refugoSessions=await refugoFetchAll(()=>sb.from('refugo_sessions').select('*').eq('unit',activeUnit).eq('status','OPEN').order('started_at',{ascending:false}).order('id',{ascending:false}));
-  $('refugoOpenSessions').innerHTML=refugoSessions.length?refugoSessions.map(s=>`<div class="refugo-open-card"><div><strong>Mapa ${esc(s.map_number)}</strong><small>${esc(s.helper_name)} • ${esc(fmtDateTime(s.started_at))} • ${esc(s.created_by_name)}</small></div><div class="refugo-inline-actions"><button type="button" class="btn secondary" data-refugo-resume="${esc(s.id)}">Retomar</button></div></div>`).join(''):'<div class="refugo-empty">Nenhum mapa em andamento nesta unidade.</div>';
+  $('refugoOpenSessions').innerHTML=refugoSessions.length?refugoSessions.map(s=>`<div class="refugo-open-card"><div><strong>Mapa ${esc(s.map_number)}</strong><small>Aferido por ${esc(s.created_by_name)} • ${esc(fmtDateTime(s.started_at))}</small></div><div class="refugo-inline-actions"><button type="button" class="btn secondary" data-refugo-resume="${esc(s.id)}">Retomar</button></div></div>`).join(''):'<div class="refugo-empty">Nenhum mapa em andamento nesta unidade.</div>';
 }
 async function refugoItemsFor(sessionId){
   return refugoFetchAll(()=>sb.from('refugo_items').select('*,refugo_item_reasons(reason_id,reason_name,quantity)').eq('session_id',sessionId).order('started_at').order('id'));
@@ -10248,8 +10248,7 @@ async function refugoResume(session){
   renderRefugoCurrent();
 }
 function refugoStartHtml(){
-  const helpers=refugoCatalogFor('HELPER');
-  return `<div class="card refugo-start-card"><div class="list-head"><div><strong>Iniciar aferição do mapa</strong><small>Os dados são salvos no banco por unidade e podem ser retomados.</small></div></div><div class="grid grid-3"><div class="field"><label>Unidade</label><input value="${esc(activeUnit)}" readonly></div><div class="field"><label>Ajudante responsável *</label><select id="refugoHelper"><option value="">Selecione</option>${helpers.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('')}</select></div><div class="field"><label>Número do mapa *</label><input id="refugoMap" inputmode="numeric" pattern="[0-9]*" maxlength="30" placeholder="Ex.: 122117"></div></div>${helpers.length?'':`<div class="notice">Cadastre um ajudante para ${esc(activeUnit)} antes de iniciar.</div>`}<div class="actions right"><button type="button" class="btn primary" data-refugo-action="start" ${helpers.length?'':'disabled'}>Iniciar aferição</button></div></div>`;
+  return `<div class="card refugo-start-card"><div class="list-head"><div><strong>Iniciar aferição do mapa</strong><small>Os dados são salvos no banco por unidade e podem ser retomados.</small></div></div><div class="grid grid-3"><div class="field"><label>Unidade</label><input value="${esc(activeUnit)}" readonly></div><div class="field"><label>Aferido por</label><input value="${esc(profile?.name||'Usuário atual')}" readonly></div><div class="field"><label>Número do mapa *</label><input id="refugoMap" inputmode="numeric" pattern="[0-9]*" maxlength="30" placeholder="Ex.: 122117"></div></div><div class="actions right"><button type="button" class="btn primary" data-refugo-action="start">Iniciar aferição</button></div></div>`;
 }
 function renderRefugoCurrent(){
   clearInterval(refugoTimer);refugoTimer=null;
@@ -10261,7 +10260,7 @@ function renderRefugoCurrent(){
   const checked=completed.reduce((n,x)=>n+Number(x.quantity_checked||0),0);
   const rejected=completed.reduce((n,x)=>n+Number(x.quantity_rejected||0),0);
   const types=refugoCatalogFor('TYPE'),reasons=refugoCatalogFor('REASON');
-  box.innerHTML=`<div class="card"><div class="refugo-session-head"><div><span class="refugo-kicker">Aferição em andamento</span><h2>Mapa ${esc(session.map_number)}</h2><p>${esc(session.unit)} • Ajudante: ${esc(session.helper_name)} • Início: ${esc(fmtDateTime(session.started_at))}</p></div><button type="button" class="btn secondary" data-refugo-action="leave">Voltar aos mapas</button></div><div class="refugo-session-stats"><span><b>${completed.length}</b> vasilhame${completed.length===1?'':'s'}</span><span><b>${checked}</b> aferidos</span><span><b>${rejected}</b> refugados</span><span><b>${checked-rejected}</b> aproveitados</span></div></div>
+  box.innerHTML=`<div class="card"><div class="refugo-session-head"><div><span class="refugo-kicker">Aferição em andamento</span><h2>Mapa ${esc(session.map_number)}</h2><p>${esc(session.unit)} • Aferido por: ${esc(session.created_by_name)} • Início: ${esc(fmtDateTime(session.started_at))}</p></div><button type="button" class="btn secondary" data-refugo-action="leave">Voltar aos mapas</button></div><div class="refugo-session-stats"><span><b>${completed.length}</b> vasilhame${completed.length===1?'':'s'}</span><span><b>${checked}</b> aferidos</span><span><b>${rejected}</b> refugados</span><span><b>${checked-rejected}</b> aproveitados</span></div></div>
   <div class="card"><div class="list-head"><div><strong>${running?'Aferindo '+esc(running.type_name):'Novo vasilhame'}</strong><small>${running?'O início já foi salvo. Você pode retomar esta etapa depois.':'Selecione o tipo para iniciar um cronômetro individual.'}</small></div></div>${running?`<div class="refugo-timer"><div><small>Tempo deste vasilhame</small><strong id="refugoClock">${refugoDuration(running.started_at)}</strong><span>Iniciado em ${esc(fmtDateTime(running.started_at))}</span></div><button type="button" class="btn secondary" data-refugo-action="cancel-item">Cancelar este vasilhame</button></div><div class="grid grid-2"><div class="field"><label>Quantidade aferida *</label><input id="refugoQuantity" type="number" min="1" step="1" inputmode="numeric" placeholder="Ex.: 10"></div><div class="field"><label>Observação</label><textarea id="refugoNote" maxlength="1000" placeholder="Opcional"></textarea></div></div><span class="refugo-kicker">Quantidade refugada por motivo</span>${reasons.length?`<div class="refugo-reasons">${reasons.map(r=>`<label class="refugo-reason"><span>${esc(r.name)}</span><input type="number" min="0" step="1" inputmode="numeric" value="0" data-refugo-reason="${esc(r.id)}"></label>`).join('')}</div>`:'<div class="notice">Nenhum motivo cadastrado. Você pode finalizar com zero refugo.</div>'}<div class="refugo-total" id="refugoLiveTotals"></div><div class="actions right"><button type="button" class="btn primary" data-refugo-action="finish-item">Finalizar este vasilhame</button></div>`:`<div class="field"><label>Tipo de vasilhame *</label><select id="refugoType"><option value="">Selecione</option>${types.map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></div>${types.length?'':'<div class="notice">Cadastre ao menos um tipo de vasilhame antes de continuar.</div>'}<div class="actions right"><button type="button" class="btn primary" data-refugo-action="start-item" ${types.length?'':'disabled'}>Iniciar este vasilhame</button></div>`}</div>
   <div class="card"><div class="list-head"><div><strong>Vasilhames registrados</strong><small>Cada passagem fica separada no histórico do mapa.</small></div><span class="counter">${completed.length} item${completed.length===1?'':'s'}</span></div><div class="refugo-item-list">${completed.length?completed.map(x=>`<div class="refugo-item-card"><div><strong>${esc(x.type_name)}</strong><small>${esc(fmtDateTime(x.started_at))} → ${esc(fmtDateTime(x.ended_at))} • ${refugoDuration(x.started_at,x.ended_at)}</small><p>${(x.refugo_item_reasons||[]).map(r=>`${esc(r.reason_name)}: ${Number(r.quantity)}`).join(' • ')||'Sem refugo'}${x.note?` • ${esc(x.note)}`:''}</p></div><span class="refugo-pill">${Number(x.quantity_checked)} aferidos · ${Number(x.quantity_rejected)} refugados</span></div>`).join(''):'<div class="refugo-empty">Nenhum vasilhame concluído neste mapa.</div>'}</div><div class="actions right"><button type="button" class="btn primary" data-refugo-action="complete" ${running||!completed.length?'disabled':''}>Finalizar mapa</button></div></div>`;
   box.querySelector('[data-refugo-action="complete"]')?.insertAdjacentHTML('beforebegin',`<button type="button" class="btn secondary" data-refugo-action="cancel-session" ${running?'disabled':''}>Cancelar mapa</button>`);
@@ -10287,9 +10286,9 @@ function onRefugoCurrentClick(event){
   const action=button.dataset.refugoAction;
   if(action==='leave'){refugoCurrentSession=null;refugoItems=[];renderRefugoCurrent();return;}
   if(action==='start')return void refugoRun(async()=>{
-    const helper=$('refugoHelper')?.value,map=String($('refugoMap')?.value||'').trim();
-    if(!helper||!/^\d{1,30}$/.test(map))throw new Error('Selecione o ajudante e informe um número de mapa válido.');
-    const session=await refugoRpc('start_refugo_session',{p_unit:activeUnit,p_map_number:map,p_helper_id:helper});
+    const map=String($('refugoMap')?.value||'').trim();
+    if(!/^\d{1,30}$/.test(map))throw new Error('Informe um número de mapa válido.');
+    const session=await refugoRpc('start_refugo_session',{p_unit:activeUnit,p_map_number:map,p_helper_id:null});
     refugoCurrentSession=session;refugoItems=[];renderRefugoCurrent();await loadRefugoOpenSessions();toast('Aferição iniciada.','success');
   });
   if(!refugoCurrentSession)return;
@@ -10344,16 +10343,16 @@ async function loadRefugoHistory(){
 function renderRefugoHistory(){
   const tbody=$('refugoHistoryRows');if(!tbody)return;
   const q=norm($('refugoHistorySearch')?.value||'');
-  const rows=refugoHistory.filter(s=>!q||norm(`${s.map_number} ${s.helper_name} ${s.created_by_name}`).includes(q));
-  tbody.innerHTML=rows.length?rows.map(s=>`<tr><td><strong>${esc(s.map_number)}</strong><small>${esc(s.unit)}</small></td><td>${esc(fmtDateTime(s.started_at))}</td><td>${esc(s.helper_name)}</td><td>${esc(s.created_by_name)}</td><td>${s.status==='COMPLETED'?'Finalizada':s.status==='OPEN'?'Em andamento':'Cancelada'}</td><td><div class="refugo-inline-actions"><button type="button" class="mini-btn" data-refugo-view="${esc(s.id)}">Detalhes</button><button type="button" class="mini-btn" data-refugo-csv="${esc(s.id)}">Baixar CSV</button></div></td></tr>`).join(''):'<tr><td colspan="6">Nenhuma aferição encontrada.</td></tr>';
+  const rows=refugoHistory.filter(s=>!q||norm(`${s.map_number} ${s.created_by_name}`).includes(q));
+  tbody.innerHTML=rows.length?rows.map(s=>`<tr><td><strong>${esc(s.map_number)}</strong><small>${esc(s.unit)}</small></td><td>${esc(fmtDateTime(s.started_at))}</td><td>${esc(s.created_by_name)}</td><td>${s.status==='COMPLETED'?'Finalizada':s.status==='OPEN'?'Em andamento':'Cancelada'}</td><td><div class="refugo-inline-actions"><button type="button" class="mini-btn" data-refugo-view="${esc(s.id)}">Detalhes</button><button type="button" class="mini-btn" data-refugo-csv="${esc(s.id)}">Baixar CSV</button></div></td></tr>`).join(''):'<tr><td colspan="5">Nenhuma aferição encontrada.</td></tr>';
 }
 async function openRefugoHistory(session){
   const items=await refugoItemsFor(session.id);
   const completed=items.filter(x=>x.status==='COMPLETED');
   const checked=completed.reduce((n,x)=>n+Number(x.quantity_checked||0),0);
   const rejected=completed.reduce((n,x)=>n+Number(x.quantity_rejected||0),0);
-  const body=`<div class="refugo-history-detail"><div class="refugo-count-summary">${completed.length} vasilhame${completed.length===1?'':'s'} · ${checked} aferidos · ${rejected} refugados · ${checked-rejected} aproveitados</div><div class="detail-grid"><div class="detail-card"><small>Unidade</small><strong>${esc(session.unit)}</strong></div><div class="detail-card"><small>Ajudante</small><strong>${esc(session.helper_name)}</strong></div><div class="detail-card"><small>Início</small><strong>${esc(fmtDateTime(session.started_at))}</strong></div><div class="detail-card"><small>Fim</small><strong>${session.completed_at||session.cancelled_at?esc(fmtDateTime(session.completed_at||session.cancelled_at)):'Em andamento'}</strong></div></div>${completed.map(x=>`<div class="refugo-item-card"><strong>${esc(x.type_name)}</strong><small>${esc(fmtDateTime(x.started_at))} → ${esc(fmtDateTime(x.ended_at))} · ${refugoDuration(x.started_at,x.ended_at)}</small><p>Aferidos: ${Number(x.quantity_checked)} · Refugados: ${Number(x.quantity_rejected)} · Aproveitados: ${Number(x.quantity_checked)-Number(x.quantity_rejected)}</p><p>${(x.refugo_item_reasons||[]).map(r=>`${esc(r.reason_name)}: ${Number(r.quantity)}`).join(' · ')||'Sem refugo'}</p><p>${esc(x.note||'Sem observação')}</p></div>`).join('')||'<div class="refugo-empty">Nenhum vasilhame concluído.</div>'}</div>`;
-  openModal(`Refugo · Mapa ${session.map_number}`,`${session.unit} · ${session.helper_name}`,body,[{label:'Baixar CSV',class:'primary',onClick:()=>void refugoRun(()=>downloadRefugoCsv(session,completed))},{label:'Fechar',class:'secondary',onClick:closeModal}]);
+  const body=`<div class="refugo-history-detail"><div class="refugo-count-summary">${completed.length} vasilhame${completed.length===1?'':'s'} · ${checked} aferidos · ${rejected} refugados · ${checked-rejected} aproveitados</div><div class="detail-grid"><div class="detail-card"><small>Unidade</small><strong>${esc(session.unit)}</strong></div><div class="detail-card"><small>Aferido por</small><strong>${esc(session.created_by_name)}</strong></div><div class="detail-card"><small>Início</small><strong>${esc(fmtDateTime(session.started_at))}</strong></div><div class="detail-card"><small>Fim</small><strong>${session.completed_at||session.cancelled_at?esc(fmtDateTime(session.completed_at||session.cancelled_at)):'Em andamento'}</strong></div></div>${completed.map(x=>`<div class="refugo-item-card"><strong>${esc(x.type_name)}</strong><small>${esc(fmtDateTime(x.started_at))} → ${esc(fmtDateTime(x.ended_at))} · ${refugoDuration(x.started_at,x.ended_at)}</small><p>Aferidos: ${Number(x.quantity_checked)} · Refugados: ${Number(x.quantity_rejected)} · Aproveitados: ${Number(x.quantity_checked)-Number(x.quantity_rejected)}</p><p>${(x.refugo_item_reasons||[]).map(r=>`${esc(r.reason_name)}: ${Number(r.quantity)}`).join(' · ')||'Sem refugo'}</p><p>${esc(x.note||'Sem observação')}</p></div>`).join('')||'<div class="refugo-empty">Nenhum vasilhame concluído.</div>'}</div>`;
+  openModal(`Refugo · Mapa ${session.map_number}`,`${session.unit} · ${session.created_by_name}`,body,[{label:'Baixar CSV',class:'primary',onClick:()=>void refugoRun(()=>downloadRefugoCsv(session,completed))},{label:'Fechar',class:'secondary',onClick:closeModal}]);
 }
 function refugoCsvText(value){const text=String(value??'');return /^[\s\t\r\n]*[=+@-]/.test(text)?`'${text}`:text;}
 async function saveRefugoCsv(name,matrix){
@@ -10375,10 +10374,10 @@ async function saveRefugoCsv(name,matrix){
 }
 async function downloadRefugoCsv(session,items){
   const reasons=[...new Set(items.flatMap(item=>(item.refugo_item_reasons||[]).map(r=>r.reason_name)))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
-  const headers=['Unidade','Mapa','Situação','Ajudante','Registrado por','Início do mapa','Fim do mapa','Tipo de vasilhame','Início do item','Fim do item','Duração','Quantidade aferida','Quantidade refugada','Quantidade aproveitada',...reasons.map(r=>`Motivo: ${r}`),'Observação'];
+  const headers=['Unidade','Mapa','Situação','Aferido por','Início do mapa','Fim do mapa','Tipo de vasilhame','Início do item','Fim do item','Duração','Quantidade aferida','Quantidade refugada','Quantidade aproveitada',...reasons.map(r=>`Motivo: ${r}`),'Observação'];
   const rows=items.map(item=>{
     const byReason=new Map((item.refugo_item_reasons||[]).map(r=>[r.reason_name,Number(r.quantity)]));
-    return [session.unit,session.map_number,session.status,session.helper_name,session.created_by_name,fmtDateTime(session.started_at),session.completed_at||session.cancelled_at?fmtDateTime(session.completed_at||session.cancelled_at):'',item.type_name,fmtDateTime(item.started_at),fmtDateTime(item.ended_at),refugoDuration(item.started_at,item.ended_at),Number(item.quantity_checked),Number(item.quantity_rejected),Number(item.quantity_checked)-Number(item.quantity_rejected),...reasons.map(r=>byReason.get(r)||0),item.note].map(refugoCsvText);
+    return [session.unit,session.map_number,session.status,session.created_by_name,fmtDateTime(session.started_at),session.completed_at||session.cancelled_at?fmtDateTime(session.completed_at||session.cancelled_at):'',item.type_name,fmtDateTime(item.started_at),fmtDateTime(item.ended_at),refugoDuration(item.started_at,item.ended_at),Number(item.quantity_checked),Number(item.quantity_rejected),Number(item.quantity_checked)-Number(item.quantity_rejected),...reasons.map(r=>byReason.get(r)||0),item.note].map(refugoCsvText);
   });
   await saveRefugoCsv(`refugo_mapa_${session.map_number}_${localIsoDate(new Date(session.started_at))}.csv`,[headers.map(refugoCsvText),...rows]);
 }
@@ -10386,7 +10385,7 @@ function renderRefugoCatalog(){
   const box=$('refugoCatalogRows');if(!box)return;
   box.innerHTML=Object.entries(REFUGO_KIND_LABEL).map(([kind,label])=>{
     const rows=refugoCatalogFor(kind,false);
-    return `<div><h3 class="refugo-catalog-group">${label}${kind==='HELPER'?` · ${esc(activeUnit)}`:''}</h3>${rows.length?rows.map(row=>`<div class="refugo-catalog-card"><div><strong>${esc(row.name)}</strong><small>${kind==='HELPER'?esc(row.unit):'Todas as unidades'}</small></div><div class="refugo-inline-actions"><span class="refugo-pill ${row.active?'':'inactive'}">${row.active?'Ativo':'Inativo'}</span><button type="button" class="mini-btn" data-refugo-edit="${esc(row.id)}">Editar</button></div></div>`).join(''):'<div class="refugo-empty">Nenhum cadastro.</div>'}</div>`;
+    return `<div><h3 class="refugo-catalog-group">${label}</h3>${rows.length?rows.map(row=>`<div class="refugo-catalog-card"><div><strong>${esc(row.name)}</strong><small>Todas as unidades</small></div><div class="refugo-inline-actions"><span class="refugo-pill ${row.active?'':'inactive'}">${row.active?'Ativo':'Inativo'}</span><button type="button" class="mini-btn" data-refugo-edit="${esc(row.id)}">Editar</button></div></div>`).join(''):'<div class="refugo-empty">Nenhum cadastro.</div>'}</div>`;
   }).join('');
 }
 function refugoClearCatalog(){
@@ -10397,7 +10396,7 @@ async function refugoSaveCatalog(event){
   return refugoRun(async()=>{
     const kind=$('refugoCatalogKind').value,name=$('refugoCatalogName').value.trim();
     if(!name)throw new Error('Informe o nome.');
-    await refugoRpc('save_refugo_catalog',{p_id:$('refugoCatalogId').value||null,p_kind:kind,p_unit:kind==='HELPER'?activeUnit:null,p_name:name,p_active:$('refugoCatalogActive').value==='true'});
+    await refugoRpc('save_refugo_catalog',{p_id:$('refugoCatalogId').value||null,p_kind:kind,p_unit:null,p_name:name,p_active:$('refugoCatalogActive').value==='true'});
     refugoClearCatalog();await loadRefugoCatalog();toast('Cadastro salvo.','success');
   });
 }
