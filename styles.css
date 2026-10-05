@@ -1198,6 +1198,28 @@ button[data-sales-delivered]:hover{
 .pull-appointment-history{display:grid;gap:9px;margin-top:12px}.pull-appointment-change{padding:12px 14px;border:1px solid #d2e1ef;border-left:3px solid #2b70d8;border-radius:10px;background:#f8fbff}.pull-appointment-change>strong,.pull-appointment-change>span,.pull-appointment-change>small{display:block}.pull-appointment-change>strong{font-size:12px;color:#173c61}.pull-appointment-change>span{margin-top:4px;color:#294d6c;font-size:12px}.pull-appointment-change>small{margin-top:5px;color:#667f99;font-size:10px;line-height:1.45}
 .pull-summary-btn{border-color:#b9d2f6!important;background:#eff6ff!important;color:#1854a3!important;font-weight:800!important}.pull-summary-btn:hover{background:#dfeeff!important}
 .pull-appointment-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:13px 0;padding:14px;border:1px solid #bfd9ee;border-radius:14px;background:#f0f8ff}.pull-appointment-summary>div{min-width:0;padding:10px;border-radius:10px;background:#fff}.pull-appointment-summary small,.pull-appointment-summary strong{display:block}.pull-appointment-summary small{color:#55748e;font-size:9px;font-weight:900;letter-spacing:.04em}.pull-appointment-summary strong{margin-top:5px;color:#174b75;font-size:13px;line-height:1.35}.pull-appointment-summary p{grid-column:1/-1;margin:0;color:#607d97;font-size:10px;line-height:1.45}
+
+/* Puxada no celular: a etapa vem primeiro, com detalhes disponíveis sob demanda. */
+#view-puxada-viagem.pull-trip-in-progress>.page-head{display:none}
+#view-puxada-viagem.pull-trip-in-progress .pull-next-card{margin-top:0}
+.pull-next-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.pull-next-head>small{font-weight:900;color:#1764d9;letter-spacing:.08em}
+.pull-next-head .btn{min-height:36px;padding:7px 11px;font-size:12px;white-space:nowrap}
+.pull-occurrence-buttons .btn.secondary{background:#fff1df;border-color:#f1a952;color:#86400a;box-shadow:0 2px 8px rgba(178,91,17,.09)}
+.pull-occurrence-buttons .btn.secondary:hover:not(:disabled){background:#ffe1b8;border-color:#dd7b18;color:#713305}
+.pull-occurrence-buttons .btn.secondary:focus-visible,.pull-camera-button:focus-visible,.pull-next-head .btn:focus-visible{outline:3px solid #ed981e;outline-offset:2px}
+.pull-occurrence-buttons .btn.secondary:disabled{background:#f6eee5;border-color:#e7d8c9;color:#9b8170;box-shadow:none}
+.pull-driver-details{padding:12px 16px}
+.pull-driver-details>summary{cursor:pointer;color:#245c86;font-weight:800;list-style-position:inside}
+.pull-driver-detail-summary{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-top:14px;padding:14px;border:1px solid #d8e6f2;border-radius:12px;background:#f3f8fc;color:#183f61}
+.pull-driver-detail-summary small,.pull-driver-detail-summary span{display:block}
+.pull-driver-detail-summary h2{margin:5px 0;font-size:20px}
+.pull-driver-details .pull-driver-info{margin:12px 0 0}
+.pull-driver-details .pull-live-time{color:#174b75}
+.pull-camera-button{width:100%;min-height:48px;background:#fff4e6!important;border-color:#efb069!important;color:#8a480c!important}
+.pull-attachment-preview{display:flex;align-items:center;gap:10px;min-height:46px;margin-top:8px;padding:8px 10px;border:1px dashed #cbd9e5;border-radius:10px;color:#667085;font-size:12px}
+.pull-attachment-preview img{width:54px;height:54px;object-fit:cover;border-radius:8px}
+@media(max-width:600px){.pull-next-head .btn{font-size:11px;padding:7px 9px}.pull-driver-detail-summary{display:block}.pull-driver-detail-summary .pull-live-time{text-align:left;margin-top:12px}}
 .pull-detail-extras{margin-top:18px}.pull-detail-extras>.section-title{margin-top:20px}
 .pull-attachment-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(195px,1fr));gap:11px;margin-top:14px}.pull-attachment-grid.empty-state{display:block}
 .pull-attachment-card{overflow:hidden;border:1px solid #d7e4ed;border-radius:12px;background:#fff}.pull-attachment-card>a{display:block;height:160px;background:#eaf1f5}.pull-attachment-card img{display:block;width:100%;height:100%;object-fit:cover}.pull-attachment-card>div{padding:10px}.pull-attachment-card small{color:#778da0;font-size:9px}.pull-attachment-card p{margin:5px 0 0;color:#2b4257;font-size:11px;line-height:1.4;overflow-wrap:anywhere}

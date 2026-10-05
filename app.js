@@ -22,6 +22,7 @@ const PERMISSION_CATALOG = [
   ['Conferência','CONF_CREATE','Realizar conferência'],['Conferência','CONF_OWN_HISTORY','Minhas conferências'],['Conferência','CONF_HISTORY','Histórico completo'],['Conferência','CONF_DASHBOARD','Dashboard'],
   ['Contagem FEFO','FEFO_CREATE','Nova contagem'],['Contagem FEFO','FEFO_ACTIVE','Contagens em andamento'],['Contagem FEFO','FEFO_REPORT','Relatórios'],
   ['Materiais','MATERIAL_INVENTORY','Contagem'],['Materiais','MATERIAL_STOCK_VIEW','Estoque'],['Materiais','MATERIAL_CATALOG','Cadastro de Materiais'],['Materiais','MATERIAL_MOVEMENT','Movimentação do estoque'],
+  ['Refugo','REFUGO_AFERIR','Aferir mapa'],['Refugo','REFUGO_HISTORICO','Histórico / CSV'],['Refugo','REFUGO_CONFIG','Cadastros'],
   ['Puxada','PULL_PLAN','Cadastrar viagens'],['Puxada','PULL_TRIP','Viagem'],['Puxada','PULL_FAROL','Farol de andamento'],['Puxada','PULL_HISTORY','Histórico'],['Puxada','PULL_DASHBOARD','Dashboards'],['Puxada','PULL_GOALS','Metas'],['Puxada','PULL_CONFIG','Configurações'],['Puxada','PULL_TMA_ADJUST','Ajustar TMA'],
   ['Administração','ADMIN_USERS','Usuários e permissões'],['Administração','ADMIN_BASES','Bases / importação']
 ].map(([module,code,name],sort)=>({module,code,name,sort}));
@@ -32,6 +33,7 @@ const MODULE_CATALOG = [
   {name:'Contagem FEFO',icon:'▦',description:'Contagens, andamento e relatórios FEFO.'},
   {name:'Ativo de Giro',icon:'↻',description:'Contagem e histórico do ativo de giro.'},
   {name:'Materiais',icon:'▧',description:'Inventário, estoque, cadastro e movimentações.'},
+  {name:'Refugo',icon:'♻',description:'Aferição por mapa, tempo de vasilhame, motivos e histórico.'},
   {name:'Avarias de Entrega',icon:'!',description:'Registro, acompanhamento e gestão das avarias de entrega.'},
   {name:'Avarias de Vendas',icon:'!',description:'Solicitações, acompanhamento e gestão das avarias de vendas.'},
   {name:'Puxada',icon:'↗',description:'Viagens, farol, histórico, dashboards e configuração.'}
@@ -39,8 +41,8 @@ const MODULE_CATALOG = [
 
 const ROLE_PERMISSION_DEFAULTS = {
   ADMIN:PERMISSION_CATALOG.filter(x=>x.code!=='DAMAGE_NOTIFICATION').map(x=>x.code),
-  COLABORADOR_ARMAZEM:['NRI_PENDING_VIEW','MARKETPLACE_RECEIVE','NRI_CREATE','NRI_PRINT','CONF_CREATE','CONF_OWN_HISTORY','FEFO_CREATE','FEFO_ACTIVE','FEFO_REPORT','MATERIAL_INVENTORY','MATERIAL_STOCK_VIEW','MATERIAL_CATALOG','MATERIAL_MOVEMENT'],
-  CONFERENTE:['NRI_PENDING_VIEW','MARKETPLACE_RECEIVE','NRI_CREATE','NRI_PRINT','CONF_CREATE','CONF_OWN_HISTORY','FEFO_CREATE','FEFO_ACTIVE','FEFO_REPORT','MATERIAL_INVENTORY','MATERIAL_STOCK_VIEW','MATERIAL_CATALOG','MATERIAL_MOVEMENT'],
+  COLABORADOR_ARMAZEM:['NRI_PENDING_VIEW','MARKETPLACE_RECEIVE','NRI_CREATE','NRI_PRINT','CONF_CREATE','CONF_OWN_HISTORY','FEFO_CREATE','FEFO_ACTIVE','FEFO_REPORT','MATERIAL_INVENTORY','MATERIAL_STOCK_VIEW','MATERIAL_CATALOG','MATERIAL_MOVEMENT','REFUGO_AFERIR','REFUGO_HISTORICO'],
+  CONFERENTE:['NRI_PENDING_VIEW','MARKETPLACE_RECEIVE','NRI_CREATE','NRI_PRINT','CONF_CREATE','CONF_OWN_HISTORY','FEFO_CREATE','FEFO_ACTIVE','FEFO_REPORT','MATERIAL_INVENTORY','MATERIAL_STOCK_VIEW','MATERIAL_CATALOG','MATERIAL_MOVEMENT','REFUGO_AFERIR','REFUGO_HISTORICO'],
   COLABORADOR_ENTREGA:['DELIVERY_DAMAGE_CREATE'],
   MOTORISTA_PUXADOR:['PULL_TRIP'],
   VENDEDOR:['SALES_DAMAGE_CREATE','SALES_DAMAGE_VIEW_OWN'],
@@ -173,6 +175,9 @@ const viewMeta = {
   'materiais-estoque':['Estoque de Materiais','Saldos e identificadores por unidade'],
   'materiais-cadastro':['Cadastro de Materiais','Materiais controlados no estoque do armazém'],
   'materiais-movimentacoes':['Movimentações de Materiais','Entradas, saídas e ajustes de inventário'],
+  'refugo-afericao':['Aferição de Refugo','Mapa, vasilhames e tempo individual'],
+  'refugo-historico':['Histórico de Refugo','Consulte e baixe o CSV de cada aferição'],
+  'refugo-cadastros':['Cadastros de Refugo','Tipos, motivos e ajudantes'],
   'ativo-giro-contagem':['Ativo de Giro','Contagem diária com adições cumulativas'],
   'ativo-giro-historico':['Histórico de Ativo de Giro','Totais consolidados por contagem'],
   'nri-carretas':['Recebimentos pendentes','Puxada e Marketplace aguardando NRI'],
@@ -201,13 +206,14 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.14-pull-track-pages',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.16-refugo',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
 async function init(){
 
   bindMaterialsV171();
+  bindRefugoEvents();
   bindBaseEvents();
 
   updateOnlineStatus();
@@ -909,6 +915,7 @@ function moduleNameForPermission(code){
   if(code.startsWith('FEFO_'))return 'Contagem FEFO';
   if(code.startsWith('ROTATING_ASSET_'))return 'Ativo de Giro';
   if(code.startsWith('MATERIAL_'))return 'Materiais';
+  if(code.startsWith('REFUGO_'))return 'Refugo';
   if(code.startsWith('DELIVERY_DAMAGE_'))return 'Avarias de Entrega';
   if(code.startsWith('SALES_DAMAGE_'))return 'Avarias de Vendas';
   if(code.startsWith('PULL_'))return 'Puxada';
@@ -1057,7 +1064,7 @@ async function startApp(){
   if(canRotatingAsset()) { await loadRotatingAssetProducts(true); if(hasPerm('ROTATING_ASSET_CREATE'))await loadRotatingAssetCurrent(true); }
   if(hasAnyPerm('DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST')) loadAdminAvarias(true);
   if(hasAnyPerm('SALES_DAMAGE_VIEW_ALL,SALES_DAMAGE_REVIEW,SALES_DAMAGE_OVERRIDE,SALES_DAMAGE_POST')) loadSalesDamageManage(true);
-  openView('home',true);
+  openView(isPullDriver()?'puxada-viagem':'home',true);
 }
 function isAdmin(){return profile?.role==='ADMIN';}
 function isPullDriver(){return profile?.role==='MOTORISTA_PUXADOR';}
@@ -1080,7 +1087,8 @@ function applyRole(){
   document.querySelectorAll('.puxador-only:not([data-permission])').forEach(x=>x.classList.toggle('hidden',!isPullDriver()&&!hasPerm('PULL_TRIP')));
   document.querySelectorAll('.admin-only:not([data-permission]):not([data-permission-any])').forEach(x=>x.classList.toggle('hidden',!isAdmin()));
   document.querySelectorAll('[data-view="modulos-config"],#view-modulos-config').forEach(x=>x.classList.toggle('hidden',!isAdmin()));
-  if(activeView&&$(`view-${activeView}`)?.classList.contains('hidden'))openView('home',true);
+  document.querySelectorAll('[data-view="home"]').forEach(x=>x.classList.toggle('hidden',isPullDriver()));
+  if(activeView&&$(`view-${activeView}`)?.classList.contains('hidden'))openView(isPullDriver()?'puxada-viagem':'home',true);
 }
 function setNavAreaOpen(area,open){
   if(!area)return;
@@ -1229,6 +1237,7 @@ function onHomeShortcutClick(event){
   homeShortcutsPending=true;renderHome();void syncHomeShortcuts();
 }
 function openView(name,force=false){
+  if(name==='home'&&isPullDriver())name='puxada-viagem';
   const v=$(`view-${name}`); if(!v||v.classList.contains('hidden'))return;
   if(!force&&activeView===name){toggleSidebar(false);return;}
   activeView=name; document.querySelectorAll('.view').forEach(x=>x.classList.remove('active')); v.classList.add('active');
@@ -1255,6 +1264,7 @@ function openView(name,force=false){
   if(name==='fefo-relatorios')loadFefoReports();
   if(name==='ativo-giro-contagem')loadRotatingAssetCurrent();
   if(name==='ativo-giro-historico')loadRotatingAssetHistory();
+  if(name.startsWith('refugo-'))loadRefugoView(name).catch(e=>toast(refugoError(e),'error'));
   if(name==='usuarios')loadUsers();
   if(name==='contatos-clientes')loadCustomerContactAdmin();
   if(name==='bases')renderGeoCustomerResults();
@@ -2863,6 +2873,9 @@ let pullGpsBestSample=null;
 let pullClockTimer=null;
 let pullMapInstances=[];
 let pullMapContexts=new Map();
+let pullAttachmentPreviewUrl=null;
+let pullAttachmentUploading=false;
+let pullRenderedTripId=null;
 
 function bindPullEvents(){
   $('formPullPlan')?.addEventListener('submit',savePullPlan);
@@ -2875,8 +2888,23 @@ function bindPullEvents(){
   $('pullAssignedPlans')?.addEventListener('click',onPullAssignedPlanClick);
   $('pullAssignedRefresh')?.addEventListener('click',()=>loadAssignedPullPlans());
   $('formPullAttachment')?.addEventListener('submit',submitPullAttachment);
+  $('pullAttachmentCamera')?.addEventListener('click',()=>{
+    const input=$('pullAttachmentFile');
+    if(!input)return;
+    input.value='';
+    updatePullAttachmentCaptureUi();
+    input.click();
+  });
+  $('pullAttachmentFile')?.addEventListener('change',updatePullAttachmentCaptureUi);
   $('formPullStart')?.addEventListener('submit',event=>event.preventDefault());
   $('btnPullNextStep')?.addEventListener('click',recordPullNextStep);
+  $('btnPullRefreshSteps')?.addEventListener('click',async()=>{
+    if(!navigator.onLine)return toast('Conecte-se à internet para atualizar as etapas.','error');
+    const button=$('btnPullRefreshSteps');
+    button.disabled=true;button.textContent='Atualizando…';
+    try{if(await loadPullActiveTrip())toast('Etapas atualizadas.','success');}
+    finally{button.disabled=false;button.textContent='↻ Atualizar etapas';}
+  });
   $('pullOccurrenceButtons')?.addEventListener('click',onPullOccurrenceClick);
   $('pullCycleChoice')?.addEventListener('click',onPullCycleChoice);
   $('pullStartSolo')?.addEventListener('change',updatePullSoloChoice);
@@ -3192,6 +3220,23 @@ async function fetchPullTripAttachments(tripId){
     return {...row,url:signed.data?.signedUrl||''};
   }));
 }
+function updatePullAttachmentCaptureUi(){
+  const file=$('pullAttachmentFile')?.files?.[0];
+  const preview=$('pullAttachmentPreview');
+  if(pullAttachmentPreviewUrl){URL.revokeObjectURL(pullAttachmentPreviewUrl);pullAttachmentPreviewUrl=null;}
+  if(preview){
+    preview.replaceChildren();
+    if(file){
+      pullAttachmentPreviewUrl=URL.createObjectURL(file);
+      const image=document.createElement('img');image.src=pullAttachmentPreviewUrl;image.alt='Prévia da foto do ciclo';
+      const label=document.createElement('span');label.textContent='Foto pronta para anexar';
+      preview.append(image,label);
+    }else preview.textContent='Nenhuma foto tirada.';
+  }
+  const full=pullTripAttachments.length>=10;
+  if($('pullAttachmentCamera'))$('pullAttachmentCamera').disabled=full||pullAttachmentUploading;
+  if($('pullAttachmentSave'))$('pullAttachmentSave').disabled=full||!file||pullAttachmentUploading;
+}
 async function loadPullTripAttachments(tripId,boxId='pullAttachmentList',driverView=false){
   const box=$(boxId);if(!box)return;
   if(!navigator.onLine){box.className='pull-attachment-grid empty-state';box.textContent='Conecte-se à internet para consultar as fotos do ciclo.';return;}
@@ -3203,20 +3248,21 @@ async function loadPullTripAttachments(tripId,boxId='pullAttachmentList',driverV
     box.innerHTML=rows.length?rows.map(pullAttachmentCard).join(''):'Nenhuma foto anexada.';
     if(driverView){
       $('pullAttachmentCount').textContent=`${rows.length} / 10`;
-      $('pullAttachmentSave').disabled=rows.length>=10;
       $('formPullAttachment').classList.toggle('hidden',rows.length>=10);
+      updatePullAttachmentCaptureUi();
     }
   }catch(error){box.className='pull-attachment-grid empty-state';box.textContent='Não foi possível carregar as fotos. Confira se o SQL 45 foi aplicado.';console.warn('Fotos do ciclo',error);}
 }
 async function submitPullAttachment(event){
   event.preventDefault();
+  if(pullAttachmentUploading)return;
   const trip=pullActiveTrip,file=$('pullAttachmentFile')?.files?.[0],note=$('pullAttachmentNote')?.value?.trim()||'';
   if(!trip||!file)return;
   if(!navigator.onLine)return toast('Conecte-se à internet para anexar uma foto.','error');
   if(!file.type.startsWith('image/'))return toast('Selecione uma imagem.','error');
   if(pullTripAttachments.length>=10)return toast('Este ciclo já possui 10 fotos.','error');
   if(note.length>500)return toast('A observação deve ter até 500 caracteres.','error');
-  const button=$('pullAttachmentSave');button.disabled=true;button.textContent='Enviando foto…';
+  const button=$('pullAttachmentSave');pullAttachmentUploading=true;updatePullAttachmentCaptureUi();button.textContent='Enviando foto…';
   let path='',uploaded=false;
   try{
     const blob=await compressImage(file,1600,.8);
@@ -3227,12 +3273,13 @@ async function submitPullAttachment(event){
     const saved=await sb.rpc('register_pull_trip_attachment',{p_trip_id:trip.id,p_photo_path:path,p_observation:note});
     if(saved.error)throw saved.error;
     $('formPullAttachment').reset();
+    updatePullAttachmentCaptureUi();
     toast('Foto anexada ao ciclo.','success');
     await loadPullTripAttachments(trip.id,'pullAttachmentList',true);
   }catch(error){
     if(uploaded)await sb.storage.from('puxada-anexos').remove([path]).catch(()=>{});
     toast(humanPullPlanError(error),'error');
-  }finally{button.disabled=pullTripAttachments.length>=10;button.textContent='Anexar foto';}
+  }finally{pullAttachmentUploading=false;updatePullAttachmentCaptureUi();button.textContent='Anexar foto';}
 }
 async function renderPullTripDetailExtras(trip){
   const body=$('modalBody');if(!body)return;
@@ -3283,7 +3330,8 @@ async function loadPullActiveTrip(silent=false){
     }else{pullDriverEvents=[];pullDriverOccurrences=[];}
     renderPullDriver();
     syncPullTracking();
-  }catch(e){if(!silent)toast(humanPullError(e),'error');}
+    return true;
+  }catch(e){if(!silent)toast(humanPullError(e),'error');return false;}
 }
 
 function pullNextStep(){
@@ -3308,10 +3356,16 @@ async function refreshPullGpsTarget(){
 }
 function renderPullDriver(){
   const active=!!pullActiveTrip;
+  if(active&&pullRenderedTripId!==pullActiveTrip.id){
+    if($('pullDriverDetails'))$('pullDriverDetails').open=false;
+    pullRenderedTripId=pullActiveTrip.id;
+  }else if(!active)pullRenderedTripId=null;
+  $('view-puxada-viagem')?.classList.toggle('pull-trip-in-progress',active);
   $('pullDriverStartCard')?.classList.toggle('hidden',active);
   $('pullDriverActive')?.classList.toggle('hidden',!active);
   if(!active){
     stopPullTracking();stopPullClock();
+    $('formPullAttachment')?.reset();updatePullAttachmentCaptureUi();
     if($('pullStartGps')){$('pullStartGps').className='gps-status';$('pullStartGps').textContent=`Tolerância GPS carregada: até ±${pullGpsTarget()} m. A localização será capturada ao iniciar.`;}
     return;
   }
@@ -6289,7 +6343,7 @@ loadPullActiveTrip = async function(silent=false){
       );
     }
 
-    return;
+    return false;
   }
 
   try{
@@ -6387,6 +6441,7 @@ loadPullActiveTrip = async function(silent=false){
     }
 
     await cachePullOfflineSnapshot();
+    return true;
 
   }
   catch(e){
@@ -6412,7 +6467,7 @@ loadPullActiveTrip = async function(silent=false){
         );
       }
 
-      return;
+      return false;
     }
 
     if(!silent){
@@ -6421,6 +6476,7 @@ loadPullActiveTrip = async function(silent=false){
         'error'
       );
     }
+    return false;
   }
 };
 async function pendingPullStepOperation(
@@ -7543,6 +7599,7 @@ function resetUnitScopedState(){
   pendingNris=[];historyNris=[];selectedNris.clear();adminAvarias=[];deliveryDamageMyRequests=[];salesDamageMyRequests=[];salesDamageManageRequests=[];
   fefoActiveCount=null;fefoItems=[];fefoEditingItemId=null;fefoActiveCounts=[];fefoReports=[];fefoItemsByCount.clear();
   rotatingAssetActiveCount=null;rotatingAssetEntries=[];rotatingAssetHistory=[];rotatingAssetEntriesByCount.clear();
+  refugoCurrentSession=null;refugoItems=[];refugoSessions=[];refugoHistory=[];clearInterval(refugoTimer);
   marketplaceActiveReceipt=null;marketplaceDashboardReceipts=[];pullActiveTrip=null;pullDriverEvents=[];pullDriverOccurrences=[];pullHistory=[];
 }
 async function changeActiveUnit(next){
@@ -10148,6 +10205,223 @@ function scheduleBindMaterialsV171(){
   }
 }
 scheduleBindMaterialsV171();
+
+// Armazem > Refugo: dados persistidos no Supabase; nenhuma planilha externa.
+let refugoCatalog=[],refugoSessions=[],refugoHistory=[],refugoCurrentSession=null,refugoItems=[];
+let refugoTimer=null,refugoBusy=false,refugoEventsBound=false;
+const REFUGO_KIND_LABEL={TYPE:'Tipos de vasilhame',REASON:'Motivos de refugo',HELPER:'Ajudantes'};
+
+function refugoError(error){
+  const message=String(error?.message||error||'');
+  const known={REFUGO_MAPA_INVALIDO:'Informe um número de mapa válido.',REFUGO_AJUDANTE_INVALIDO:'Selecione um ajudante ativo desta unidade.',REFUGO_TIPO_INVALIDO:'Selecione um tipo de vasilhame ativo.',REFUGO_MOTIVO_INVALIDO:'Um motivo foi inativado. Atualize a tela e tente novamente.',REFUGO_MOTIVOS_INVALIDOS:'Confira as quantidades por motivo.',REFUGO_QUANTIDADE_INVALIDA:'Informe uma quantidade aferida maior que zero.',REFUGO_OBSERVACAO_LONGA:'A observação deve ter até 1.000 caracteres.',REFUGO_CADASTRO_NAO_ENCONTRADO:'Cadastro não encontrado nesta unidade.',REFUGO_ITEM_NAO_ENCONTRADO:'Vasilhame não encontrado. Atualize a tela.',REFUGO_ITEM_EM_ANDAMENTO:'Finalize ou cancele o vasilhame em andamento.',REFUGO_ITEM_FINALIZADO:'Este vasilhame já foi finalizado.',REFUGO_TOTAL_SUPERA_AFERIDO:'A quantidade refugada não pode superar a quantidade aferida.',REFUGO_MAPA_SEM_ITENS:'Registre ao menos um vasilhame antes de finalizar o mapa.',REFUGO_MAPA_FINALIZADO:'Este mapa já foi finalizado.',REFUGO_NOME_INVALIDO:'Informe um nome de 1 a 100 caracteres.'};
+  const key=Object.keys(known).find(x=>message.includes(x));
+  if(key)return known[key];
+  if(error?.code==='23505')return 'Este cadastro ou mapa em andamento já existe.';
+  if(/PGRST205|PGRST202|42P01|42883|relation .*refugo_.* does not exist|function .*refugo_.* does not exist/i.test(message))return 'O módulo Refugo ainda não está disponível no banco. Execute o SQL 48_refugo_afericoes.sql no Supabase.';
+  return humanError(error);
+}
+function refugoDuration(start,end){
+  const seconds=Math.max(0,Math.floor((new Date(end||Date.now())-new Date(start))/1000));
+  return [Math.floor(seconds/3600),Math.floor(seconds%3600/60),seconds%60].map(n=>String(n).padStart(2,'0')).join(':');
+}
+function refugoCatalogFor(kind,activeOnly=true){return refugoCatalog.filter(row=>row.kind===kind&&(!activeOnly||row.active)&&(kind!=='HELPER'||row.unit===activeUnit)).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));}
+async function refugoFetchAll(makeQuery){
+  const rows=[];const size=500;
+  for(let from=0;;from+=size){
+    const {data,error}=await makeQuery().range(from,from+size-1);
+    if(error)throw error;
+    const page=data||[];rows.push(...page);
+    if(page.length<size)break;
+  }
+  return rows;
+}
+async function loadRefugoCatalog(){
+  refugoCatalog=await refugoFetchAll(()=>sb.from('refugo_catalog').select('id,kind,unit,name,active').order('id'));
+  renderRefugoCatalog();
+}
+async function loadRefugoOpenSessions(){
+  refugoSessions=await refugoFetchAll(()=>sb.from('refugo_sessions').select('*').eq('unit',activeUnit).eq('status','OPEN').order('started_at',{ascending:false}).order('id',{ascending:false}));
+  $('refugoOpenSessions').innerHTML=refugoSessions.length?refugoSessions.map(s=>`<div class="refugo-open-card"><div><strong>Mapa ${esc(s.map_number)}</strong><small>${esc(s.helper_name)} • ${esc(fmtDateTime(s.started_at))} • ${esc(s.created_by_name)}</small></div><div class="refugo-inline-actions"><button type="button" class="btn secondary" data-refugo-resume="${esc(s.id)}">Retomar</button></div></div>`).join(''):'<div class="refugo-empty">Nenhum mapa em andamento nesta unidade.</div>';
+}
+async function refugoItemsFor(sessionId){
+  return refugoFetchAll(()=>sb.from('refugo_items').select('*,refugo_item_reasons(reason_id,reason_name,quantity)').eq('session_id',sessionId).order('started_at').order('id'));
+}
+async function refugoResume(session){
+  if(!session||session.unit!==activeUnit)return;
+  refugoCurrentSession=session;
+  refugoItems=await refugoItemsFor(session.id);
+  renderRefugoCurrent();
+}
+function refugoStartHtml(){
+  const helpers=refugoCatalogFor('HELPER');
+  return `<div class="card refugo-start-card"><div class="list-head"><div><strong>Iniciar aferição do mapa</strong><small>Os dados são salvos no banco por unidade e podem ser retomados.</small></div></div><div class="grid grid-3"><div class="field"><label>Unidade</label><input value="${esc(activeUnit)}" readonly></div><div class="field"><label>Ajudante responsável *</label><select id="refugoHelper"><option value="">Selecione</option>${helpers.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('')}</select></div><div class="field"><label>Número do mapa *</label><input id="refugoMap" inputmode="numeric" pattern="[0-9]*" maxlength="30" placeholder="Ex.: 122117"></div></div>${helpers.length?'':`<div class="notice">Cadastre um ajudante para ${esc(activeUnit)} antes de iniciar.</div>`}<div class="actions right"><button type="button" class="btn primary" data-refugo-action="start" ${helpers.length?'':'disabled'}>Iniciar aferição</button></div></div>`;
+}
+function renderRefugoCurrent(){
+  clearInterval(refugoTimer);refugoTimer=null;
+  const box=$('refugoCurrent');if(!box)return;
+  const session=refugoCurrentSession;
+  if(!session||session.unit!==activeUnit){box.innerHTML=refugoStartHtml();return;}
+  const running=refugoItems.find(x=>x.status==='RUNNING');
+  const completed=refugoItems.filter(x=>x.status==='COMPLETED');
+  const checked=completed.reduce((n,x)=>n+Number(x.quantity_checked||0),0);
+  const rejected=completed.reduce((n,x)=>n+Number(x.quantity_rejected||0),0);
+  const types=refugoCatalogFor('TYPE'),reasons=refugoCatalogFor('REASON');
+  box.innerHTML=`<div class="card"><div class="refugo-session-head"><div><span class="refugo-kicker">Aferição em andamento</span><h2>Mapa ${esc(session.map_number)}</h2><p>${esc(session.unit)} • Ajudante: ${esc(session.helper_name)} • Início: ${esc(fmtDateTime(session.started_at))}</p></div><button type="button" class="btn secondary" data-refugo-action="leave">Voltar aos mapas</button></div><div class="refugo-session-stats"><span><b>${completed.length}</b> vasilhame${completed.length===1?'':'s'}</span><span><b>${checked}</b> aferidos</span><span><b>${rejected}</b> refugados</span><span><b>${checked-rejected}</b> aproveitados</span></div></div>
+  <div class="card"><div class="list-head"><div><strong>${running?'Aferindo '+esc(running.type_name):'Novo vasilhame'}</strong><small>${running?'O início já foi salvo. Você pode retomar esta etapa depois.':'Selecione o tipo para iniciar um cronômetro individual.'}</small></div></div>${running?`<div class="refugo-timer"><div><small>Tempo deste vasilhame</small><strong id="refugoClock">${refugoDuration(running.started_at)}</strong><span>Iniciado em ${esc(fmtDateTime(running.started_at))}</span></div><button type="button" class="btn secondary" data-refugo-action="cancel-item">Cancelar este vasilhame</button></div><div class="grid grid-2"><div class="field"><label>Quantidade aferida *</label><input id="refugoQuantity" type="number" min="1" step="1" inputmode="numeric" placeholder="Ex.: 10"></div><div class="field"><label>Observação</label><textarea id="refugoNote" maxlength="1000" placeholder="Opcional"></textarea></div></div><span class="refugo-kicker">Quantidade refugada por motivo</span>${reasons.length?`<div class="refugo-reasons">${reasons.map(r=>`<label class="refugo-reason"><span>${esc(r.name)}</span><input type="number" min="0" step="1" inputmode="numeric" value="0" data-refugo-reason="${esc(r.id)}"></label>`).join('')}</div>`:'<div class="notice">Nenhum motivo cadastrado. Você pode finalizar com zero refugo.</div>'}<div class="refugo-total" id="refugoLiveTotals"></div><div class="actions right"><button type="button" class="btn primary" data-refugo-action="finish-item">Finalizar este vasilhame</button></div>`:`<div class="field"><label>Tipo de vasilhame *</label><select id="refugoType"><option value="">Selecione</option>${types.map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')}</select></div>${types.length?'':'<div class="notice">Cadastre ao menos um tipo de vasilhame antes de continuar.</div>'}<div class="actions right"><button type="button" class="btn primary" data-refugo-action="start-item" ${types.length?'':'disabled'}>Iniciar este vasilhame</button></div>`}</div>
+  <div class="card"><div class="list-head"><div><strong>Vasilhames registrados</strong><small>Cada passagem fica separada no histórico do mapa.</small></div><span class="counter">${completed.length} item${completed.length===1?'':'s'}</span></div><div class="refugo-item-list">${completed.length?completed.map(x=>`<div class="refugo-item-card"><div><strong>${esc(x.type_name)}</strong><small>${esc(fmtDateTime(x.started_at))} → ${esc(fmtDateTime(x.ended_at))} • ${refugoDuration(x.started_at,x.ended_at)}</small><p>${(x.refugo_item_reasons||[]).map(r=>`${esc(r.reason_name)}: ${Number(r.quantity)}`).join(' • ')||'Sem refugo'}${x.note?` • ${esc(x.note)}`:''}</p></div><span class="refugo-pill">${Number(x.quantity_checked)} aferidos · ${Number(x.quantity_rejected)} refugados</span></div>`).join(''):'<div class="refugo-empty">Nenhum vasilhame concluído neste mapa.</div>'}</div><div class="actions right"><button type="button" class="btn primary" data-refugo-action="complete" ${running||!completed.length?'disabled':''}>Finalizar mapa</button></div></div>`;
+  box.querySelector('[data-refugo-action="complete"]')?.insertAdjacentHTML('beforebegin',`<button type="button" class="btn secondary" data-refugo-action="cancel-session" ${running?'disabled':''}>Cancelar mapa</button>`);
+  if(running){
+    refugoTimer=setInterval(()=>{const clock=$('refugoClock');if(clock)clock.textContent=refugoDuration(running.started_at);else clearInterval(refugoTimer);},1000);
+    refugoUpdateTotals();
+  }
+}
+function refugoUpdateTotals(){
+  const el=$('refugoLiveTotals');if(!el)return;
+  const checked=Number($('refugoQuantity')?.value||0);
+  const rejected=[...document.querySelectorAll('[data-refugo-reason]')].reduce((n,input)=>n+Number(input.value||0),0);
+  el.innerHTML=`<span>Aferidos: ${checked}</span><span class="refugo-rejected">Refugados: ${rejected}</span><span>Aproveitados: ${Math.max(0,checked-rejected)}</span>${rejected>checked?'<span class="refugo-rejected">Refugados excedem aferidos</span>':''}`;
+}
+async function refugoRun(work){
+  if(refugoBusy)return;
+  refugoBusy=true;
+  try{await work();}catch(error){toast(refugoError(error),'error');}finally{refugoBusy=false;}
+}
+async function refugoRpc(name,args){const {data,error}=await sb.rpc(name,args);if(error)throw error;return data;}
+function onRefugoCurrentClick(event){
+  const button=event.target.closest('[data-refugo-action]');if(!button)return;
+  const action=button.dataset.refugoAction;
+  if(action==='leave'){refugoCurrentSession=null;refugoItems=[];renderRefugoCurrent();return;}
+  if(action==='start')return void refugoRun(async()=>{
+    const helper=$('refugoHelper')?.value,map=String($('refugoMap')?.value||'').trim();
+    if(!helper||!/^\d{1,30}$/.test(map))throw new Error('Selecione o ajudante e informe um número de mapa válido.');
+    const session=await refugoRpc('start_refugo_session',{p_unit:activeUnit,p_map_number:map,p_helper_id:helper});
+    refugoCurrentSession=session;refugoItems=[];renderRefugoCurrent();await loadRefugoOpenSessions();toast('Aferição iniciada.','success');
+  });
+  if(!refugoCurrentSession)return;
+  if(action==='start-item')return void refugoRun(async()=>{
+    const type=$('refugoType')?.value;if(!type)throw new Error('Selecione o tipo de vasilhame.');
+    await refugoRpc('start_refugo_item',{p_session_id:refugoCurrentSession.id,p_type_id:type});
+    refugoItems=await refugoItemsFor(refugoCurrentSession.id);renderRefugoCurrent();
+  });
+  if(action==='cancel-item')return void refugoRun(async()=>{
+    const running=refugoItems.find(x=>x.status==='RUNNING');if(!running||!window.confirm('Cancelar a aferição deste vasilhame?'))return;
+    await refugoRpc('cancel_refugo_item',{p_item_id:running.id});refugoItems=await refugoItemsFor(refugoCurrentSession.id);renderRefugoCurrent();
+  });
+  if(action==='finish-item')return void refugoRun(async()=>{
+    const running=refugoItems.find(x=>x.status==='RUNNING');if(!running)return;
+    const quantity=Number($('refugoQuantity')?.value);
+    const inputs=[...document.querySelectorAll('[data-refugo-reason]')];
+    if(!Number.isSafeInteger(quantity)||quantity<=0)throw new Error('Informe a quantidade aferida, maior que zero.');
+    if(inputs.some(input=>!Number.isSafeInteger(Number(input.value))||Number(input.value)<0))throw new Error('As quantidades por motivo devem ser inteiros não negativos.');
+    const reasons=inputs.map(input=>({id:input.dataset.refugoReason,quantity:Number(input.value||0)}));
+    if(reasons.reduce((n,r)=>n+r.quantity,0)>quantity)throw new Error('O total refugado não pode ser maior que a quantidade aferida.');
+    await refugoRpc('finish_refugo_item',{p_item_id:running.id,p_quantity_checked:quantity,p_note:$('refugoNote')?.value||'',p_reasons:reasons});
+    refugoItems=await refugoItemsFor(refugoCurrentSession.id);renderRefugoCurrent();toast('Vasilhame salvo.','success');
+  });
+  if(action==='complete')return void refugoRun(async()=>{
+    if(!window.confirm(`Finalizar o mapa ${refugoCurrentSession.map_number}?`))return;
+    const session=await refugoRpc('complete_refugo_session',{p_session_id:refugoCurrentSession.id});
+    refugoCurrentSession=null;refugoItems=[];renderRefugoCurrent();await loadRefugoOpenSessions();
+    if(hasPerm('REFUGO_HISTORICO')){await loadRefugoHistory();await openRefugoHistory(session);}
+    toast('Mapa finalizado. O CSV está disponível no histórico.','success');
+  });
+  if(action==='cancel-session')return void refugoRun(async()=>{
+    if(!window.confirm(`Cancelar o mapa ${refugoCurrentSession.map_number}? Os vasilhames já salvos permanecerão no histórico.`))return;
+    await refugoRpc('cancel_refugo_session',{p_session_id:refugoCurrentSession.id});
+    refugoCurrentSession=null;refugoItems=[];renderRefugoCurrent();await loadRefugoOpenSessions();toast('Mapa cancelado.','success');
+  });
+}
+async function loadRefugoView(name){
+  if(!sb||!activeUnit)return;
+  if(name==='refugo-afericao'){
+    await loadRefugoCatalog();
+    await loadRefugoOpenSessions();
+    if(refugoCurrentSession?.unit===activeUnit){refugoItems=await refugoItemsFor(refugoCurrentSession.id);renderRefugoCurrent();}
+    else renderRefugoCurrent();
+  }
+  if(name==='refugo-historico')await loadRefugoHistory();
+  if(name==='refugo-cadastros'){await loadRefugoCatalog();renderRefugoCatalog();}
+}
+async function loadRefugoHistory(){
+  refugoHistory=await refugoFetchAll(()=>sb.from('refugo_sessions').select('*').eq('unit',activeUnit).order('started_at',{ascending:false}).order('id',{ascending:false}));
+  renderRefugoHistory();
+}
+function renderRefugoHistory(){
+  const tbody=$('refugoHistoryRows');if(!tbody)return;
+  const q=norm($('refugoHistorySearch')?.value||'');
+  const rows=refugoHistory.filter(s=>!q||norm(`${s.map_number} ${s.helper_name} ${s.created_by_name}`).includes(q));
+  tbody.innerHTML=rows.length?rows.map(s=>`<tr><td><strong>${esc(s.map_number)}</strong><small>${esc(s.unit)}</small></td><td>${esc(fmtDateTime(s.started_at))}</td><td>${esc(s.helper_name)}</td><td>${esc(s.created_by_name)}</td><td>${s.status==='COMPLETED'?'Finalizada':s.status==='OPEN'?'Em andamento':'Cancelada'}</td><td><div class="refugo-inline-actions"><button type="button" class="mini-btn" data-refugo-view="${esc(s.id)}">Detalhes</button><button type="button" class="mini-btn" data-refugo-csv="${esc(s.id)}">Baixar CSV</button></div></td></tr>`).join(''):'<tr><td colspan="6">Nenhuma aferição encontrada.</td></tr>';
+}
+async function openRefugoHistory(session){
+  const items=await refugoItemsFor(session.id);
+  const completed=items.filter(x=>x.status==='COMPLETED');
+  const checked=completed.reduce((n,x)=>n+Number(x.quantity_checked||0),0);
+  const rejected=completed.reduce((n,x)=>n+Number(x.quantity_rejected||0),0);
+  const body=`<div class="refugo-history-detail"><div class="refugo-count-summary">${completed.length} vasilhame${completed.length===1?'':'s'} · ${checked} aferidos · ${rejected} refugados · ${checked-rejected} aproveitados</div><div class="detail-grid"><div class="detail-card"><small>Unidade</small><strong>${esc(session.unit)}</strong></div><div class="detail-card"><small>Ajudante</small><strong>${esc(session.helper_name)}</strong></div><div class="detail-card"><small>Início</small><strong>${esc(fmtDateTime(session.started_at))}</strong></div><div class="detail-card"><small>Fim</small><strong>${session.completed_at||session.cancelled_at?esc(fmtDateTime(session.completed_at||session.cancelled_at)):'Em andamento'}</strong></div></div>${completed.map(x=>`<div class="refugo-item-card"><strong>${esc(x.type_name)}</strong><small>${esc(fmtDateTime(x.started_at))} → ${esc(fmtDateTime(x.ended_at))} · ${refugoDuration(x.started_at,x.ended_at)}</small><p>Aferidos: ${Number(x.quantity_checked)} · Refugados: ${Number(x.quantity_rejected)} · Aproveitados: ${Number(x.quantity_checked)-Number(x.quantity_rejected)}</p><p>${(x.refugo_item_reasons||[]).map(r=>`${esc(r.reason_name)}: ${Number(r.quantity)}`).join(' · ')||'Sem refugo'}</p><p>${esc(x.note||'Sem observação')}</p></div>`).join('')||'<div class="refugo-empty">Nenhum vasilhame concluído.</div>'}</div>`;
+  openModal(`Refugo · Mapa ${session.map_number}`,`${session.unit} · ${session.helper_name}`,body,[{label:'Baixar CSV',class:'primary',onClick:()=>void refugoRun(()=>downloadRefugoCsv(session,completed))},{label:'Fechar',class:'secondary',onClick:closeModal}]);
+}
+function refugoCsvText(value){const text=String(value??'');return /^[\s\t\r\n]*[=+@-]/.test(text)?`'${text}`:text;}
+async function saveRefugoCsv(name,matrix){
+  if(!isNativeCapacitor()){downloadCsv(name,matrix);return;}
+  const cap=window.Capacitor;
+  const files=cap.Plugins?.Filesystem||cap.registerPlugin?.('Filesystem');
+  const share=cap.Plugins?.Share||cap.registerPlugin?.('Share');
+  if(!files||!share)throw new Error('Atualize o APK para salvar ou compartilhar o CSV.');
+  const csv='\uFEFF'+matrix.map(row=>row.map(value=>`"${String(value??'').replace(/"/g,'""')}"`).join(';')).join('\r\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const data=await new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(String(reader.result||'').split(',')[1]||'');
+    reader.onerror=()=>reject(new Error('Não foi possível preparar o CSV para salvar.'));
+    reader.readAsDataURL(blob);
+  });
+  const saved=await files.writeFile({path:name,data,directory:'CACHE'});
+  await share.share({title:`Aferição de Refugo ${name}`,url:saved.uri,dialogTitle:'Salvar ou compartilhar CSV'});
+}
+async function downloadRefugoCsv(session,items){
+  const reasons=[...new Set(items.flatMap(item=>(item.refugo_item_reasons||[]).map(r=>r.reason_name)))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const headers=['Unidade','Mapa','Situação','Ajudante','Registrado por','Início do mapa','Fim do mapa','Tipo de vasilhame','Início do item','Fim do item','Duração','Quantidade aferida','Quantidade refugada','Quantidade aproveitada',...reasons.map(r=>`Motivo: ${r}`),'Observação'];
+  const rows=items.map(item=>{
+    const byReason=new Map((item.refugo_item_reasons||[]).map(r=>[r.reason_name,Number(r.quantity)]));
+    return [session.unit,session.map_number,session.status,session.helper_name,session.created_by_name,fmtDateTime(session.started_at),session.completed_at||session.cancelled_at?fmtDateTime(session.completed_at||session.cancelled_at):'',item.type_name,fmtDateTime(item.started_at),fmtDateTime(item.ended_at),refugoDuration(item.started_at,item.ended_at),Number(item.quantity_checked),Number(item.quantity_rejected),Number(item.quantity_checked)-Number(item.quantity_rejected),...reasons.map(r=>byReason.get(r)||0),item.note].map(refugoCsvText);
+  });
+  await saveRefugoCsv(`refugo_mapa_${session.map_number}_${localIsoDate(new Date(session.started_at))}.csv`,[headers.map(refugoCsvText),...rows]);
+}
+function renderRefugoCatalog(){
+  const box=$('refugoCatalogRows');if(!box)return;
+  box.innerHTML=Object.entries(REFUGO_KIND_LABEL).map(([kind,label])=>{
+    const rows=refugoCatalogFor(kind,false);
+    return `<div><h3 class="refugo-catalog-group">${label}${kind==='HELPER'?` · ${esc(activeUnit)}`:''}</h3>${rows.length?rows.map(row=>`<div class="refugo-catalog-card"><div><strong>${esc(row.name)}</strong><small>${kind==='HELPER'?esc(row.unit):'Todas as unidades'}</small></div><div class="refugo-inline-actions"><span class="refugo-pill ${row.active?'':'inactive'}">${row.active?'Ativo':'Inativo'}</span><button type="button" class="mini-btn" data-refugo-edit="${esc(row.id)}">Editar</button></div></div>`).join(''):'<div class="refugo-empty">Nenhum cadastro.</div>'}</div>`;
+  }).join('');
+}
+function refugoClearCatalog(){
+  $('refugoCatalogId').value='';$('refugoCatalogName').value='';$('refugoCatalogActive').value='true';
+}
+async function refugoSaveCatalog(event){
+  event.preventDefault();
+  return refugoRun(async()=>{
+    const kind=$('refugoCatalogKind').value,name=$('refugoCatalogName').value.trim();
+    if(!name)throw new Error('Informe o nome.');
+    await refugoRpc('save_refugo_catalog',{p_id:$('refugoCatalogId').value||null,p_kind:kind,p_unit:kind==='HELPER'?activeUnit:null,p_name:name,p_active:$('refugoCatalogActive').value==='true'});
+    refugoClearCatalog();await loadRefugoCatalog();toast('Cadastro salvo.','success');
+  });
+}
+function bindRefugoEvents(){
+  if(refugoEventsBound||!$('refugoCurrent'))return;
+  refugoEventsBound=true;
+  $('refugoCurrent').addEventListener('click',onRefugoCurrentClick);
+  $('refugoCurrent').addEventListener('input',event=>{if(event.target.id==='refugoQuantity'||event.target.hasAttribute('data-refugo-reason'))refugoUpdateTotals();});
+  $('refugoOpenSessions').addEventListener('click',event=>{const button=event.target.closest('[data-refugo-resume]');if(!button)return;const session=refugoSessions.find(s=>s.id===button.dataset.refugoResume);if(session)void refugoRun(()=>refugoResume(session));});
+  $('refugoRefresh').addEventListener('click',()=>void loadRefugoView('refugo-afericao').catch(e=>toast(refugoError(e),'error')));
+  $('refugoHistoryRefresh').addEventListener('click',()=>void loadRefugoHistory().catch(e=>toast(refugoError(e),'error')));
+  $('refugoHistorySearch').addEventListener('input',renderRefugoHistory);
+  $('refugoHistoryRows').addEventListener('click',event=>{const view=event.target.closest('[data-refugo-view]'),csv=event.target.closest('[data-refugo-csv]');const id=view?.dataset.refugoView||csv?.dataset.refugoCsv;if(!id)return;const session=refugoHistory.find(s=>s.id===id);if(!session)return;void refugoRun(async()=>{if(view)await openRefugoHistory(session);else await downloadRefugoCsv(session,(await refugoItemsFor(id)).filter(x=>x.status==='COMPLETED'));});});
+  $('refugoCatalogForm').addEventListener('submit',refugoSaveCatalog);
+  $('refugoCatalogClear').addEventListener('click',refugoClearCatalog);
+  $('refugoCatalogKind').addEventListener('change',refugoClearCatalog);
+  $('refugoCatalogRefresh').addEventListener('click',()=>void loadRefugoCatalog().catch(e=>toast(refugoError(e),'error')));
+  $('refugoCatalogRows').addEventListener('click',event=>{const button=event.target.closest('[data-refugo-edit]');if(!button)return;const row=refugoCatalog.find(x=>x.id===button.dataset.refugoEdit);if(!row)return;$('refugoCatalogId').value=row.id;$('refugoCatalogKind').value=row.kind;$('refugoCatalogName').value=row.name;$('refugoCatalogActive').value=String(row.active);$('refugoCatalogForm').scrollIntoView({behavior:'smooth',block:'start'});});
+}
 
 // V1.7.1 - PUSH_RELIABILITY_FIX4
 let pushRepairPromiseV171=null;

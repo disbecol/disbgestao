@@ -50,16 +50,16 @@ const gradleGroovy = path.join(root, 'android', 'app', 'build.gradle');
 const gradleKts = path.join(root, 'android', 'app', 'build.gradle.kts');
 if (fs.existsSync(gradleGroovy)) {
   let g = fs.readFileSync(gradleGroovy, 'utf8');
-  g = g.replace(/versionCode\s+\d+/, 'versionCode 184');
-  g = g.replace(/versionName\s+["'][^"']+["']/, 'versionName "1.7.14"');
+  g = g.replace(/versionCode\s+\d+/, 'versionCode 186');
+  g = g.replace(/versionName\s+["'][^"']+["']/, 'versionName "1.7.16"');
   fs.writeFileSync(gradleGroovy, g, 'utf8');
-  console.log('Versao Android OK: versionCode 184 / versionName 1.7.14.');
+  console.log('Versao Android OK: versionCode 186 / versionName 1.7.16.');
 } else if (fs.existsSync(gradleKts)) {
   let g = fs.readFileSync(gradleKts, 'utf8');
-  g = g.replace(/versionCode\s*=\s*\d+/, 'versionCode = 184');
-  g = g.replace(/versionName\s*=\s*["'][^"']+["']/, 'versionName = "1.7.14"');
+  g = g.replace(/versionCode\s*=\s*\d+/, 'versionCode = 186');
+  g = g.replace(/versionName\s*=\s*["'][^"']+["']/, 'versionName = "1.7.16"');
   fs.writeFileSync(gradleKts, g, 'utf8');
-  console.log('Versao Android OK: versionCode 184 / versionName 1.7.14.');
+  console.log('Versao Android OK: versionCode 186 / versionName 1.7.16.');
 }
 
 /* DISB_FCM_BUILD_FLAG_V170
