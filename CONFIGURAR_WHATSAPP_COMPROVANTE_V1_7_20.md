@@ -9,13 +9,28 @@ mantém o procedimento anterior enquanto a integração é ativada.
 ## 1. Preservar o WhatsApp Business no celular
 
 O número (84) 99801-6062 precisa continuar ativo no aplicativo WhatsApp Business.
-Portanto, peça a configuração de **WhatsApp Business App Coexistence** no fluxo
-de onboarding da Meta ou de um provedor oficial que ofereça esse recurso. Antes
-de confirmar o cadastro, verifique que a tela do fluxo diz explicitamente que
-o mesmo número permanecerá no aplicativo e na Cloud API. Não faça uma migração
-comum do número para a API.
+A página de [Coexistência da Meta](https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/onboarding-business-app-users)
+é documentação **para Parceiros de Soluções e Provedores de Tecnologia**; ela
+não oferece um cadastro direto para a empresa. Para usar o mesmo número no app
+e na Cloud API, contrate ou utilize um parceiro que ofereça explicitamente o
+fluxo **WhatsApp Business App Coexistence**. A Meta exige que esse parceiro
+configure o Cadastro Incorporado com a opção de conectar a conta existente,
+webhooks e registro de sessão.
 
-Referência da Meta: [Onboarding de usuários do WhatsApp Business App](https://developers.facebook.com/docs/whatsapp/embedded-signup/custom-flows/onboarding-business-app-users/).
+Antes de contratar, confirme com o parceiro:
+
+1. O número continuará funcionando no aplicativo WhatsApp Business do celular?
+2. O fluxo exibirá a opção de conectar a conta existente do app?
+3. O parceiro fornecerá acesso à **Cloud API da Meta**, incluindo Phone Number ID
+   e possibilidade de gerar um token para o sistema Disb Gestão? Se ele oferecer
+   apenas uma API própria, esta integração precisará ser adaptada.
+4. Quem cuidará dos webhooks exigidos para a coexistência e da sincronização
+   inicial? Quais são as taxas do parceiro e da Meta?
+
+Use [Encontrar um parceiro, no site oficial do WhatsApp Business](https://business.facebook.com/messaging/partner-showcase/)
+para iniciar a busca. Antes de confirmar a conexão, verifique que a tela diz
+que o mesmo número permanecerá no aplicativo e na Cloud API. Não faça uma
+migração comum do número para a API.
 
 Ao concluir, obtenha o **Phone Number ID** desse número e um token com permissão
 `whatsapp_business_messaging`. Confira no WhatsApp Manager que o número vinculado
