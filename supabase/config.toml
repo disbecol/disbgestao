@@ -2,3 +2,6 @@ project_id = "jrsjbcdahqpcgcvzdtfb"
 
 [functions.admin-users]
 verify_jwt = false
+
+[functions.send-damage-receipt]
+verify_jwt = true

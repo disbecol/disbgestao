@@ -206,7 +206,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.19-refugo-map',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.20-whatsapp',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -5335,12 +5335,38 @@ function openWhatsappReceipt(phone,ctx){
   const url=whatsappReceiptUrl(phone,ctx);if(!url)return toast('Número de WhatsApp inválido. Informe DDD + telefone.','error');
   const opened=window.open(url,'_blank');if(!opened)window.location.href=url;
 }
-function openAllWhatsappReceipts(contacts,ctx){
-  const phones=[...new Set((contacts||[]).map(x=>normalizeWhatsappPhone(x.phone_normalized)).filter(Boolean))];
-  if(!phones.length)return toast('Nenhum WhatsApp válido cadastrado para este cliente.','error');
-  if(phones.length===1)return openWhatsappReceipt(phones[0],ctx);
-  if(!confirm(`Abrir o comprovante para ${phones.length} contatos? O WhatsApp solicitará a confirmação de cada envio.`))return;
-  phones.forEach((phone,i)=>setTimeout(()=>{const url=whatsappReceiptUrl(phone,ctx);if(url)window.open(url,'_blank');},i*450));
+function damageReceiptSendError(e){
+  const code=String(e?.code||e?.message||'');
+  if(/FunctionsFetchError|Failed to send a request to the Edge Function|Function not found/i.test(code))return 'O serviço de envio da empresa ainda não está disponível. Solicite a ativação ao administrador.';
+  const map={WHATSAPP_NOT_CONFIGURED:'O WhatsApp da empresa ainda não foi configurado. Solicite a ativação ao administrador.',RECEIPT_NOT_FOUND:'Não foi possível localizar esta avaria. Atualize os dados e tente novamente.',CONTACT_NOT_FOUND:'Este contato não pertence ao cliente da avaria.',RECEIPT_TOO_LONG:'O comprovante excede o limite do modelo do WhatsApp. Solicite ajuda ao administrador.',SEND_IN_PROGRESS:'O envio já está em processamento. Aguarde e consulte o histórico.',SEND_STATUS_UNKNOWN:'Não foi possível confirmar o envio anterior. Solicite verificação antes de reenviar.',META_SEND_FAILED:'O WhatsApp da empresa recusou o envio. Solicite verificação ao administrador.',SEND_LOG_FAILED:'Não foi possível registrar o envio. Tente novamente.',UNAUTHORIZED:'Sua sessão expirou. Entre novamente.'};
+  const key=Object.keys(map).find(k=>code.includes(k));return key?map[key]:humanError(e);
+}
+async function sendDeliveryDamageReceipt(contact,ctx,button){
+  if(!ctx.request_id)throw new Error('A avaria ainda não foi sincronizada. Aguarde a conexão.');
+  if(!navigator.onLine)throw new Error('Conecte-se à internet para enviar pelo WhatsApp da empresa.');
+  if(button){button.disabled=true;button.textContent='Enviando…';}
+  try{
+    const {data:{session},error:sessionError}=await sb.auth.getSession();
+    if(sessionError||!session?.access_token)throw new Error('UNAUTHORIZED');
+    const {data,error}=await sb.functions.invoke('send-damage-receipt',{body:{request_id:ctx.request_id,contact_id:contact.id},headers:{Authorization:`Bearer ${session.access_token}`}});
+    if(error){let detail=null;try{detail=await error.context?.json();}catch(_e){}throw new Error(detail?.error||error.message||'META_SEND_FAILED');}
+    if(data?.error)throw new Error(data.error);
+    if(!data?.accepted)throw new Error('META_SEND_FAILED');
+    if(button){button.textContent=data.already_sent?'Aceito anteriormente':'Aceito pelo WhatsApp';button.dataset.receiptAccepted='1';}
+    return data;
+  }catch(e){if(button){button.disabled=false;button.textContent='Enviar comprovante';}throw e;}
+}
+async function sendAllDeliveryDamageReceipts(contacts,ctx,button){
+  if(button){button.disabled=true;button.textContent='Enviando…';}
+  let accepted=0;const errors=[];
+  for(const contact of contacts){
+    const contactButton=$('modalBody')?.querySelector(`[data-send-receipt-contact="${contact.id}"]`);
+    if(contactButton?.dataset.receiptAccepted==='1'){accepted++;continue;}
+    try{await sendDeliveryDamageReceipt(contact,ctx,contactButton);accepted++;}catch(e){errors.push(`${contact.label||formatWhatsappPhone(contact.phone_normalized)}: ${damageReceiptSendError(e)}`);}
+  }
+  if(button){button.disabled=false;button.textContent=`Enviar para todos os ${contacts.length} contatos`;}
+  if(accepted)toast(`${accepted} de ${contacts.length} comprovante(s) aceito(s) pelo WhatsApp da empresa.`,'success');
+  if(errors.length)toast(errors.join(' | '),'error');
 }
 async function saveCustomerContactForReceipt(ctx,phone,label=''){
   const normalized=normalizeWhatsappPhone(phone);if(!normalized)return toast('Informe um telefone válido com DDD.','error');
@@ -5355,12 +5381,13 @@ async function openDeliveryDamageReceipt(ctx){
   let contacts=[];let contactError='';
   try{contacts=await getCustomerContacts(ctx.customer.id,ctx.customer.code);}catch(e){contactError=humanCustomerContactError(e);}
   const last=contacts.reduce((max,x)=>!max||String(x.updated_at)>String(max)?x.updated_at:max,'');
-  const contactHtml=contacts.length?contacts.map((c,i)=>`<div class="receipt-contact-row"><div><strong>${esc(c.label||`Contato ${i+1}`)}</strong><span>${esc(formatWhatsappPhone(c.phone_normalized))}</span></div><button type="button" class="btn whatsapp-btn" data-send-receipt-phone="${esc(c.phone_normalized)}">Enviar comprovante</button></div>`).join(''):`<div class="empty-state">Nenhum WhatsApp cadastrado para este cliente.</div>`;
-  const sendAll=contacts.length>1?`<div class="receipt-send-all"><button type="button" id="btnDeliveryReceiptSendAll" class="btn whatsapp-btn">Enviar para todos os ${contacts.length} contatos</button><small>O WhatsApp abre cada conversa com o comprovante preenchido; confirme o envio em cada contato.</small></div>`:'';
+  const contactHtml=contacts.length?contacts.map((c,i)=>`<div class="receipt-contact-row"><div><strong>${esc(c.label||`Contato ${i+1}`)}</strong><span>${esc(formatWhatsappPhone(c.phone_normalized))}</span></div><button type="button" class="btn whatsapp-btn" data-send-receipt-contact="${esc(c.id)}">Enviar comprovante</button><button type="button" class="btn secondary" data-manual-receipt-phone="${esc(c.phone_normalized)}">Abrir envio manual pelo meu WhatsApp</button></div>`).join(''):`<div class="empty-state">Nenhum WhatsApp cadastrado para este cliente.</div>`;
+  const sendAll=contacts.length>1?`<div class="receipt-send-all"><button type="button" id="btnDeliveryReceiptSendAll" class="btn whatsapp-btn">Enviar para todos os ${contacts.length} contatos</button><small>Envio automático pelo número da empresa. O aceite da API não confirma a entrega ao cliente.</small></div>`:'';
   const body=`<div class="receipt-proof-card"><div class="receipt-proof-head"><div><small>COMPROVANTE DE AVARIA</small><strong>PDV ${esc(ctx.customer.code)} • ${esc(ctx.customer.name)}</strong><span>Mapa ${esc(ctx.map_number)} • ${fmtDate(ctx.date)}</span></div><span class="status approved">REGISTRADA</span></div><div class="receipt-products">${(ctx.items||[]).map(x=>`<div><strong>${esc(x.product_name||x.product||'Produto')}</strong><span>${fmtNum(x.quantity)} ${x.unit==='CAIXA'?'Caixa':'Unidade'}${num(x.quantity)===1?'':'s'}</span></div>`).join('')}</div><p class="receipt-observation"><strong>Observação:</strong> O produto avariado será enviado junto ao próximo pedido realizado pelo cliente.</p></div><div class="section-title">WhatsApp do cliente</div>${contactError?`<div class="notice error">${esc(contactError)}</div>`:''}${sendAll}<div class="receipt-contact-list">${contactHtml}</div><div class="contact-last-update">${last?`Atualizado por último em ${fmtDate(last)}`:'Ainda sem atualização de contato.'}</div><div class="manual-contact-card"><strong>Novo contato</strong><small>Se o número não estiver na lista, digite abaixo. Ele será salvo automaticamente para este cliente.</small><div class="grid grid-3"><div class="field span-2"><label>WhatsApp</label><input id="deliveryReceiptNewPhone" inputmode="tel" placeholder="Ex.: (84) 99999-9999"></div><div class="field"><label>Identificação</label><input id="deliveryReceiptNewLabel" placeholder="Ex.: Recebedor"></div></div><div class="actions right"><button type="button" id="btnDeliveryReceiptAddPhone" class="btn secondary">Salvar novo contato</button></div></div>`;
   openModal('Avaria registrada',`Comprovante para ${ctx.customer.name}`,body,[{label:'Fechar',class:'secondary',onClick:closeModal}]);
-  $('btnDeliveryReceiptSendAll')?.addEventListener('click',()=>openAllWhatsappReceipts(contacts,ctx));
-  $('modalBody')?.querySelectorAll('[data-send-receipt-phone]').forEach(b=>b.addEventListener('click',()=>openWhatsappReceipt(b.dataset.sendReceiptPhone,ctx)));
+  $('btnDeliveryReceiptSendAll')?.addEventListener('click',e=>sendAllDeliveryDamageReceipts(contacts,ctx,e.currentTarget));
+  $('modalBody')?.querySelectorAll('[data-send-receipt-contact]').forEach(b=>b.addEventListener('click',async()=>{try{const result=await sendDeliveryDamageReceipt(contacts.find(c=>c.id===b.dataset.sendReceiptContact),ctx,b);toast(result.already_sent?'Comprovante já aceito anteriormente.':'Comprovante aceito pelo WhatsApp da empresa.','success');}catch(e){toast(damageReceiptSendError(e),'error');}}));
+  $('modalBody')?.querySelectorAll('[data-manual-receipt-phone]').forEach(b=>b.addEventListener('click',()=>openWhatsappReceipt(b.dataset.manualReceiptPhone,ctx)));
   $('btnDeliveryReceiptAddPhone')?.addEventListener('click',()=>saveCustomerContactForReceipt(ctx,$('deliveryReceiptNewPhone')?.value||'',$('deliveryReceiptNewLabel')?.value||''));
 }
 

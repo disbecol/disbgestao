@@ -765,8 +765,9 @@ button[data-sales-launch]:focus-visible,
 .receipt-send-all{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;margin:0 0 10px;border:1px solid #b7ebc6;background:#f3fff7;border-radius:12px}
 .receipt-send-all small{font-size:9px;color:#53705d;line-height:1.35}
 .receipt-contact-list{display:flex;flex-direction:column;gap:8px}
-.receipt-contact-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:12px;background:#fff}
-.receipt-contact-row>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.receipt-contact-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:12px;background:#fff}
+.receipt-contact-row>div{display:flex;flex-direction:column;gap:2px;min-width:140px;flex:1}
+.receipt-contact-row [data-manual-receipt-phone]{font-size:10px}
 .receipt-contact-row strong{font-size:11px;color:#172033}
 .receipt-contact-row span{font-size:10px;color:#667085}
 .whatsapp-btn{background:#128c4b!important;border-color:#128c4b!important;color:#fff!important;white-space:nowrap}
