@@ -20,9 +20,12 @@ Antes de retirar o número do aplicativo:
    conforme a [Central de Ajuda do WhatsApp](https://faq.whatsapp.com/2138577903196467/).
 2. Confirme que a empresa controla o chip/linha e consegue receber SMS ou ligação
    de verificação nesse número.
-3. Entre em [Meus Apps da Meta](https://developers.facebook.com/apps/) com a
-   conta que administrará a empresa. Crie um app, escolha o caso de uso de
-   comunicação pelo **WhatsApp** e vincule ou crie o portfólio empresarial.
+3. Entre em [Meus Apps da Meta](https://developers.facebook.com/apps/) com o
+   **perfil pessoal de uma pessoa responsável**. O perfil usa o nome dessa
+   pessoa; o nome público da empresa fica no portfólio empresarial. Crie um
+   app, escolha o caso de uso de comunicação pelo **WhatsApp** e vincule ou
+   crie o portfólio empresarial. No formulário do portfólio, preencha os
+   campos **Nome** e **Sobrenome** com os dados reais do administrador.
    Abra a configuração da API do WhatsApp; a Meta fornece uma conta de teste
    e um número de teste para validar o acesso inicial. Faça isso antes de
    mexer na linha real. Os nomes dos botões podem variar.
