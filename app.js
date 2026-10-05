@@ -206,7 +206,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.16-refugo',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.17-pull-driver',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -3210,7 +3210,7 @@ function renderPullActiveSchedule(){
   box.innerHTML=`<div><small>AGENDAMENTO</small><strong>${fmtDateTime(trip.appointment_at)}</strong></div><div><small>CHEGADA À FÁBRICA</small><strong>${fmtDateTime(trip.arrived_factory_at)}</strong></div><div><small>ANTECEDÊNCIA REAL</small><strong>${m?fmtMinutes(m.actual):'Aguardando'}</strong></div><div><small>CONSIDERADA PELA FÁBRICA</small><strong>${m?fmtMinutes(m.factory):'Aguardando'}</strong></div>`;
 }
 function pullAttachmentCard(row){
-  return `<article class="pull-attachment-card"><a href="${esc(row.url||'#')}" target="_blank" rel="noopener" aria-label="Abrir foto do ciclo em tamanho maior"><img src="${esc(row.url||'')}" alt="Foto anexada ao ciclo" loading="lazy"></a><div><small>${fmtDateTime(row.created_at)}</small><p>${esc(row.observation||'Sem observação.')}</p></div></article>`;
+  return `<article class="pull-attachment-card"><a href="${esc(row.url||'#')}" target="_blank" rel="noopener" aria-label="Abrir foto do ciclo em tamanho maior"><img src="${esc(row.url||'')}" alt="Foto anexada ao ciclo" loading="lazy"></a><div><small>${fmtDateTime(row.created_at)}</small>${row.observation?`<p>${esc(row.observation)}</p>`:''}</div></article>`;
 }
 async function fetchPullTripAttachments(tripId){
   const {data,error}=await sb.from('pull_trip_attachments').select('*').eq('trip_id',tripId).order('created_at');
@@ -3256,12 +3256,11 @@ async function loadPullTripAttachments(tripId,boxId='pullAttachmentList',driverV
 async function submitPullAttachment(event){
   event.preventDefault();
   if(pullAttachmentUploading)return;
-  const trip=pullActiveTrip,file=$('pullAttachmentFile')?.files?.[0],note=$('pullAttachmentNote')?.value?.trim()||'';
+  const trip=pullActiveTrip,file=$('pullAttachmentFile')?.files?.[0];
   if(!trip||!file)return;
   if(!navigator.onLine)return toast('Conecte-se à internet para anexar uma foto.','error');
   if(!file.type.startsWith('image/'))return toast('Selecione uma imagem.','error');
   if(pullTripAttachments.length>=10)return toast('Este ciclo já possui 10 fotos.','error');
-  if(note.length>500)return toast('A observação deve ter até 500 caracteres.','error');
   const button=$('pullAttachmentSave');pullAttachmentUploading=true;updatePullAttachmentCaptureUi();button.textContent='Enviando foto…';
   let path='',uploaded=false;
   try{
@@ -3270,7 +3269,7 @@ async function submitPullAttachment(event){
     const up=await sb.storage.from('puxada-anexos').upload(path,blob,{contentType:'image/jpeg',upsert:false});
     if(up.error)throw up.error;
     uploaded=true;
-    const saved=await sb.rpc('register_pull_trip_attachment',{p_trip_id:trip.id,p_photo_path:path,p_observation:note});
+    const saved=await sb.rpc('register_pull_trip_attachment',{p_trip_id:trip.id,p_photo_path:path,p_observation:''});
     if(saved.error)throw saved.error;
     $('formPullAttachment').reset();
     updatePullAttachmentCaptureUi();
@@ -3384,11 +3383,7 @@ function renderPullDriver(){
   const canPoint=!!next&&pullCanExecuteStep(next)&&!occurrenceLocksStep;
   $('btnPullNextStep').disabled=!canPoint;
   $('btnPullNextStep').textContent=!next?'Ciclo concluído':occurrenceLocksStep?`Finalize ${openOcc.occurrence_name}`:canPoint?'Registrar próxima etapa':`Aguardando ${responsible}`;
-  let hint=nextNo?`Etapa ${nextNo} de ${pullMainSteps.length} • responsável: ${executorNo?`Motorista ${executorNo} — `:''}${responsible}. GPS exigido ≤ ${pullGpsTarget()} m.`:'Todas as etapas principais foram concluídas.';
-  if(next?.requires_factory_geofence){const f=pullFactories.find(x=>x.name===pullActiveTrip.factory);hint+=f?.radius_meters?` Raio de auditoria da fábrica: ${f.radius_meters} m; estar fora do raio não impede o registro.`:' A fábrica ainda não possui raio de auditoria configurado.';}
-  if(occurrenceLocksStep)hint=`Ocorrência “${openOcc.occurrence_name}” em andamento. Finalize a ocorrência antes de registrar a etapa obrigatória ${nextNo}. ${next.name}.`;
-  else if(next&&!pullCanExecuteStep(next))hint=`Esta etapa deve ser registrada por ${executorNo?`Motorista ${executorNo} — `:''}${responsible}. O seu acesso à viagem continua disponível para acompanhamento.`;
-  $('pullNextStepHint').textContent=hint;
+  $('pullNextStepHint').textContent=nextNo?`Etapa ${nextNo}/${pullMainSteps.length} • responsável: ${executorNo?`Motorista ${executorNo} — `:''}${responsible}`:'Todas as etapas principais foram concluídas.';
   const occBox=$('pullOpenOccurrence');
   if(openOcc){occBox.classList.remove('hidden');occBox.innerHTML=`<div><small>OCORRÊNCIA EM ANDAMENTO</small><strong>${esc(openOcc.occurrence_name)}</strong><span>Iniciada ${fmtDateTime(openOcc.started_at)} por ${esc(openOcc.started_by_name)}</span></div><button class="btn primary" data-end-occ="${openOcc.id}" ${pullIsActiveDriver()?'':'disabled'}>Encerrar ocorrência</button>`;}
   else{occBox.classList.add('hidden');occBox.innerHTML='';}
@@ -6949,7 +6944,7 @@ recordPullNextStep = async function(){
   }
 };
 const renderPullDriverV151=renderPullDriver;
-renderPullDriver = function(){renderPullDriverV151();const tl=$('pullDriverTimeline');if(tl){tl.querySelectorAll('.pull-timeline-item').forEach((el,i)=>{const ordered=[...pullDriverEvents.map(x=>({kind:'STEP',raw:x})),...pullDriverOccurrences.map(x=>({kind:'OCC',raw:x}))].sort((a,b)=>new Date(a.raw.recorded_at||a.raw.started_at)-new Date(b.raw.recorded_at||b.raw.started_at));if(ordered[i]?.raw?._offline)el.classList.add('offline-pending-row');});}const hint=$('pullNextStepHint');if(hint&&!navigator.onLine&&pullActiveTrip)hint.textContent+=` • OFFLINE: a etapa ficará salva neste aparelho até a conexão voltar.`;};
+renderPullDriver = function(){renderPullDriverV151();const tl=$('pullDriverTimeline');if(tl){tl.querySelectorAll('.pull-timeline-item').forEach((el,i)=>{const ordered=[...pullDriverEvents.map(x=>({kind:'STEP',raw:x})),...pullDriverOccurrences.map(x=>({kind:'OCC',raw:x}))].sort((a,b)=>new Date(a.raw.recorded_at||a.raw.started_at)-new Date(b.raw.recorded_at||b.raw.started_at));if(ordered[i]?.raw?._offline)el.classList.add('offline-pending-row');});}};
 const renderPullDriverBeforePlans=renderPullDriver;
 renderPullDriver=function(){renderPullDriverBeforePlans();renderPullActiveSchedule();};
 
