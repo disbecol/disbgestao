@@ -9,7 +9,7 @@ const contactId = '22222222-2222-4222-8222-222222222222';
 const customerId = '33333333-3333-4333-8333-333333333333';
 const userId = '44444444-4444-4444-8444-444444444444';
 
-function harness({ configured = true, contactCode = '42', replies = [] } = {}) {
+function harness({ configured = true, contactCode = '42', eligible = true, replies = [] } = {}) {
   const logs = [];
   const requests = [];
   const env = {
@@ -20,7 +20,7 @@ function harness({ configured = true, contactCode = '42', replies = [] } = {}) {
   };
   const rows = {
     damage_requests: { id: requestId, created_by: userId, customer_code: '42', customer_name: 'Cliente Teste', map_number: '125', occurrence_date: '2026-10-05' },
-    customer_contacts: { id: contactId, customer_id: customerId, customer_code: contactCode, phone_normalized: '5584999999999' },
+    customer_contacts: { id: contactId, customer_id: customerId, customer_code: contactCode, phone_normalized: '5584999999999', whatsapp_receipt_eligible: eligible, whatsapp_receipt_verified_at: eligible ? '2026-10-06T12:00:00Z' : null, whatsapp_receipt_verified_by: eligible ? userId : null },
     customers: { id: customerId, code: '42', name: 'Cliente Teste' },
     damage_items: [{ product_text: 'Produto X', quantity: 2, quantity_unit: 'CAIXA', item_order: 1 }],
   };
@@ -105,6 +105,15 @@ test('não envia para contato de outro cliente', async () => {
   const app = harness({ contactCode: '99' });
   assert.equal((await app.send()).body.error, 'CONTACT_NOT_FOUND');
   assert.equal(app.providerCalls, 0);
+});
+
+test('bloqueia contato sem consentimento e maioridade confirmados', async () => {
+  const app = harness({ eligible: false });
+  const result = await app.send();
+  assert.equal(result.status, 403);
+  assert.equal(result.body.error, 'CONTACT_NOT_ELIGIBLE');
+  assert.equal(app.providerCalls, 0);
+  assert.equal(app.logs.length, 0);
 });
 
 test('envia modelo com dados do banco e não duplica após aceite', async () => {

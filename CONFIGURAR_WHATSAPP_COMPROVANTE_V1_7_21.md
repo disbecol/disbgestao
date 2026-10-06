@@ -1,10 +1,20 @@
-# Comprovante de avaria pelo WhatsApp da empresa — v1.7.20
+# Comprovante de avaria pelo WhatsApp da empresa — v1.7.21
 
 O botão **Enviar comprovante** chama a Edge Function `send-damage-receipt`. Ela usa a
 WhatsApp Business Platform Cloud API para enviar um modelo de mensagem a partir
 do número corporativo **(84) 99801-6062**. O token da Meta fica apenas nos
-Secrets do Supabase. O botão separado **Abrir envio manual pelo meu WhatsApp**
-mantém o procedimento anterior enquanto a integração é ativada.
+Secrets do Supabase. Após registrar o aceite do destinatário, o botão separado
+**Abrir envio manual pelo meu WhatsApp** mantém o procedimento anterior enquanto
+a integração é ativada. A API ainda não
+está ativa no número real; não exclua a conta do celular agora.
+
+Como os comprovantes podem citar cerveja e chope, a
+[Política de Mensagens do WhatsApp Business](https://whatsappbusiness.com/pt-br/policy/)
+exige consentimento do destinatário, proteção de idade e país e licenças aplicáveis.
+O Brasil consta entre os países permitidos para mensagens sobre álcool pela
+**Plataforma** do WhatsApp Business, mas a Meta ainda precisa aceitar o cadastro,
+o número e o modelo. O cadastro atual dos clientes comprova apenas a maioridade
+do titular; ele não comprova o consentimento nem a idade de quem usa cada número.
 
 ## 1. Preparar o cadastro direto na Cloud API
 
@@ -29,11 +39,18 @@ Antes de retirar o número do aplicativo:
    Abra a configuração da API do WhatsApp; a Meta fornece uma conta de teste
    e um número de teste para validar o acesso inicial. Faça isso antes de
    mexer na linha real. Os nomes dos botões podem variar.
-4. Planeje o atendimento das respostas: o Disb Gestão v1.7.20 **apenas envia**
+4. Planeje o atendimento das respostas: o Disb Gestão v1.7.21 **apenas envia**
    comprovantes. Ele ainda não mostra mensagens que os clientes responderem.
 
 **Não retire o número do aplicativo nesta etapa.** Conclua a preparação da Meta,
 o modelo e o backend abaixo; faça a troca do número somente na etapa 5.
+
+No portfólio empresarial, preencha os dados oficiais da Disbecol. O campo
+**Telefone comercial** é um dado cadastral e pode ser diferente do número que
+enviará as mensagens. O **(84) 99801-6062** será cadastrado separadamente como
+número da API. Se a Meta continuar mostrando um aviso de bloqueio para a categoria
+real da empresa após preencher os dados, interrompa o cadastro e procure o
+suporte da Meta; não selecione uma categoria incorreta.
 
 ## 2. Criar e aprovar o modelo
 
@@ -65,6 +82,29 @@ A Meta precisa aprovar o modelo antes de usá-lo com clientes.
 Execute uma vez, no SQL Editor do projeto, o arquivo:
 
 `supabase/51_v1_7_20_whatsapp_comprovante_avaria.sql`
+
+Esse SQL e a primeira publicação da Edge Function já foram feitos no Supabase.
+Para a atualização **1.7.21**, execute também:
+
+`supabase/52_whatsapp_comprovante_elegibilidade.sql`
+
+Depois, republique `supabase/functions/send-damage-receipt/index.ts` com a versão
+deste repositório. A função atualizada bloqueia o envio para um contato não
+autorizado. **Não configure o token real da Meta antes de republicá-la.**
+
+Os contatos existentes começam sem autorização. **Não é necessário abordar os
+2.600 clientes de uma vez.** Quando ocorrer uma avaria, o motorista pede o aceite
+à pessoa que usa o número, confirma que ela tem 18 anos ou mais e está no Brasil,
+e toca **Registrar aceite na entrega**. O sistema registra o nome informado, como
+a maioridade foi confirmada, o motorista e a data. Só então libera **Enviar
+comprovante** para aquele número. Se a pessoa não aceitar, o envio automático
+permanece bloqueado. O administrador pode revisar ou revogar a autorização em
+**Admin → Contatos de clientes**. Não registre CPF ou data de nascimento.
+
+Para novos cadastros, também é possível obter esse aceite previamente com a
+frase: “Aceito receber da Disbecol, pelo WhatsApp informado, comprovantes de
+avaria. Posso cancelar esse recebimento a qualquer momento.” Guarde a resposta
+e confirme a maioridade de quem usa o número.
 
 A tabela `damage_receipt_sends` registra tentativas, aceite da API e ID da
 mensagem. A trava impede que toques repetidos enviem o mesmo comprovante ao
@@ -115,7 +155,7 @@ Cadastre os dois Secrets obrigatórios listados na etapa 4.
 
 ## 6. Teste de ativação
 
-1. Instale a versão 1.7.20 ou atualize o app web.
+1. Instale a versão 1.7.21 ou atualize o app web.
 2. Crie uma avaria de teste com um contato autorizado da empresa.
 3. Toque **Enviar comprovante** e confira que a conversa recebeu a mensagem do
    número **(84) 99801-6062**, sem abrir o WhatsApp do motorista.

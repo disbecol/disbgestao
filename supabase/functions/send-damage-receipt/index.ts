@@ -63,11 +63,17 @@ Deno.serve(async (req) => {
   if (!damage) return json({ error: 'RECEIPT_NOT_FOUND' }, 404);
 
   const { data: contact, error: contactError } = await userDb.from('customer_contacts')
-    .select('id,customer_id,customer_code,phone_normalized').eq('id', contactId).maybeSingle();
+    .select('id,customer_id,customer_code,phone_normalized,whatsapp_receipt_eligible,whatsapp_receipt_verified_at,whatsapp_receipt_verified_by')
+    .eq('id', contactId).maybeSingle();
   if (contactError) { console.error('receipt contact lookup', contactError); return json({ error: 'CONTACT_LOOKUP_FAILED' }, 500); }
   if (!contact || cleanCode(contact.customer_code) !== cleanCode(damage.customer_code)
       || !/^55\d{10,11}$/.test(String(contact.phone_normalized || ''))) {
     return json({ error: 'CONTACT_NOT_FOUND' }, 404);
+  }
+  // O aceite do destinatário, a maioridade e o país são registrados antes do envio.
+  // Contatos antigos ou ainda não validados permanecem bloqueados.
+  if (contact.whatsapp_receipt_eligible !== true || !contact.whatsapp_receipt_verified_at || !contact.whatsapp_receipt_verified_by) {
+    return json({ error: 'CONTACT_NOT_ELIGIBLE' }, 403);
   }
   const { data: customer, error: customerError } = await userDb.from('customers')
     .select('id,code,name').eq('id', contact.customer_id).maybeSingle();
