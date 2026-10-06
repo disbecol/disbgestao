@@ -9,7 +9,7 @@ const contactId = '22222222-2222-4222-8222-222222222222';
 const customerId = '33333333-3333-4333-8333-333333333333';
 const userId = '44444444-4444-4444-8444-444444444444';
 
-function harness({ configured = true, contactCode = '42', eligible = true, replies = [] } = {}) {
+function harness({ configured = true, contactCode = '42', eligible = true, replies = [], items = null } = {}) {
   const logs = [];
   const requests = [];
   const env = {
@@ -22,7 +22,7 @@ function harness({ configured = true, contactCode = '42', eligible = true, repli
     damage_requests: { id: requestId, created_by: userId, customer_code: '42', customer_name: 'Cliente Teste', map_number: '125', occurrence_date: '2026-10-05' },
     customer_contacts: { id: contactId, customer_id: customerId, customer_code: contactCode, phone_normalized: '5584999999999', whatsapp_receipt_eligible: eligible, whatsapp_receipt_verified_at: eligible ? '2026-10-06T12:00:00Z' : null, whatsapp_receipt_verified_by: eligible ? userId : null },
     customers: { id: customerId, code: '42', name: 'Cliente Teste' },
-    damage_items: [{ product_text: 'Produto X', quantity: 2, quantity_unit: 'CAIXA', item_order: 1 }],
+    damage_items: items || [{ product_text: 'Produto X', quantity: 2, quantity_unit: 'CAIXA', item_order: 1, status: 'PENDENTE' }],
   };
   let handler;
   let providerCalls = 0;
@@ -114,6 +114,25 @@ test('bloqueia contato sem consentimento e maioridade confirmados', async () => 
   assert.equal(result.body.error, 'CONTACT_NOT_ELIGIBLE');
   assert.equal(app.providerCalls, 0);
   assert.equal(app.logs.length, 0);
+});
+
+test('não envia comprovante de avaria totalmente cancelada', async () => {
+  const app = harness({ items: [{ product_text: 'Produto cancelado', quantity: 1, quantity_unit: 'UNIDADE', item_order: 1, status: 'CANCELADO' }] });
+  const result = await app.send();
+  assert.equal(result.status, 409);
+  assert.equal(result.body.error, 'RECEIPT_CANCELLED');
+  assert.equal(app.providerCalls, 0);
+  assert.equal(app.logs.length, 0);
+});
+
+test('comprovante de ocorrência parcial omite produto cancelado', async () => {
+  const app = harness({ items: [
+    { product_text: 'Produto cancelado', quantity: 1, quantity_unit: 'UNIDADE', item_order: 1, status: 'CANCELADO' },
+    { product_text: 'Produto válido', quantity: 2, quantity_unit: 'CAIXA', item_order: 2, status: 'APROVADO' },
+  ] });
+  assert.equal((await app.send()).status, 200);
+  const text = JSON.parse(app.requests[0].options.body).template.components[0].parameters[4].text;
+  assert.equal(text, '• Produto válido — 2 caixas');
 });
 
 test('envia modelo com dados do banco e não duplica após aceite', async () => {

@@ -53,35 +53,44 @@
     }else{box(x,775,W-pad*2,105,'#fff8e9','#f6df9d');text('Sem mapa-base cadastrado',pad+24,809,24,'#8b6200',800);text('O comparativo será exibido quando a planilha estiver disponível.',pad+24,846,20,muted,500);}
     footer(c.height);return [{name:`vasilhames-mapa-${row.map_number||'conferencia'}.png`,dataUrl:c.toDataURL('image/png')}];
   }
-  function asset(count,view,rows,totals){
+  function asset(count,view,rows){
     const accent=view==='PATIO'?'#0d9c5c':view==='REFUGO'?'#d54848':blue;
     const label=view==='PATIO'?'Pátio':view==='REFUGO'?'Refugo':'Total geral';
     const pages=[];const pageSize=13;
     for(let page=0;page<Math.max(1,Math.ceil(rows.length/pageSize));page++){
-      const slice=rows.slice(page*pageSize,(page+1)*pageSize),tableRows=Math.max(1,slice.length),height=506+tableRows*68+95;
+      const slice=rows.slice(page*pageSize,(page+1)*pageSize),tableRows=Math.max(1,slice.length),height=471+tableRows*68;
       const {c,x:ctx}=canvas(height);x=ctx;
       header('Ativo de giro',`${count.count_code||'Contagem'} • ${label}`,`${date(count.count_date)}  •  ${count.unit||'—'}  •  Conferente: ${count.counter_name||'—'}`,accent);
-      box(x,201,W-pad*2,128,view==='REFUGO'?'#fff0f0':view==='PATIO'?'#edfaf3':'#eaf3ff',null);
-      text('RESUMO DE QUANTIDADES',pad+24,232,18,muted,800);
-      const labels=[['PALET/GFA',totals.pallet_gfa],['LASTRO/GFA',totals.layer_gfa],['CAIXA/GFA',totals.box_gfa],['AVULSO',totals.loose],['UNIDADES',totals.units]];
-      labels.forEach(([name,value],i)=>{const cx=pad+27+i*192;text(name,cx,270,15,muted,800);text(number(value),cx,305,26,accent,800);});
-      text('P Palet/GFA  •  L Lastro/GFA  •  C Caixa/GFA  •  A Avulso  •  U Unidades',pad+8,343,16,muted,600);
-      box(x,355,W-pad*2,65+tableRows*68);
-      x.fillStyle='#eef3fa';x.fillRect(pad+1,356,W-pad*2-2,58);
-      text('ATIVO / CÓDIGO',pad+22,385,17,muted,800);
-      [['P',605],['L',693],['C',781],['A',869],['U',1015]].forEach(([name,cx])=>text(name,cx,385,18,muted,800,'right'));
+      text('P Palet/GFA  •  L Lastro/GFA  •  C Caixa/GFA  •  A Avulso  •  U Unidades',pad+8,205,16,muted,600);
+      box(x,225,W-pad*2,65+tableRows*68);
+      x.fillStyle='#eef3fa';x.fillRect(pad+1,226,W-pad*2-2,58);
+      text('ATIVO / CÓDIGO',pad+22,255,17,muted,800);
+      [['P',605],['L',693],['C',781],['A',869],['U',1015]].forEach(([name,cx])=>text(name,cx,255,18,muted,800,'right'));
       slice.forEach((row,i)=>{
-        const y=446+i*68;if(i%2===1){x.fillStyle='#f8fafd';x.fillRect(pad+1,y-32,W-pad*2-2,68);}
+        const y=316+i*68;if(i%2===1){x.fillStyle='#f8fafd';x.fillRect(pad+1,y-32,W-pad*2-2,68);}
         text(crop(row.description,33),pad+22,y-8,21,navy,700);
         text(`SAP ${row.sap_code||'—'}  •  Cód. ${row.asset_code||'—'}`,pad+22,y+17,15,muted,500);
         [['pallet_gfa',605],['layer_gfa',693],['box_gfa',781],['loose',869],['units',1015]].forEach(([key,cx])=>text(number(row[key]),cx,y,22,navy,700,'right'));
       });
-      if(!slice.length)text('Nenhum lançamento nesta área.',pad+23,449,22,muted,500);
+      if(!slice.length)text('Nenhum lançamento nesta área.',pad+23,319,22,muted,500);
       text(`Página ${page+1} de ${Math.max(1,Math.ceil(rows.length/pageSize))}`,W-pad,height-104,18,muted,600,'right');
       footer(height);
       pages.push({name:`ativo-giro-${count.count_code||'contagem'}-${view.toLowerCase()}-${page+1}.png`,dataUrl:c.toDataURL('image/png')});
     }
     return pages;
   }
-  window.DISB_REPORT_IMAGES={conference,asset};
+  async function assetPdf(images,PDFLib){
+    if(!images?.length)throw new Error('Nenhuma página para gerar o PDF.');
+    const pdf=await PDFLib.PDFDocument.create();
+    pdf.setTitle('Ativo de Giro • Disb Gestão');
+    for(const image of images){
+      const png=await pdf.embedPng(image.dataUrl);
+      const page=pdf.addPage(PDFLib.PageSizes.A4);
+      const margin=18,scale=Math.min((page.getWidth()-margin*2)/png.width,(page.getHeight()-margin*2)/png.height);
+      const width=png.width*scale,height=png.height*scale;
+      page.drawImage(png,{x:(page.getWidth()-width)/2,y:page.getHeight()-margin-height,width,height});
+    }
+    return pdf.save();
+  }
+  window.DISB_REPORT_IMAGES={conference,asset,assetPdf};
 })();

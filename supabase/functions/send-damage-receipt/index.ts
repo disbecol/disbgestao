@@ -83,11 +83,13 @@ Deno.serve(async (req) => {
   }
 
   const { data: items, error: itemsError } = await userDb.from('damage_items')
-    .select('product_text,quantity,quantity_unit,item_order').eq('request_id', requestId).order('item_order');
+    .select('product_text,quantity,quantity_unit,item_order,status').eq('request_id', requestId).order('item_order');
   if (itemsError) { console.error('receipt items lookup', itemsError); return json({ error: 'RECEIPT_LOOKUP_FAILED' }, 500); }
   if (!items?.length) return json({ error: 'RECEIPT_NOT_FOUND' }, 404);
+  const activeItems = items.filter((item) => item.status !== 'CANCELADO');
+  if (!activeItems.length) return json({ error: 'RECEIPT_CANCELLED' }, 409);
 
-  const itemLines = items.map((item) => {
+  const itemLines = activeItems.map((item) => {
     const qty = quantityText(item.quantity);
     const unit = item.quantity_unit === 'CAIXA' ? (Number(item.quantity) === 1 ? 'caixa' : 'caixas')
       : (Number(item.quantity) === 1 ? 'unidade' : 'unidades');

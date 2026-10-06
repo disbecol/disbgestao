@@ -206,7 +206,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.21-whatsapp',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.22-asset-cancel',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -3611,7 +3611,7 @@ async function fetchPullReportNris(requests){
   }
   return rows;
 }
-async function savePullReportPdf(name,bytes){
+async function savePdfDocument(name,bytes,{title,dialogTitle,successMessage,webShare=false}){
   const blob=new Blob([bytes],{type:'application/pdf'});
   if(isNativeCapacitor()){
     const cap=window.Capacitor;
@@ -3625,13 +3625,20 @@ async function savePullReportPdf(name,bytes){
       reader.readAsDataURL(blob);
     });
     const saved=await files.writeFile({path:name,data,directory:'CACHE'});
-    await share.share({title:`Resumo do ciclo ${name}`,url:saved.uri,dialogTitle:'Salvar ou compartilhar PDF'});
+    await share.share({title,url:saved.uri,dialogTitle});
     return;
+  }
+  if(webShare&&typeof File!=='undefined'){
+    const file=new File([blob],name,{type:'application/pdf'});
+    if(navigator.canShare?.({files:[file]})&&navigator.share){await navigator.share({files:[file],title});return;}
   }
   const url=URL.createObjectURL(blob);
   const link=document.createElement('a');link.href=url;link.download=name;link.style.display='none';document.body.appendChild(link);link.click();link.remove();
   setTimeout(()=>URL.revokeObjectURL(url),60000);
-  toast('Resumo em PDF baixado com as fotos incorporadas.','success');
+  toast(successMessage,'success');
+}
+async function savePullReportPdf(name,bytes){
+  return savePdfDocument(name,bytes,{title:`Resumo do ciclo ${name}`,dialogTitle:'Salvar ou compartilhar PDF',successMessage:'Resumo em PDF baixado com as fotos incorporadas.'});
 }
 async function downloadPullTripSummary(tripId,button){
   if(!hasPerm('PULL_HISTORY'))return toast('Seu usuário não possui permissão para baixar o resumo.','error');
@@ -4640,19 +4647,19 @@ function humanFefoError(e){
 function showDamageDecisionPanel({status,count,label,onConfirm,onError}){
   const body=$('modalBody');if(!body)return;
   body.querySelector('.damage-decision-panel')?.remove();
-  const reject=status==='REPROVADO',verb=reject?'Reprovar':'Aprovar',trigger=document.activeElement;
+  const reject=status==='REPROVADO',cancel=status==='CANCELADO',mandatory=reject||cancel,verb=cancel?'Cancelar':reject?'Reprovar':'Aprovar',trigger=document.activeElement;
   const panel=document.createElement('section');
-  panel.className=`damage-decision-panel ${reject?'reject':'approve'}`;
+  panel.className=`damage-decision-panel ${mandatory?'reject':'approve'}`;
   panel.setAttribute('role','region');
   panel.setAttribute('aria-label',`${verb} ${count} produto${count===1?'':'s'}`);
-  panel.innerHTML=`<div class="damage-decision-head"><div><small>${esc(label)}</small><strong>${verb} ${count} produto${count===1?'':'s'}</strong></div><button type="button" class="damage-decision-close" data-decision-cancel aria-label="Fechar justificativa">×</button></div><label for="damageDecisionNote">Justificativa ${reject?'*':'(opcional)'}</label><textarea id="damageDecisionNote" rows="3" maxlength="500" placeholder="${reject?'Informe o motivo da reprovação.':'Se desejar, informe o motivo da aprovação.'}"></textarea><small class="damage-decision-help">A decisão e a justificativa ficam registradas na auditoria.</small><div class="damage-decision-actions"><button type="button" class="btn secondary" data-decision-cancel>Cancelar</button><button type="button" class="btn ${reject?'danger':'success'}" data-decision-confirm>Confirmar ${reject?'reprovação':'aprovação'}</button></div>`;
+  panel.innerHTML=`<div class="damage-decision-head"><div><small>${esc(label)}</small><strong>${verb} ${count} produto${count===1?'':'s'}</strong></div><button type="button" class="damage-decision-close" data-decision-cancel aria-label="Fechar justificativa">×</button></div><label for="damageDecisionNote">Justificativa ${mandatory?'*':'(opcional)'}</label><textarea id="damageDecisionNote" rows="3" maxlength="500" placeholder="${cancel?'Informe por que a avaria será cancelada.':reject?'Informe o motivo da reprovação.':'Se desejar, informe o motivo da aprovação.'}"></textarea><small class="damage-decision-help">${cancel?'O cancelamento fica registrado no histórico. Se o produto já foi lançado em outro sistema, corrija-o também lá.':'A decisão e a justificativa ficam registradas na auditoria.'}</small><div class="damage-decision-actions"><button type="button" class="btn secondary" data-decision-cancel>Voltar</button><button type="button" class="btn ${mandatory?'danger':'success'}" data-decision-confirm>Confirmar ${cancel?'cancelamento':reject?'reprovação':'aprovação'}</button></div>`;
   const anchor=body.querySelector('.damage-selection-bar');
   if(anchor)anchor.after(panel);else body.prepend(panel);
   panel.querySelectorAll('[data-decision-cancel]').forEach(button=>button.addEventListener('click',()=>{panel.remove();trigger?.focus?.();}));
   const confirmButton=panel.querySelector('[data-decision-confirm]');
   confirmButton.addEventListener('click',async()=>{
     const note=String(panel.querySelector('textarea')?.value||'').trim();
-    if(reject&&!note){toast('Informe a justificativa da reprovação.','error');panel.querySelector('textarea')?.focus();return;}
+    if(mandatory&&!note){toast(`Informe a justificativa ${cancel?'do cancelamento':'da reprovação'}.`,'error');panel.querySelector('textarea')?.focus();return;}
     confirmButton.disabled=true;
     try{await onConfirm(note);}catch(error){toast(onError?onError(error):humanError(error),'error');}
     finally{if(confirmButton.isConnected)confirmButton.disabled=false;}
@@ -4765,7 +4772,7 @@ function setupDamageReviewWorkspace(kind){
   const refreshBulkActions=()=>{
     const visible=cards.filter(card=>!card.hidden);
     const showBulk=visible.length>1&&visible.some(card=>card.querySelector('input[type="checkbox"]:checked'));
-    actionButtons.forEach(button=>button.hidden=!showBulk||!button.classList.contains(`damage-action-${activeStage}`));
+    actionButtons.forEach(button=>button.hidden=!button.classList.contains('damage-action-global')&&(!showBulk||!button.classList.contains(`damage-action-${activeStage}`)));
     actions.hidden=!actionButtons.some(button=>!button.hidden);
   };
   const setStage=key=>{
@@ -5141,12 +5148,25 @@ async function finishRotatingAssetCount(){
   catch(e){toast(humanRotatingAssetError(e),'error');}finally{btn.disabled=false;btn.textContent=old;}
 }
 function assetReportImages(count,entries){
-  return ['PATIO','REFUGO','TOTAL'].flatMap(view=>window.DISB_REPORT_IMAGES.asset(count,view,rotatingAssetHistoryViewRows(entries,view),aggregateRotatingAssetGrandTotal(entries,view==='TOTAL'?undefined:view)));
+  return ['PATIO','REFUGO','TOTAL'].flatMap(view=>window.DISB_REPORT_IMAGES.asset(count,view,rotatingAssetHistoryViewRows(entries,view)));
+}
+const assetPdfBusy=new Set();
+async function shareAssetReportPdf(count,entries){
+  if(assetPdfBusy.has(count.id))return;
+  assetPdfBusy.add(count.id);
+  try{
+    await ensurePullPdfLibrary();
+    const images=assetReportImages(count,entries);
+    const bytes=await window.DISB_REPORT_IMAGES.assetPdf(images,window.PDFLib);
+    const code=String(count.count_code||'contagem').replace(/[^A-Za-z0-9_-]+/g,'-');
+    await savePdfDocument(`ativo-giro-${code}.pdf`,bytes,{title:`Ativo de Giro ${count.count_code||''}`,dialogTitle:'Compartilhar PDF do Ativo de Giro',successMessage:'PDF do Ativo de Giro baixado. Anexe-o à conversa desejada.',webShare:true});
+  }catch(error){if(error?.name!=='AbortError')toast(`Não foi possível compartilhar o PDF: ${humanError(error)}`,'error');}
+  finally{assetPdfBusy.delete(count.id);}
 }
 function openAssetShareModal(count,entries){
   const patio=aggregateRotatingAssetGrandTotal(entries,'PATIO'),refugo=aggregateRotatingAssetGrandTotal(entries,'REFUGO'),total=aggregateRotatingAssetGrandTotal(entries);
-  const body=`<div class="notice">Contagem finalizada. Compartilhe imagens separadas de Pátio, Refugo e Total com quem precisa acompanhar as quantidades. O envio não ocupa o Storage do Supabase.</div><div class="asset-history-total-cards asset-share-cards"><div class="asset-history-total-card patio"><span>Pátio</span><strong>${assetTotalLabel(patio)}</strong></div><div class="asset-history-total-card refugo"><span>Refugo</span><strong>${assetTotalLabel(refugo)}</strong></div><div class="asset-history-total-card"><span>Total geral</span><strong>${assetTotalLabel(total)}</strong></div></div>`;
-  openModal(`Ativo de Giro • ${count.count_code}`,`${fmtDate(count.count_date)} • ${count.unit}`,body,[{label:'Compartilhar imagens',class:'primary',onClick:()=>shareReportImages(assetReportImages(count,entries))},{label:'Fechar',class:'secondary',onClick:closeModal}]);
+  const body=`<div class="notice">Contagem finalizada. Compartilhe um PDF com as páginas de Pátio, Refugo e Total. O arquivo é gerado no aparelho, sem ocupar o Storage do Supabase.</div><div class="asset-history-total-cards asset-share-cards"><div class="asset-history-total-card patio"><span>Pátio</span><strong>${assetTotalLabel(patio)}</strong></div><div class="asset-history-total-card refugo"><span>Refugo</span><strong>${assetTotalLabel(refugo)}</strong></div><div class="asset-history-total-card"><span>Total geral</span><strong>${assetTotalLabel(total)}</strong></div></div>`;
+  openModal(`Ativo de Giro • ${count.count_code}`,`${fmtDate(count.count_date)} • ${count.unit}`,body,[{label:'Compartilhar PDF',class:'primary',onClick:()=>shareAssetReportPdf(count,entries)},{label:'Fechar',class:'secondary',onClick:closeModal}]);
 }
 async function cancelRotatingAssetCount(){
   if(!rotatingAssetActiveCount)return;if(!window.confirm(`Cancelar ${rotatingAssetActiveCount.count_code}?\n\nOs lançamentos desta contagem serão mantidos para auditoria, mas ela ficará como cancelada.`))return;
@@ -5208,7 +5228,7 @@ function openRotatingAssetHistory(id){
   const total=aggregateRotatingAssetGrandTotal(entries);
   const initialRows=rotatingAssetHistoryViewRows(entries,'TOTAL');
   const body=`<div class="detail-grid asset-history-detail-grid"><div class="detail-card"><small>Data</small><strong>${fmtDate(c.count_date)}</strong></div><div class="detail-card"><small>Unidade</small><strong>${esc(c.unit)}</strong></div><div class="detail-card"><small>Conferente</small><strong>${esc(c.counter_name)}</strong></div><div class="detail-card"><small>Adições</small><strong>${entries.length}</strong></div></div><div class="asset-history-total-cards"><div class="asset-history-total-card patio"><span>Pátio</span><strong>${assetTotalLabel(patio)}</strong><small>${patio.entries} adição${patio.entries===1?'':'ões'}</small></div><div class="asset-history-total-card refugo"><span>Refugo</span><strong>${assetTotalLabel(refugo)}</strong><small>${refugo.entries} adição${refugo.entries===1?'':'ões'}</small></div></div><div class="asset-history-view-tabs" role="tablist" aria-label="Visualização dos totais do Ativo de Giro"><button type="button" class="asset-history-view-tab active" data-asset-history-tab="TOTAL">TOTAL</button><button type="button" class="asset-history-view-tab patio" data-asset-history-tab="PATIO">PÁTIO</button><button type="button" class="asset-history-view-tab refugo" data-asset-history-tab="REFUGO">REFUGO</button></div><div class="asset-history-view-caption"><strong id="assetHistoryViewTitle">Total</strong><span id="assetHistoryViewSummary">Pátio + Refugo • ${assetTotalLabel(total)}</span></div><div class="table-wrap"><table class="asset-history-total-table"><thead><tr><th>COD. SAP</th><th>COD.</th><th>Descrição</th><th>Visão</th><th>Palet/GFA</th><th>Lastro/GFA</th><th>Caixa/GFA</th><th>Avulso</th><th>Unidades</th></tr></thead><tbody id="assetHistoryViewTbody">${rotatingAssetHistoryTableRowsHtml(initialRows,'TOTAL')}</tbody></table></div>`;
-  openModal(`Ativo de Giro • ${c.count_code}`,`${fmtDate(c.count_date)} • ${c.unit}`,body,[{label:'Baixar CSV',class:'secondary',onClick:()=>downloadRotatingAssetHistoryCsv(c.id)},{label:'Compartilhar imagens',class:'primary',onClick:()=>shareReportImages(assetReportImages(c,entries))},{label:'Fechar',class:'secondary',onClick:closeModal}]);
+  openModal(`Ativo de Giro • ${c.count_code}`,`${fmtDate(c.count_date)} • ${c.unit}`,body,[{label:'Baixar CSV',class:'secondary',onClick:()=>downloadRotatingAssetHistoryCsv(c.id)},{label:'Compartilhar PDF',class:'primary',onClick:()=>shareAssetReportPdf(c,entries)},{label:'Fechar',class:'secondary',onClick:closeModal}]);
   const modalBody=$('modalBody');
   const renderView=view=>{
     const mode=String(view||'TOTAL').toUpperCase(),rows=rotatingAssetHistoryViewRows(entries,mode);
@@ -5233,7 +5253,7 @@ function humanRotatingAssetError(e){
 // V1.5.1 - FLUXO DE AVARIAS, COMPROVANTE WHATSAPP, CONTATOS E DESCARTE NRI ------
 function statusBadge(s){
   const status=String(s||'').toUpperCase();
-  const cls={PENDENTE:'pending',EM_ANALISE:'analysis',PARCIAL:'partial',APROVADO:'approved',LANCADO:'launched',ENTREGUE:'delivered',REPROVADO:'rejected',REPROVADO_ADMIN:'rejected',REMOVIDO:'rejected',IMPRESSO:'approved',COMPLETED:'approved',DISCARDED:'discarded'}[status]||'pending';
+  const cls={PENDENTE:'pending',EM_ANALISE:'analysis',PARCIAL:'partial',APROVADO:'approved',LANCADO:'launched',ENTREGUE:'delivered',CANCELADO:'rejected',REPROVADO:'rejected',REPROVADO_ADMIN:'rejected',REMOVIDO:'rejected',IMPRESSO:'approved',COMPLETED:'approved',DISCARDED:'discarded'}[status]||'pending';
   const labels={EM_ANALISE:'EM ANÁLISE',LANCADO:'LANÇADO NO SISTEMA',ENTREGUE:'ENTREGUE',REPROVADO_ADMIN:'REPROVADO',DISCARDED:'PENDÊNCIA DESCARTADA'};
   return `<span class="status ${cls}">${esc(labels[status]||status||'—')}</span>`;
 }
@@ -5333,14 +5353,26 @@ function deliveryDamageReceiptMessage(ctx){
 function whatsappReceiptUrl(phone,ctx){
   const normalized=normalizeWhatsappPhone(phone);return normalized?`https://wa.me/${normalized}?text=${encodeURIComponent(deliveryDamageReceiptMessage(ctx))}`:'';
 }
-function openWhatsappReceipt(phone,ctx){
-  const url=whatsappReceiptUrl(phone,ctx);if(!url)return toast('Número de WhatsApp inválido. Informe DDD + telefone.','error');
-  const opened=window.open(url,'_blank');if(!opened)window.location.href=url;
+async function currentDeliveryDamageReceiptContext(ctx){
+  if(!ctx.request_id)return ctx;
+  const {data,error}=await sb.from('damage_items').select('product_text,quantity,quantity_unit,item_order,status').eq('request_id',ctx.request_id).order('item_order');
+  if(error)throw error;
+  const items=(data||[]).filter(i=>i.status!=='CANCELADO');
+  if(!items.length)throw new Error('RECEIPT_CANCELLED');
+  return {...ctx,items:items.map(i=>({product_name:i.product_text,quantity:i.quantity,unit:i.quantity_unit}))};
+}
+async function openWhatsappReceipt(phone,ctx){
+  if(!normalizeWhatsappPhone(phone))return toast('Número de WhatsApp inválido. Informe DDD + telefone.','error');
+  const opened=window.open('about:blank','_blank');
+  try{
+    const current=await currentDeliveryDamageReceiptContext(ctx),url=whatsappReceiptUrl(phone,current);
+    if(opened)opened.location.href=url;else window.location.href=url;
+  }catch(error){opened?.close();toast(damageReceiptSendError(error),'error');}
 }
 function damageReceiptSendError(e){
   const code=String(e?.code||e?.message||'');
   if(/FunctionsFetchError|Failed to send a request to the Edge Function|Function not found/i.test(code))return 'O serviço de envio da empresa ainda não está disponível. Solicite a ativação ao administrador.';
-  const map={WHATSAPP_NOT_CONFIGURED:'O WhatsApp da empresa ainda não foi configurado. Solicite a ativação ao administrador.',RECEIPT_NOT_FOUND:'Não foi possível localizar esta avaria. Atualize os dados e tente novamente.',CONTACT_NOT_FOUND:'Este contato não pertence ao cliente da avaria.',CONTACT_NOT_ELIGIBLE:'Este contato ainda não tem consentimento e maioridade confirmados para o envio pela empresa.',RECEIPT_TOO_LONG:'O comprovante excede o limite do modelo do WhatsApp. Solicite ajuda ao administrador.',SEND_IN_PROGRESS:'O envio já está em processamento. Aguarde e consulte o histórico.',SEND_STATUS_UNKNOWN:'Não foi possível confirmar o envio anterior. Solicite verificação antes de reenviar.',META_SEND_FAILED:'O WhatsApp da empresa recusou o envio. Solicite verificação ao administrador.',SEND_LOG_FAILED:'Não foi possível registrar o envio. Tente novamente.',UNAUTHORIZED:'Sua sessão expirou. Entre novamente.'};
+  const map={WHATSAPP_NOT_CONFIGURED:'O WhatsApp da empresa ainda não foi configurado. Solicite a ativação ao administrador.',RECEIPT_NOT_FOUND:'Não foi possível localizar esta avaria. Atualize os dados e tente novamente.',RECEIPT_CANCELLED:'Esta avaria foi cancelada e não pode gerar comprovante.',CONTACT_NOT_FOUND:'Este contato não pertence ao cliente da avaria.',CONTACT_NOT_ELIGIBLE:'Este contato ainda não tem consentimento e maioridade confirmados para o envio pela empresa.',RECEIPT_TOO_LONG:'O comprovante excede o limite do modelo do WhatsApp. Solicite ajuda ao administrador.',SEND_IN_PROGRESS:'O envio já está em processamento. Aguarde e consulte o histórico.',SEND_STATUS_UNKNOWN:'Não foi possível confirmar o envio anterior. Solicite verificação antes de reenviar.',META_SEND_FAILED:'O WhatsApp da empresa recusou o envio. Solicite verificação ao administrador.',SEND_LOG_FAILED:'Não foi possível registrar o envio. Tente novamente.',UNAUTHORIZED:'Sua sessão expirou. Entre novamente.'};
   const key=Object.keys(map).find(k=>code.includes(k));return key?map[key]:humanError(e);
 }
 async function sendDeliveryDamageReceipt(contact,ctx,button){
@@ -5379,6 +5411,7 @@ async function saveCustomerContactForReceipt(ctx,phone,label=''){
   }catch(e){toast(humanCustomerContactError(e),'error');}
 }
 async function openDeliveryDamageReceipt(ctx){
+  try{ctx=await currentDeliveryDamageReceiptContext(ctx);}catch(error){toast(damageReceiptSendError(error),'error');return;}
   deliveryDamageReceiptContext=ctx;
   let contacts=[];let contactError='';
   try{contacts=await getCustomerContacts(ctx.customer.id,ctx.customer.code);}catch(e){contactError=humanCustomerContactError(e);}
@@ -5507,19 +5540,25 @@ function setupDamageGeoMap(customer,points){
   });
 }
 function selectedDeliveryDamageIds(kind){return [...($('modalBody')?.querySelectorAll(`.delivery-review-check[data-review-kind="${kind}"]:checked`)||[])].map(x=>x.value);}
+function canCancelDeliveryDamageStatus(status,canReview,canPost){
+  return (canReview&&['PENDENTE','APROVADO','REPROVADO','LANCADO'].includes(status))
+    ||(canPost&&['APROVADO','LANCADO'].includes(status));
+}
 async function showAvariaDetail(id){
   const r=adminAvarias.find(x=>x.id===id);if(!r)return;currentAvariaDetail=r;const items=[...(r.damage_items||[])].sort((a,b)=>Number(a.item_order||0)-Number(b.item_order||0));
   const paths=[r.signature_path,...items.flatMap(i=>itemEvidencePhotos(i).map(p=>p.photo_path))].filter(Boolean);
   const signedPairs=await Promise.all(paths.map(async path=>{const {data}=await sb.storage.from('avarias').createSignedUrl(path,3600);return [path,data?.signedUrl||''];}));
   const signed=new Map(signedPairs),signatureUrl=signed.get(r.signature_path)||'',canReview=hasPerm('DELIVERY_DAMAGE_REVIEW'),canPost=hasPerm('DELIVERY_DAMAGE_POST');
   const productsHtml=items.map((i,idx)=>{
-    const match=lotNriMap.get(deliveryDamageLotKey(i))||[],photos=itemEvidencePhotos(i),reviewable=canReview&&i.status==='PENDENTE',launchable=canPost&&i.status==='APROVADO',deliverable=canPost&&i.status==='LANCADO',selectable=reviewable||launchable||deliverable,kind=reviewable?'review':launchable?'launch':deliverable?'deliver':'';
+    const match=lotNriMap.get(deliveryDamageLotKey(i))||[],photos=itemEvidencePhotos(i),reviewable=canReview&&i.status==='PENDENTE',launchable=canPost&&i.status==='APROVADO',deliverable=canPost&&i.status==='LANCADO',cancellable=canCancelDeliveryDamageStatus(i.status,canReview,canPost),selectable=reviewable||launchable||deliverable,kind=reviewable?'review':launchable?'launch':deliverable?'deliver':'';
     const photoHtml=photos.map((p,pidx)=>`<div class="damage-photo-card"><div class="damage-photo-title"><strong>Foto ${pidx+1}</strong><span class="status approved">GPS ${validDamageCoordinate(p.latitude,p.longitude)?'✓':'indisponível'}</span></div><a class="damage-photo-open" href="${esc(signed.get(p.photo_path)||'#')}" data-damage-photo aria-label="Ampliar foto ${pidx+1} da avaria"><img src="${esc(signed.get(p.photo_path)||'')}" alt="Foto ${pidx+1} da avaria"><span>Ampliar foto</span></a><small>${validDamageCoordinate(p.latitude,p.longitude)?`GPS: ${Number(p.latitude).toFixed(6)}, ${Number(p.longitude).toFixed(6)} • ±${Math.round(p.gps_accuracy||0)} m`:'GPS não registrado'}</small></div>`).join('');
     const decision=i.reviewed_at?`<div class="sales-decision ${i.status==='REPROVADO'?'rejected':'approved'}"><strong>Decisão</strong><span>${esc(i.reviewer_name||'—')} • ${fmtDateTime(i.reviewed_at)}</span><p>${esc(i.review_note||'Sem justificativa registrada.')}</p></div>`:'';
     const launched=i.launched_at?`<div class="sales-decision launched"><strong>Lançado no Sistema</strong><span>${esc(i.launched_by_name||'—')} • ${fmtDateTime(i.launched_at)}</span></div>`:'';
     const delivered=i.delivered_at?`<div class="sales-decision delivered"><strong>Entregue</strong><span>${esc(i.delivered_by_name||'—')} • ${fmtDateTime(i.delivered_at)}</span></div>`:'';
-    const inlineActions=reviewable?`<button type="button" class="damage-card-action approve" data-delivery-review="APROVADO" data-item-id="${i.id}">Aprovar</button><button type="button" class="damage-card-action reject" data-delivery-review="REPROVADO" data-item-id="${i.id}">Reprovar</button>`:launchable?`<button type="button" class="damage-card-action launch" data-delivery-launch="${i.id}">Marcar como lançada</button>`:deliverable?`<button type="button" class="damage-card-action deliver" data-delivery-delivered="${i.id}">Marcar como entregue</button>`:'';
-    return `<div class="damage-admin-item" data-item="${i.id}" data-damage-status="${esc(i.status)}"><div class="damage-product-head">${selectable?`<label class="damage-check"><input type="checkbox" class="delivery-review-check" value="${i.id}" data-review-kind="${kind}"><span></span></label>`:''}${damageReviewProductIdentity(i,idx)}${damageReviewControls(i.status,inlineActions)}</div><div class="damage-summary-grid"><div><small>LOTE</small><strong>${esc(i.lot)}</strong></div><div><small>QUANTIDADE</small><strong>${fmtNum(i.quantity)} ${esc(i.quantity_unit)}</strong></div><div><small>MOTIVO</small><strong>${esc(i.reason)}</strong></div><div><small>EVIDÊNCIAS</small><strong>${photos.length} foto(s)</strong></div></div><div class="damage-lot-row">${match.length?`<span class="status approved">Lote compatível</span><span>${match.slice(0,4).map(n=>esc(n.nri)).join(', ')}</span>`:'<span class="status rejected">Lote não encontrado</span>'}</div><details class="damage-evidence"><summary><span>Ver evidências</span><small>${photos.length?`${photos.length} foto(s) • localização por foto`:i.reason==="Não foi no caminhão"?"Foto dispensada pelo motivo":"Sem foto"}</small></summary><div class="damage-photo-grid">${photoHtml||'<div class="empty-state">Sem foto disponível.</div>'}</div></details>${decision}${launched}${delivered}</div>`;
+    const cancelled=i.cancelled_at?`<div class="sales-decision rejected"><strong>Cancelado${i.cancelled_from_status?` após ${esc(i.cancelled_from_status.toLowerCase())}`:''}</strong><span>${esc(i.cancelled_by_name||'—')} • ${fmtDateTime(i.cancelled_at)}</span><p>${esc(i.cancel_reason||'—')}</p></div>`:'';
+    let inlineActions=reviewable?`<button type="button" class="damage-card-action approve" data-delivery-review="APROVADO" data-item-id="${i.id}">Aprovar</button><button type="button" class="damage-card-action reject" data-delivery-review="REPROVADO" data-item-id="${i.id}">Reprovar</button>`:launchable?`<button type="button" class="damage-card-action launch" data-delivery-launch="${i.id}">Marcar como lançada</button>`:deliverable?`<button type="button" class="damage-card-action deliver" data-delivery-delivered="${i.id}">Marcar como entregue</button>`:'';
+    if(cancellable)inlineActions+=`<button type="button" class="damage-card-action reject" data-delivery-cancel="${i.id}">Cancelar avaria</button>`;
+    return `<div class="damage-admin-item" data-item="${i.id}" data-damage-status="${esc(i.status)}"><div class="damage-product-head">${selectable?`<label class="damage-check"><input type="checkbox" class="delivery-review-check" value="${i.id}" data-review-kind="${kind}"><span></span></label>`:''}${damageReviewProductIdentity(i,idx)}${damageReviewControls(i.status,inlineActions)}</div><div class="damage-summary-grid"><div><small>LOTE</small><strong>${esc(i.lot)}</strong></div><div><small>QUANTIDADE</small><strong>${fmtNum(i.quantity)} ${esc(i.quantity_unit)}</strong></div><div><small>MOTIVO</small><strong>${esc(i.reason)}</strong></div><div><small>EVIDÊNCIAS</small><strong>${photos.length} foto(s)</strong></div></div><div class="damage-lot-row">${match.length?`<span class="status approved">Lote compatível</span><span>${match.slice(0,4).map(n=>esc(n.nri)).join(', ')}</span>`:'<span class="status rejected">Lote não encontrado</span>'}</div><details class="damage-evidence"><summary><span>Ver evidências</span><small>${photos.length?`${photos.length} foto(s) • localização por foto`:i.reason==="Não foi no caminhão"?"Foto dispensada pelo motivo":"Sem foto"}</small></summary><div class="damage-photo-grid">${photoHtml||'<div class="empty-state">Sem foto disponível.</div>'}</div></details>${decision}${launched}${delivered}${cancelled}</div>`;
   }).join('');
   const pending=items.filter(i=>i.status==='PENDENTE').length,approved=items.filter(i=>i.status==='APROVADO').length,launched=items.filter(i=>i.status==='LANCADO').length,canDeliverCount=items.filter(i=>i.status==='LANCADO').length,selectableCount=(canReview?pending:0)+(canPost?approved+canDeliverCount:0);
   const body=`<div class="damage-request-hero"><div><small>OCORRÊNCIA</small><strong>PDV ${esc(r.customer_code)} · ${esc(r.customer_name)}</strong><span>${esc(r.city)} • Mapa ${esc(r.map_number)} • ${esc(r.delivery_name)}</span></div><div class="damage-counts"><b>${items.length}</b><span>produtos</span><b>${pending+approved+launched}</b><span>em fluxo</span></div></div><div class="detail-grid damage-request-grid"><div class="detail-card"><small>PDV</small><strong>${esc(r.customer_name)}</strong></div><div class="detail-card"><small>Código</small><strong>${esc(r.customer_code)}</strong></div><div class="detail-card"><small>Cidade</small><strong>${esc(r.city)}</strong></div><div class="detail-card"><small>Mapa</small><strong>${esc(r.map_number)}</strong></div><div class="detail-card"><small>Motorista</small><strong>${esc(r.delivery_name)}</strong></div></div>${selectableCount?`<div class="damage-selection-bar delivery-selection-bar"><label class="check delivery-select-all"><input id="deliveryDamageSelectAll" type="checkbox"> Selecionar tudo</label><span id="avariaSelectionSummary">0 selecionados</span><small>${pending&&canReview?'Pendentes: aprovação ou reprovação. ':''}${approved&&canPost?'Aprovados: prontos para lançamento. ':''}${canDeliverCount&&canPost?'Lançados: prontos para marcar como entregues.':''}</small></div>`:''}${productsHtml}<details class="signature-details"><summary>Ver assinatura do cliente</summary><img src="${esc(signatureUrl)}" alt="Assinatura"></details>`;
@@ -5527,6 +5566,7 @@ async function showAvariaDetail(id){
   if(canReview&&pending)actions.push({label:'Reprovar selecionados',class:'danger damage-action-review',onClick:()=>reviewAvaria('REPROVADO',false)},{label:'Aprovar selecionados',class:'success damage-action-review',onClick:()=>reviewAvaria('APROVADO',false)});
   if(canPost&&approved)actions.push({label:'✓ Marcar como lançada',class:'success damage-action-launch',onClick:markDeliveryDamageLaunchedBulk});
   if(canPost&&canDeliverCount)actions.push({label:'✓ Marcar como entregue',class:'primary damage-action-deliver',onClick:markDeliveryDamageDeliveredBulk});
+  if(items.length>1&&items.some(i=>canCancelDeliveryDamageStatus(i.status,canReview,canPost)))actions.push({label:'Cancelar produtos não entregues',class:'danger damage-action-global',onClick:()=>cancelDeliveryDamage()});
   const geoCustomer=await customerGeoForDamage(r,'delivery'),geoPoints=damageGeoPhotos(items,'delivery',r);
   const geoBody=body.replace('<div class="detail-grid damage-request-grid">',damageGeoSection(geoCustomer,geoPoints)+'<div class="detail-grid damage-request-grid">');
   openModal(`Avaria • PDV ${r.customer_code}`,`${fmtDate(r.occurrence_date)} • ${r.delivery_name}`,geoBody,actions);
@@ -5535,7 +5575,21 @@ async function showAvariaDetail(id){
   $('modalBody')?.querySelectorAll('[data-delivery-launch]').forEach(b=>b.addEventListener('click',()=>markDeliveryDamageLaunched(b.dataset.deliveryLaunch)));
   $('modalBody')?.querySelectorAll('[data-delivery-delivered]').forEach(b=>b.addEventListener('click',()=>markDeliveryDamageDelivered(b.dataset.deliveryDelivered)));
   $('modalBody')?.querySelectorAll('[data-delivery-review]').forEach(b=>b.addEventListener('click',()=>reviewAvaria(b.dataset.deliveryReview,false,b.dataset.itemId)));
+  $('modalBody')?.querySelectorAll('[data-delivery-cancel]').forEach(b=>b.addEventListener('click',()=>cancelDeliveryDamage(b.dataset.deliveryCancel)));
   setupDamageReviewWorkspace('delivery');
+}
+function cancelDeliveryDamage(itemId=null){
+  if(!currentAvariaDetail)return;
+  const canReview=hasPerm('DELIVERY_DAMAGE_REVIEW'),canPost=hasPerm('DELIVERY_DAMAGE_POST');
+  const eligible=(currentAvariaDetail.damage_items||[]).filter(i=>canCancelDeliveryDamageStatus(i.status,canReview,canPost));
+  const ids=itemId?eligible.filter(i=>i.id===itemId).map(i=>i.id):eligible.map(i=>i.id);
+  if(!ids.length)return toast('Esta avaria já foi entregue ou cancelada.','error');
+  showDamageDecisionPanel({status:'CANCELADO',count:ids.length,label:'Avaria de entrega',onConfirm:async reason=>{
+    const {error}=await sb.rpc('cancel_damage_items',{p_item_ids:ids,p_reason:reason});
+    if(error)throw error;
+    toast(`${ids.length} produto(s) cancelado(s).`,'success');
+    const requestId=currentAvariaDetail.id;closeModal();await loadAdminAvarias(true);await loadDeliveryDamageMy(true);await showAvariaDetail(requestId);
+  },onError:humanDeliveryDamageError});
 }
 async function reviewAvaria(status,all=false,itemId=null){
   if(!currentAvariaDetail)return;
@@ -5565,7 +5619,7 @@ async function markDeliveryDamageDeliveredBulk(){
   try{for(const id of ids){const {error}=await sb.rpc('mark_damage_item_delivered',{p_item_id:id});if(error)throw error;}toast(`${ids.length} produto(s) marcado(s) como Entregue.`,'success');const req=currentAvariaDetail?.id;closeModal();await loadAdminAvarias(true);if(req)await showAvariaDetail(req);}catch(e){toast(humanDeliveryDamageError(e),'error');}
 }
 function humanDeliveryDamageError(e){
-  const m=String(e?.message||e||'Erro em Avarias de Entrega');const map={JUSTIFICATIVA_OBRIGATORIA:'Informe a justificativa da decisão.',NENHUM_ITEM_PENDENTE:'Nenhum produto pendente foi selecionado.',ITEM_NAO_APROVADO:'Somente avarias aprovadas podem ser marcadas como lançadas.',ITEM_NAO_LANCADO:'Somente avarias lançadas podem ser marcadas como entregues.',SOMENTE_USUARIO_LANCAMENTO:'Execute o SQL 39 no Supabase para liberar esta ação a quem possui Lançar/Entregar.',FORBIDDEN:'Seu usuário não possui permissão para esta ação.'};const key=Object.keys(map).find(k=>m.includes(k));if(key)return map[key];if(/mark_damage_item_launched|mark_damage_item_delivered|delivery_damage_items/i.test(m))return 'A atualização do fluxo de Avarias ainda não foi aplicada no Supabase. Execute o SQL 24_v1_5_1_fluxo_avarias_comprovante_contatos_nri.sql.';return humanError(e);
+  const m=String(e?.message||e||'Erro em Avarias de Entrega');const map={JUSTIFICATIVA_OBRIGATORIA:'Informe a justificativa da decisão.',MOTIVO_CANCELAMENTO_OBRIGATORIO:'Informe o motivo do cancelamento.',ITEM_CANCELAMENTO_INDISPONIVEL:'Somente produtos ainda não entregues podem ser cancelados.',ITEM_NAO_ENCONTRADO:'Produto da avaria não encontrado.',NENHUM_ITEM_PENDENTE:'Nenhum produto pendente foi selecionado.',ITEM_NAO_APROVADO:'Somente avarias aprovadas podem ser marcadas como lançadas.',ITEM_NAO_LANCADO:'Somente avarias lançadas podem ser marcadas como entregues.',SOMENTE_USUARIO_LANCAMENTO:'Execute o SQL 39 no Supabase para liberar esta ação a quem possui Lançar/Entregar.',FORBIDDEN:'Seu usuário não possui permissão para esta ação.'};const key=Object.keys(map).find(k=>m.includes(k));if(key)return map[key];if(/cancel_damage_items/i.test(m))return 'A atualização de cancelamento de avarias ainda não foi aplicada no Supabase. Execute o SQL 53_cancelamento_avarias_entrega.sql.';if(/mark_damage_item_launched|mark_damage_item_delivered|delivery_damage_items/i.test(m))return 'A atualização do fluxo de Avarias ainda não foi aplicada no Supabase. Execute o SQL 24_v1_5_1_fluxo_avarias_comprovante_contatos_nri.sql.';return humanError(e);
 }
 
 function salesDamageStatusLabel(status){return ({PENDENTE:'Pendente',EM_ANALISE:'Em análise',PARCIAL:'Parcial',APROVADO:'Aprovado',REPROVADO:'Reprovado',LANCADO:'Lançado no Sistema',ENTREGUE:'Entregue'})[status]||status||'—';}
@@ -7145,7 +7199,7 @@ openRotatingAssetHistory = async function(id){
   if(isAdmin()){try{const q=await sb.from('rotating_asset_entry_audit').select('*').eq('count_id',c.id).order('changed_at',{ascending:false}).limit(500);if(q.error)throw q.error;audit=q.data||[];}catch(e){console.warn('Auditoria ativo de giro',e);}}
   const adminBlock=isAdmin()?`<div class="section-title asset-admin-section-title">Ajustes administrativos</div><p class="asset-admin-help">O Admin pode corrigir lançamentos digitados incorretamente. Toda alteração fica registrada.</p><div class="table-wrap"><table class="asset-admin-entry-table"><thead><tr><th>Hora</th><th>Ativo</th><th>Local</th><th>Palet</th><th>Lastro</th><th>Caixa</th><th>Avulso</th><th>Unid.</th><th>Conferente</th><th>Ação</th></tr></thead><tbody>${assetAdminEntryRows(entries)||'<tr><td colspan="10">Sem lançamentos.</td></tr>'}</tbody></table></div><div class="section-title">Histórico de correções</div><div class="asset-audit-list">${audit.length?audit.map(a=>`<div class="asset-audit-item"><div><strong>${esc(a.product_description)}</strong><span>${esc(assetAuditDiff(a))}</span><small>${esc(a.changed_by_name)} • ${fmtDateTime(a.changed_at)} • Motivo: ${esc(a.reason)}</small></div></div>`).join(''):'<div class="empty-state">Nenhuma correção administrativa registrada.</div>'}</div>`:'';
   const body=`<div class="detail-grid asset-history-detail-grid"><div class="detail-card"><small>Data</small><strong>${fmtDate(c.count_date)}</strong></div><div class="detail-card"><small>Unidade</small><strong>${esc(c.unit)}</strong></div><div class="detail-card"><small>Conferente</small><strong>${esc(c.counter_name)}</strong></div><div class="detail-card"><small>Adições</small><strong>${entries.length}</strong></div></div><div class="asset-history-total-cards"><div class="asset-history-total-card patio"><span>Pátio</span><strong>${assetTotalLabel(patio)}</strong><small>${patio.entries} adição${patio.entries===1?'':'ões'}</small></div><div class="asset-history-total-card refugo"><span>Refugo</span><strong>${assetTotalLabel(refugo)}</strong><small>${refugo.entries} adição${refugo.entries===1?'':'ões'}</small></div></div><div class="asset-history-view-tabs" role="tablist"><button type="button" class="asset-history-view-tab active" data-asset-history-tab="TOTAL">TOTAL</button><button type="button" class="asset-history-view-tab patio" data-asset-history-tab="PATIO">PÁTIO</button><button type="button" class="asset-history-view-tab refugo" data-asset-history-tab="REFUGO">REFUGO</button></div><div class="asset-history-view-caption"><strong id="assetHistoryViewTitle">Total</strong><span id="assetHistoryViewSummary">Pátio + Refugo • ${assetTotalLabel(total)}</span></div><div class="table-wrap"><table class="asset-history-total-table"><thead><tr><th>COD. SAP</th><th>COD.</th><th>Descrição</th><th>Visão</th><th>Palet/GFA</th><th>Lastro/GFA</th><th>Caixa/GFA</th><th>Avulso</th><th>Unidades</th></tr></thead><tbody id="assetHistoryViewTbody">${rotatingAssetHistoryTableRowsHtml(initialRows,'TOTAL')}</tbody></table></div>${adminBlock}`;
-  openModal(`Ativo de Giro • ${c.count_code}`,`${fmtDate(c.count_date)} • ${c.unit}`,body,[{label:'Baixar CSV',class:'secondary',onClick:()=>downloadRotatingAssetHistoryCsv(c.id)},{label:'Compartilhar imagens',class:'primary',onClick:()=>shareReportImages(assetReportImages(c,entries))},{label:'Fechar',class:'secondary',onClick:closeModal}]);const modalBody=$('modalBody');const renderView=view=>{const mode=String(view||'TOTAL').toUpperCase(),rows=rotatingAssetHistoryViewRows(entries,mode),totals=mode==='PATIO'?patio:mode==='REFUGO'?refugo:total,title=rotatingAssetHistoryViewLabel(mode),summary=mode==='TOTAL'?`Pátio + Refugo • ${assetTotalLabel(totals)}`:`${totals.entries} adição${totals.entries===1?'':'ões'} • ${assetTotalLabel(totals)}`;if($('assetHistoryViewTbody'))$('assetHistoryViewTbody').innerHTML=rotatingAssetHistoryTableRowsHtml(rows,mode);if($('assetHistoryViewTitle'))$('assetHistoryViewTitle').textContent=title;if($('assetHistoryViewSummary'))$('assetHistoryViewSummary').textContent=summary;modalBody?.querySelectorAll('[data-asset-history-tab]').forEach(btn=>{const active=btn.dataset.assetHistoryTab===mode;btn.classList.toggle('active',active);btn.setAttribute('aria-selected',active?'true':'false');});};modalBody?.querySelectorAll('[data-asset-history-tab]').forEach(btn=>btn.addEventListener('click',()=>renderView(btn.dataset.assetHistoryTab)));modalBody?.querySelectorAll('[data-asset-admin-edit]').forEach(btn=>btn.addEventListener('click',()=>openRotatingAssetEntryAdminEdit(btn.dataset.assetAdminEdit,c.id)));
+  openModal(`Ativo de Giro • ${c.count_code}`,`${fmtDate(c.count_date)} • ${c.unit}`,body,[{label:'Baixar CSV',class:'secondary',onClick:()=>downloadRotatingAssetHistoryCsv(c.id)},{label:'Compartilhar PDF',class:'primary',onClick:()=>shareAssetReportPdf(c,entries)},{label:'Fechar',class:'secondary',onClick:closeModal}]);const modalBody=$('modalBody');const renderView=view=>{const mode=String(view||'TOTAL').toUpperCase(),rows=rotatingAssetHistoryViewRows(entries,mode),totals=mode==='PATIO'?patio:mode==='REFUGO'?refugo:total,title=rotatingAssetHistoryViewLabel(mode),summary=mode==='TOTAL'?`Pátio + Refugo • ${assetTotalLabel(totals)}`:`${totals.entries} adição${totals.entries===1?'':'ões'} • ${assetTotalLabel(totals)}`;if($('assetHistoryViewTbody'))$('assetHistoryViewTbody').innerHTML=rotatingAssetHistoryTableRowsHtml(rows,mode);if($('assetHistoryViewTitle'))$('assetHistoryViewTitle').textContent=title;if($('assetHistoryViewSummary'))$('assetHistoryViewSummary').textContent=summary;modalBody?.querySelectorAll('[data-asset-history-tab]').forEach(btn=>{const active=btn.dataset.assetHistoryTab===mode;btn.classList.toggle('active',active);btn.setAttribute('aria-selected',active?'true':'false');});};modalBody?.querySelectorAll('[data-asset-history-tab]').forEach(btn=>btn.addEventListener('click',()=>renderView(btn.dataset.assetHistoryTab)));modalBody?.querySelectorAll('[data-asset-admin-edit]').forEach(btn=>btn.addEventListener('click',()=>openRotatingAssetEntryAdminEdit(btn.dataset.assetAdminEdit,c.id)));
 };
 
 const humanRotatingAssetErrorV151=humanRotatingAssetError;
