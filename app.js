@@ -3689,6 +3689,37 @@ async function loadPullTripTrackRowsV171(tripId,afterId=0){
   return rows;
 }
 
+async function loadPullTripRouteV172(tripId,status){
+  if(status==='IN_PROGRESS')return loadPullTripTrackRowsV171(tripId);
+
+  const {data,error}=await sb.from('pull_trip_route_snapshots')
+    .select('route_points,original_points,sampled_points,archived_at')
+    .eq('trip_id',tripId).maybeSingle();
+
+  // Durante a publicacao do SQL, viagens antigas ainda usam os pontos brutos.
+  if(error&&!['42P01','PGRST205'].includes(error.code))throw error;
+  if(!data)return loadPullTripTrackRowsV171(tripId);
+
+  return (Array.isArray(data.route_points)?data.route_points:[])
+    .map((point,index)=>{
+      const latitude=Number(point?.[0]);
+      const longitude=Number(point?.[1]);
+      const epoch=Number(point?.[2]);
+      const date=new Date(epoch*1000);
+      if(!Number.isFinite(latitude)||!Number.isFinite(longitude)||!Number.isFinite(date.getTime()))return null;
+      return {
+        id:index+1,
+        latitude,
+        longitude,
+        device_at:date.toISOString(),
+        gps_accuracy:null,
+        archived:true,
+        archived_original_points:Number(data.original_points)||0
+      };
+    })
+    .filter(Boolean);
+}
+
 async function openPullTripDetail(id,live=false){
   try{
     const t=(pullHistory.find(x=>x.id===id)||($('pullFarolCards')?._rows||[]).find(x=>x.id===id))||((await sb.from('pull_trips').select('*').eq('id',id).single()).data);
@@ -3696,7 +3727,7 @@ async function openPullTripDetail(id,live=false){
     const [ev,oc,trackRows,aud,nri]=await Promise.all([
       sb.from('pull_events').select('*').eq('trip_id',id).order('recorded_at'),
       sb.from('pull_occurrences').select('*').eq('trip_id',id).order('started_at'),
-      loadPullTripTrackRowsV171(id),
+      loadPullTripRouteV172(id,t.status),
       sb.from('pull_tma_adjust_audit').select('*').eq('trip_id',id).order('changed_at',{ascending:false}),
       sb.from('nri_requests').select('id,created_at').eq('pull_trip_id',id)
     ]);
@@ -9192,6 +9223,11 @@ function pullTrackStatusTextV170(track){
 
   const last=rows.at(-1);
 
+  if(rows[0]?.archived){
+    return `Trajeto arquivado • ${rows.length} posições do desenho conservadas`+
+      (rows[0].archived_original_points?` de ${rows[0].archived_original_points} posições GPS.`:'.');
+  }
+
   if(!last)return 'GPS aguardando primeira localização real.';
 
   const age=Math.max(0,Date.now()-pullTrackMomentV170(last));
@@ -9208,6 +9244,10 @@ function pullTrackStatusTextV170(track){
 function updatePullMapStatusV170(mapId,track){
   const el=$(mapId+'-track-status');
   if(!el)return;
+  if(track?.[0]?.archived){
+    el.textContent=pullTrackStatusTextV170(track);
+    return;
+  }
   const points=cleanPullTrackV170(track).length,loaded=track?.length||0;
   el.textContent=pullTrackStatusTextV170(track)+(points>1?` • ${loaded} posições carregadas, ${points} válidas no mapa.`:` • ${loaded} posições carregadas; ainda sem pontos suficientes para traçar o trajeto azul.`);
 }
@@ -9234,6 +9274,7 @@ renderPullMap=function(mapId,t,track,events,occurrences=[]){
       {maxZoom:19,attribution:'© OpenStreetMap'}
     ).addTo(map);
 
+    const archived=Boolean(track?.[0]?.archived);
     const clean=cleanPullTrackV170(track);
     const segments=pullTrackSegmentsV170(track);
     const trackPts=clean.map(x=>[Number(x.latitude),Number(x.longitude)]);
@@ -9245,7 +9286,8 @@ renderPullMap=function(mapId,t,track,events,occurrences=[]){
           color:'#2563eb',
           weight:5,
           opacity:.9,
-          smoothFactor:.3
+          smoothFactor:.3,
+          ...(archived?{dashArray:'10 7'}:{})
         }).addTo(map);
       }
     });
@@ -9333,7 +9375,7 @@ renderPullMap=function(mapId,t,track,events,occurrences=[]){
       )
       .addTo(map)
       .bindPopup(
-        '<strong>Localização atual da carreta</strong><br>'+
+        `<strong>${archived?'Última posição arquivada da carreta':'Localização atual da carreta'}</strong><br>`+
         esc(fmtDateTime(latest.device_at||latest.recorded_at))+
         (latest.gps_accuracy!=null?'<br>Precisão ±'+Math.round(Number(latest.gps_accuracy))+' m':'')
       );
@@ -9444,8 +9486,8 @@ openPullTripDetail=async function(id,live=false){
       status.textContent='GPS aguardando atualização...';
 
       const legend=document.createElement('div');
-      legend.className='pull-map-legend';
-      legend.innerHTML='<span><i></i>Trajeto GPS real</span><span class="gap"><i></i>Trecho sem sinal</span><span class="stage"><i></i>Etapa</span><span class="occ"><i></i>Ocorrência</span><span class="current">'+mapSymbolMarkup('truck')+'Última posição</span><span class="factory">'+mapSymbolMarkup('factory')+'Fábrica</span>';
+      legend.className='pull-map-legend'+(trip?.status==='IN_PROGRESS'?'':' archived');
+      legend.innerHTML=`<span><i></i>${trip?.status==='IN_PROGRESS'?'Trajeto GPS real':'Trajeto GPS arquivado'}</span><span class="gap"><i></i>Trecho sem sinal</span><span class="stage"><i></i>Etapa</span><span class="occ"><i></i>Ocorrência</span><span class="current">`+mapSymbolMarkup('truck')+'Última posição</span><span class="factory">'+mapSymbolMarkup('factory')+'Fábrica</span>';
       mapEl.before(title,status,legend);
     }
 

@@ -1174,6 +1174,7 @@ button[data-sales-delivered]:hover{
 .pull-map-legend{display:flex;flex-wrap:wrap;gap:7px 15px;margin:9px 0 12px;color:#4f6377;font-size:11px}
 .pull-map-legend span{display:inline-flex;align-items:center;gap:6px}
 .pull-map-legend i{display:inline-block;width:20px;height:0;border-top:4px solid #2563eb}
+.pull-map-legend.archived span:first-child i{border-top-style:dashed}
 .pull-map-legend .gap i{border-color:#94a3b8;border-top-style:dashed}
 .pull-map-legend .stage i,.pull-map-legend .occ i,.pull-map-legend .current i{width:10px;height:10px;border:0;border-radius:50%;background:#0877c9}
 .pull-map-legend .occ i{background:#d49800}
