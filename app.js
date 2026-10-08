@@ -207,7 +207,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.26-pull-offline',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.27-signature',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -4800,7 +4800,6 @@ function setupDamageReviewWorkspace(kind){
   const selection=body.querySelector(':scope > .damage-selection-bar');
   const note=body.querySelector(':scope > .sales-review-justification');
   const observation=body.querySelector(':scope > .sales-request-observation-card');
-  const signature=body.querySelector(':scope > .signature-details');
   const actionButtons=[...actions.querySelectorAll('.btn')];
   let activeStage='';
   const refreshBulkActions=()=>{
@@ -4825,7 +4824,6 @@ function setupDamageReviewWorkspace(kind){
     visible.forEach(card=>{const check=card.querySelector('.damage-check');if(check)check.hidden=!multi;});
     if(note)note.hidden=!(key==='review'||key==='final')||!selectable;
     if(observation)observation.hidden=!(key==='review'||key==='final');
-    if(signature)signature.hidden=key!=='review';
     refreshBulkActions();
     for(const button of nav.querySelectorAll('button')){
       const active=button.dataset.damageTab===key;
