@@ -1,6 +1,6 @@
 {
   "name": "disb-gestao",
-  "version": "1.7.25",
+  "version": "1.7.26",
   "private": true,
   "scripts": {
     "prepare:web": "node scripts/copy-web.mjs",
@@ -20,6 +20,8 @@
     "@capacitor/push-notifications": "latest",
     "@capacitor/share": "8.0.2",
     "@capgo/background-geolocation": "^8.4.7",
+    "@supabase/supabase-js": "^2.117.3",
+    "leaflet": "^1.9.4",
     "pdf-lib": "1.17.1"
   },
   "devDependencies": {

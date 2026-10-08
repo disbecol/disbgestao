@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#073b6f">
   <title>Disb Gestão</title>
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=1.7.25-pull-invoice">
+  <link rel="stylesheet" href="vendor/leaflet.css">
+  <link rel="stylesheet" href="styles.css?v=1.7.26-pull-offline">
   <link rel="stylesheet" href="visual-refresh.css?v=1.7.1-visual">
   <link rel="stylesheet" href="pull-dashboard.css?v=1.7.1-pull-dashboard">
   <link rel="stylesheet" href="damage-geofence.css?v=2">
@@ -20,7 +20,7 @@
         <div class="login-logo"><img src="assets/icon-192.png" alt="Disb Gestão"></div>
         <span class="eyebrow light">ARMAZÉM • ENTREGA • CONFERÊNCIA</span>
         <h1>Disb Gestão</h1>
-        <p>NRI, Ativo de Giro, Refugo, avarias, vendas, conferência, FEFO e Puxada em um único aplicativo.</p><div class="login-version">v1.7.25</div>
+        <p>NRI, Ativo de Giro, Refugo, avarias, vendas, conferência, FEFO e Puxada em um único aplicativo.</p><div class="login-version">v1.7.26</div>
         <div class="feature-list">
           <span>✓ Cadastro por carreta e impressão de NRIs</span>
           <span>✓ Avarias de entrega e vendas com evidências</span>
@@ -47,7 +47,7 @@
 
   <div id="appShell" class="app-shell hidden">
     <aside id="sidebar" class="sidebar">
-      <div class="brand-row"><div class="brand-box"><img src="assets/icon-192.png" alt="Disb Gestão"></div><div><strong>Disb Gestão</strong><span>Supabase • tempo real</span></div></div><div class="app-version-badge">v1.7.25</div>
+      <div class="brand-row"><div class="brand-box"><img src="assets/icon-192.png" alt="Disb Gestão"></div><div><strong>Disb Gestão</strong><span>Supabase • tempo real</span></div></div><div class="app-version-badge">v1.7.26</div>
       <button class="nav-item home-nav-item" data-view="home"><span aria-hidden="true">⌂</span>Home</button>
       <div class="nav-area open" data-area="armazem" data-permission-any="NRI_PENDING_VIEW,MARKETPLACE_RECEIVE,NRI_CREATE,NRI_PRINT,NRI_HISTORY,NRI_DAMAGE_HISTORY,CONF_CREATE,CONF_OWN_HISTORY,CONF_HISTORY,CONF_DASHBOARD,FEFO_CREATE,FEFO_ACTIVE,FEFO_REPORT,ROTATING_ASSET_CREATE,ROTATING_ASSET_HISTORY,MATERIAL_INVENTORY,MATERIAL_STOCK_VIEW,MATERIAL_CATALOG,MATERIAL_MOVEMENT,REFUGO_AFERIR,REFUGO_HISTORICO,REFUGO_CONFIG">
         <button type="button" class="nav-area-toggle" aria-expanded="true"><span class="area-icon">▦</span><span class="area-name">Armazém</span><span class="area-chevron">⌄</span></button>
@@ -535,6 +535,7 @@
         </div><label class="pull-solo-choice"><input id="pullPlanSolo" type="checkbox"><span><strong>Viagem sozinho</strong><small>O Motorista 1 executará as etapas aplicáveis, sem Motorista 2.</small></span></label>
         <div class="actions right"><button id="pullPlanClear" type="button" class="btn secondary">Limpar</button><button id="pullPlanSave" type="submit" class="btn primary">Cadastrar viagem</button></div></form></div>
         <div class="card"><div class="pull-plan-list-head"><div class="section-title">Viagens cadastradas</div><button id="pullPlansRefresh" type="button" class="btn secondary">Atualizar</button></div><div id="pullPlansList" class="pull-plan-list empty-state">Carregando viagens…</div></div>
+        <div class="card"><div class="section-title">Ciclos encerrados aguardando NRI</div><p class="muted-text">É possível cadastrar a NF após a chegada, enquanto os NRIs ainda não foram emitidos.</p><div id="pullPlanClosedList" class="pull-plan-list empty-state">Carregando ciclos…</div></div>
       </section>
 
       <!-- PUXADA - MOTORISTA -->
@@ -839,9 +840,9 @@
 
       <!-- PRODUTOS -->
       <section id="view-produtos" class="view admin-only" data-permission="ADMIN_BASES">
-        <div class="page-head"><div><div class="breadcrumb">Configurações / Administração</div><h1>Produtos</h1><p>Edite o código Promax, a referência da nota fiscal e a quantidade de unidades comerciais por palete na tabela única de produtos.</p></div><span class="page-chip admin">PRODUTOS</span></div>
-        <div class="card"><form id="formProductAdmin"><input id="productAdminOriginalCode" type="hidden"><div class="grid grid-3"><div class="field"><label for="productAdminCode">Código Promax *</label><input id="productAdminCode" required></div><div class="field span-2"><label for="productAdminName">Nome *</label><input id="productAdminName" required></div><div class="field"><label for="productAdminReference">Código referência NF</label><input id="productAdminReference" placeholder="Ex.: 25078"></div><div class="field"><label for="productAdminPallet">Unidades comerciais por palete</label><input id="productAdminPallet" type="number" min="1" step="1" placeholder="Ex.: 84"></div><div class="field"><label for="productAdminUnit">UN. COM da nota</label><select id="productAdminUnit"><option value="">Não definido</option><option value="CX">Caixa (CX)</option><option value="DZ">Dúzia (DZ)</option><option value="UN">Unidade (UN)</option></select></div></div><label class="check"><input id="productAdminActive" type="checkbox" checked> Produto ativo</label><div class="actions right"><button id="productAdminNew" type="button" class="btn secondary">Novo produto</button><button type="submit" class="btn primary">Salvar produto</button></div></form></div>
-        <div class="card"><div class="grid grid-2"><div class="field"><label for="productAdminSearch">Buscar produto</label><input id="productAdminSearch" placeholder="Código Promax, nome ou referência NF"></div><div class="actions end"><button id="productAdminRefresh" type="button" class="btn secondary">Atualizar</button></div></div><div id="productAdminCount" class="field-help"></div><div class="table-wrap"><table><thead><tr><th>Promax</th><th>Produto</th><th>Referência NF</th><th>Un./palete</th><th>UN. COM</th><th></th></tr></thead><tbody id="productAdminRows"></tbody></table></div></div>
+        <div class="page-head"><div><div class="breadcrumb">Configurações / Administração</div><h1>Produtos</h1><p>Edite as referências da Matriz e da Filial, o código Promax e as unidades comerciais por palete na tabela única de produtos.</p></div><span class="page-chip admin">PRODUTOS</span></div>
+        <div class="card"><form id="formProductAdmin"><input id="productAdminOriginalCode" type="hidden"><div class="grid grid-3"><div class="field"><label for="productAdminCode">Código Promax *</label><input id="productAdminCode" required></div><div class="field span-2"><label for="productAdminName">Nome *</label><input id="productAdminName" required></div><div class="field"><label for="productAdminReference">Referência NF • Matriz Caicó</label><input id="productAdminReference" placeholder="Ex.: 25078"></div><div class="field"><label for="productAdminReferenceFilial">Referência NF • Filial Pau dos Ferros</label><input id="productAdminReferenceFilial" placeholder="Código da filial"></div><div class="field"><label for="productAdminPallet">Unidades comerciais por palete</label><input id="productAdminPallet" type="number" min="1" step="1" placeholder="Ex.: 84"></div><div class="field"><label for="productAdminUnit">UN. COM da nota</label><select id="productAdminUnit"><option value="">Não definido</option><option value="CX">Caixa (CX)</option><option value="DZ">Dúzia (DZ)</option><option value="UN">Unidade (UN)</option></select></div></div><label class="check"><input id="productAdminActive" type="checkbox" checked> Produto ativo</label><div class="actions right"><button id="productAdminNew" type="button" class="btn secondary">Novo produto</button><button type="submit" class="btn primary">Salvar produto</button></div></form></div>
+        <div class="card"><div class="grid grid-2"><div class="field"><label for="productAdminSearch">Buscar produto</label><input id="productAdminSearch" placeholder="Código Promax, nome ou referência NF"></div><div class="actions end"><button id="productAdminRefresh" type="button" class="btn secondary">Atualizar</button></div></div><div id="productAdminCount" class="field-help"></div><div class="table-wrap"><table><thead><tr><th>Promax</th><th>Produto</th><th>NF Matriz</th><th>NF Filial</th><th>Un./palete</th><th>UN. COM</th><th></th></tr></thead><tbody id="productAdminRows"></tbody></table></div></div>
       </section>
 
       <!-- BASES -->
@@ -870,11 +871,11 @@
   <div id="damageNotificationStack" class="damage-notification-stack" aria-live="polite"></div>
   <div id="toast" class="toast"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="vendor/supabase.js"></script>
+  <script src="vendor/leaflet.js"></script>
   <script src="config.js?v=1.7.0"></script>
   <script src="share-reports.js?v=1.7.22"></script>
-  <script src="invoice-note.js?v=1.7.24"></script>
-  <script src="app.js?v=1.7.25-pull-invoice"></script>
+  <script src="invoice-note.js?v=1.7.26"></script>
+  <script src="app.js?v=1.7.26-pull-offline"></script>
 </body>
 </html>

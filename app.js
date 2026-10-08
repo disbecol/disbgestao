@@ -207,7 +207,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.24-pull-invoice',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.26-pull-offline',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -1357,7 +1357,8 @@ async function queryCustomersByCodeCompat(normalized){
   return out;
 }
 async function loadReferences(useCache=false){
-  if(useCache){ const cached=readRefCache(); if(cached){refs=cached;rebuildReferenceMaps();populateReferenceInputs();} }
+  if(useCache){ const cached=readRefCache(!navigator.onLine); if(cached){refs=cached;rebuildReferenceMaps();populateReferenceInputs();} }
+  if(!navigator.onLine)return;
   if(refRefreshPromise)return refRefreshPromise;
   refRefreshPromise=(async()=>{
     try{
@@ -1376,7 +1377,7 @@ async function loadReferences(useCache=false){
   })();
   return refRefreshPromise;
 }
-function readRefCache(){try{localStorage.removeItem('ops_ref_cache');const x=JSON.parse(localStorage.getItem(REF_CACHE_KEY)||'null');return x&&Date.now()-x.at<12*3600e3?sanitizeRefs(x.data):null;}catch{return null;}}
+function readRefCache(allowExpired=false){try{localStorage.removeItem('ops_ref_cache');const x=JSON.parse(localStorage.getItem(REF_CACHE_KEY)||'null');return x&&(allowExpired||Date.now()-x.at<12*3600e3)?sanitizeRefs(x.data):null;}catch{return null;}}
 function rebuildReferenceMaps(){
   productsByCode=new Map(refs.products.map(x=>[String(x.code),x]));
   customersByCode=new Map();
@@ -3095,7 +3096,7 @@ function pullPlanCardHtml(plan,analyst=false){
   const driverNames=plan.solo_trip||plan.cycle_type==='TRANSFER'?`${esc(plan.driver1_name)} • sozinho`:`${esc(plan.driver1_name)} + ${esc(plan.driver2_name||'—')}`;
   const change=analyst&&plan.trip_id?pullPlanAppointmentChanges.get(plan.trip_id):null;
   const changeHtml=change?`<div class="pull-plan-appointment-change"><strong>Última alteração do agendamento</strong><span>Antigo: ${fmtDateTime(change.old_appointment_at)} → Novo: ${fmtDateTime(change.new_appointment_at)}</span><small>${esc(change.reason)} · ${esc(change.changed_by_name)} · ${fmtDateTime(change.changed_at)}</small></div>`:'';
-  return `<article class="pull-plan-card"><div class="pull-plan-card-top"><div><small>${esc(type)} • ${esc(plan.origin_unit)}</small><strong>${esc(plan.plate)} → ${esc(plan.factory)}</strong></div><span class="status ${plan.status==='PLANNED'?'pending':plan.status==='STARTED'?'approved':'rejected'}">${pullPlanStatusLabel(plan)}</span></div><div class="pull-plan-meta"><span>${appointment}</span><span>Motoristas: <b>${driverNames}</b></span></div>${changeHtml}<div class="pull-plan-actions">${analyst&&plan.status==='PLANNED'?`<button type="button" class="mini-btn" data-pull-plan-edit="${plan.id}">Editar</button><button type="button" class="mini-btn" data-pull-plan-cancel="${plan.id}">Cancelar viagem</button>`:analyst&&plan.status==='STARTED'&&plan.cycle_type==='PULL'&&plan.trip_id?`<button type="button" class="mini-btn" data-pull-appointment-edit="${plan.id}">Alterar agendamento</button>`:!analyst&&plan.status==='PLANNED'?canStart?`<button type="button" class="btn primary" data-pull-plan-start="${plan.id}">Iniciar viagem</button>`:'<span class="pull-plan-wait">Aguardando o Motorista 1 iniciar</span>':''}</div></article>`;
+  return `<article class="pull-plan-card" data-plan-id="${plan.id}"><div class="pull-plan-card-top"><div><small>${esc(type)} • ${esc(plan.origin_unit)}</small><strong>${esc(plan.plate)} → ${esc(plan.factory)}</strong></div><span class="status ${plan.status==='PLANNED'?'pending':plan.status==='STARTED'?'approved':'rejected'}">${pullPlanStatusLabel(plan)}</span></div><div class="pull-plan-meta"><span>${appointment}</span><span>Motoristas: <b>${driverNames}</b></span></div>${changeHtml}<div class="pull-plan-actions">${analyst&&plan.status==='PLANNED'?`<button type="button" class="mini-btn" data-pull-plan-edit="${plan.id}">Editar</button><button type="button" class="mini-btn" data-pull-plan-cancel="${plan.id}">Cancelar viagem</button>`:analyst&&plan.status==='STARTED'&&plan.cycle_type==='PULL'&&plan.trip_id?`<button type="button" class="mini-btn" data-pull-appointment-edit="${plan.id}">Alterar agendamento</button>`:!analyst&&plan.status==='PLANNED'?canStart?`<button type="button" class="btn primary" data-pull-plan-start="${plan.id}">Iniciar viagem</button>`:'<span class="pull-plan-wait">Aguardando o Motorista 1 iniciar</span>':''}</div></article>`;
 }
 async function loadPullPlans(silent=false){
   if(!hasPerm('PULL_PLAN'))return;
@@ -3174,11 +3175,11 @@ async function loadAssignedPullPlans(){
   const box=$('pullAssignedPlans');if(!box||!isPullDriver())return;
   if(!navigator.onLine){box.className='pull-plan-list empty-state';box.textContent='Conecte-se à internet para consultar e iniciar viagens cadastradas.';return;}
   try{
-    const {data,error}=await sb.from('pull_trip_plans').select('*').eq('origin_unit',activeUnit).eq('status','PLANNED').or(`driver1_id.eq.${authUser.id},driver2_id.eq.${authUser.id}`).order('scheduled_at',{ascending:true}).limit(100);
+    const {data,error}=await sb.from('pull_trip_plans').select('*').in('origin_unit',myUnits.length?myUnits:['__SEM_UNIDADE__']).eq('status','PLANNED').or(`driver1_id.eq.${authUser.id},driver2_id.eq.${authUser.id}`).order('scheduled_at',{ascending:true}).limit(100);
     if(error)throw error;
     pullAssignedPlans=data||[];
     box.className=pullAssignedPlans.length?'pull-plan-list':'pull-plan-list empty-state';
-    box.innerHTML=pullAssignedPlans.length?pullAssignedPlans.map(x=>pullPlanCardHtml(x)).join(''):'Nenhuma viagem atribuída a você nesta unidade.';
+    box.innerHTML=pullAssignedPlans.length?pullAssignedPlans.map(x=>pullPlanCardHtml(x)).join(''):'Nenhuma viagem atribuída a você nas suas unidades.';
   }catch(error){box.className='pull-plan-list empty-state';box.textContent='Não foi possível consultar suas viagens. Confira a conexão e a atualização do banco.';console.warn('Viagens atribuídas',error);}
 }
 async function onPullAssignedPlanClick(event){
@@ -6488,7 +6489,7 @@ loadPullActiveTrip = async function(silent=false){
       );
     }
 
-    return false;
+    return ok;
   }
 
   try{
@@ -6499,9 +6500,9 @@ loadPullActiveTrip = async function(silent=false){
       await sb
         .from('pull_trips')
         .select('*')
-        .eq(
+        .in(
           'origin_unit',
-          activeUnit
+          myUnits.length?myUnits:['__SEM_UNIDADE__']
         )
         .eq(
           'status',
@@ -6815,7 +6816,7 @@ recordPullNextStep = async function(){
     const gps=
       await captureGps({
         maxAccuracy:target,
-        maxWaitMs:15000,
+        maxWaitMs:navigator.onLine?15000:45000,
         onProgress:s=>{
 
           if(hint){
@@ -6972,6 +6973,8 @@ recordPullNextStep = async function(){
           Number(step.sort_order)
       );
 
+    if(!after)pullActiveTrip._offline_completion_pending=true;
+
     if(after?.executor_driver===1){
 
       pullActiveTrip.active_driver_id=
@@ -7096,10 +7099,74 @@ recordPullNextStep = async function(){
 const renderPullDriverV151=renderPullDriver;
 renderPullDriver = function(){renderPullDriverV151();const tl=$('pullDriverTimeline');if(tl){tl.querySelectorAll('.pull-timeline-item').forEach((el,i)=>{const ordered=[...pullDriverEvents.map(x=>({kind:'STEP',raw:x})),...pullDriverOccurrences.map(x=>({kind:'OCC',raw:x}))].sort((a,b)=>new Date(a.raw.recorded_at||a.raw.started_at)-new Date(b.raw.recorded_at||b.raw.started_at));if(ordered[i]?.raw?._offline)el.classList.add('offline-pending-row');});}};
 const renderPullDriverBeforePlans=renderPullDriver;
-renderPullDriver=function(){renderPullDriverBeforePlans();renderPullActiveSchedule();};
+renderPullDriver=function(){
+  renderPullDriverBeforePlans();renderPullActiveSchedule();
+  if(pullActiveTrip?._offline_completion_pending){
+    const next=$('btnPullNextStep'),hint=$('pullNextStepHint');
+    if(next){next.disabled=true;next.textContent='Ciclo aguardando sincronização';}
+    if(hint)hint.textContent='Última etapa salva no aparelho. O ciclo será concluído quando a internet voltar.';
+    $('pullOccurrenceButtons')?.querySelectorAll('button').forEach(button=>{button.disabled=true;});
+  }
+};
 
 const syncPullTrackingV151=syncPullTracking;
 syncPullTracking = function(){if(!navigator.onLine){stopPullTracking();return;}return syncPullTrackingV151();};
+
+async function syncNewPullOccurrence(op,successMessage){
+  if(!navigator.onLine){toast('Sem sinal: ocorrência salva no aparelho. Será enviada quando a internet voltar.','success');return;}
+  await syncOfflineQueue({silent:true});
+  const pending=await offlineGet('queue',op.id);
+  if(pending){toast('Ocorrência salva no aparelho e aguardando sincronização. Toque no status de conexão para tentar novamente.','success');return;}
+  await loadPullActiveTrip(true);
+  toast(successMessage,'success');
+}
+
+onPullOccurrenceClick = async function(event){
+  const button=event.target.closest('button[data-occ]');if(!button||button.disabled||!pullActiveTrip)return;
+  if(pullActiveTrip._offline_completion_pending||!pullNextStep())return toast('O ciclo já foi encerrado neste aparelho e aguarda sincronização.','error');
+  const step=pullOccurrenceTypes.find(x=>x.id===button.dataset.occ);if(!step||!pullIsActiveDriver())return;
+  if(pullDriverOccurrences.some(x=>x.status==='OPEN'))return toast('Encerre a ocorrência em andamento primeiro.','error');
+  const note=prompt(`Observação para ${step.name} (opcional):`,'')||'';
+  button.disabled=true;button.textContent='Capturando GPS…';
+  try{
+    const target=await refreshPullGpsTarget();
+    const gps=await captureGps({maxAccuracy:target,maxWaitMs:navigator.onLine?15000:45000,onProgress:s=>button.textContent=`GPS ±${Math.round(s.accuracy)} m / limite ${target} m…`});
+    const localId=offlineLocalId('pull-occurrence'),op=await offlineQueueAdd('PULL_OCC_START',{
+      p_trip_id:pullActiveTrip.id,p_step_id:step.id,p_latitude:gps.latitude,p_longitude:gps.longitude,
+      p_accuracy:gps.accuracy,p_note:note,p_device_at:gps.capturedAt,local_occurrence_id:localId
+    });
+    const closed=step.duration_mode==='POINT';
+    pullDriverOccurrences.push({id:localId,trip_id:pullActiveTrip.id,step_id:step.id,occurrence_name:step.name,
+      action_code:step.action_code,duration_mode:step.duration_mode,suggest_tma_discount:step.suggest_tma_discount,
+      started_by:authUser.id,started_by_name:profile.name,started_at:gps.capturedAt,
+      start_latitude:gps.latitude,start_longitude:gps.longitude,start_accuracy:gps.accuracy,
+      ended_by:closed?authUser.id:null,ended_by_name:closed?profile.name:null,ended_at:closed?gps.capturedAt:null,
+      end_latitude:closed?gps.latitude:null,end_longitude:closed?gps.longitude:null,end_accuracy:closed?gps.accuracy:null,
+      status:closed?'CLOSED':'OPEN',note,_offline:true,offline_operation_id:op.id});
+    await cachePullOfflineSnapshot();renderPullDriver();
+    await syncNewPullOccurrence(op,closed?`${step.name} registrado.`:`${step.name} iniciado.`);
+  }catch(error){toast(humanGpsOrPullError(error),'error');}
+  finally{renderPullDriver();}
+};
+
+onPullOpenOccurrenceClick = async function(event){
+  const button=event.target.closest('[data-end-occ]');if(!button||button.disabled||!pullActiveTrip)return;
+  const occurrence=pullDriverOccurrences.find(x=>String(x.id)===String(button.dataset.endOcc));
+  if(!occurrence||occurrence.status!=='OPEN'||!pullIsActiveDriver())return;
+  button.disabled=true;button.textContent='Capturando GPS…';
+  try{
+    const target=await refreshPullGpsTarget();
+    const gps=await captureGps({maxAccuracy:target,maxWaitMs:navigator.onLine?15000:45000,onProgress:s=>button.textContent=`GPS ±${Math.round(s.accuracy)} m / limite ${target} m…`});
+    const op=await offlineQueueAdd('PULL_OCC_END',{p_occurrence_id:occurrence.id,p_latitude:gps.latitude,
+      p_longitude:gps.longitude,p_accuracy:gps.accuracy,p_device_at:gps.capturedAt});
+    Object.assign(occurrence,{status:'CLOSED',ended_by:authUser.id,ended_by_name:profile.name,
+      ended_at:gps.capturedAt,end_latitude:gps.latitude,end_longitude:gps.longitude,end_accuracy:gps.accuracy,
+      _offline:true,offline_operation_id:op.id});
+    await cachePullOfflineSnapshot();renderPullDriver();
+    await syncNewPullOccurrence(op,'Ocorrência encerrada.');
+  }catch(error){toast(humanGpsOrPullError(error),'error');}
+  finally{renderPullDriver();}
+};
 
 async function offlineUploadDamageStorage(path,blob){const {error}=await sb.storage.from('avarias').upload(path,blob,{contentType:'image/jpeg',upsert:true});if(error)throw error;}
 const damagePushResultsV174=new Map();
@@ -7248,6 +7315,19 @@ async function processOfflineRecord(row){
   if(row.type==='FEFO_DELETE'){const {data,error}=await sb.rpc('offline_sync_fefo_delete',{p_operation_id:row.id,p_item_id:row.payload.p_item_id});if(error)throw error;return data;}
   if(row.type==='FEFO_FINISH'){const countId=await resolveOfflineFefoCountId(row.payload.p_count_id);if(!countId)throw new Error('FEFO_AGUARDANDO_INICIO');const {data,error}=await sb.rpc('offline_sync_fefo_finish',{p_operation_id:row.id,p_count_id:countId});if(error)throw error;for(const unit of myUnits){const key=fefoOfflineSnapshotKey(unit),snap=await getFefoOfflineSnapshot(unit);if(snap?.count?.id===countId||snap?.count?.id===row.payload.p_count_id)await offlineStateSet(key,{count:null,items:[]});}return data;}
   if(row.type==='PULL_STEP'){const p=row.payload,{data,error}=await sb.rpc('offline_sync_pull_step',{p_operation_id:row.id,p_trip_id:p.p_trip_id,p_step_id:p.p_step_id,p_latitude:p.p_latitude,p_longitude:p.p_longitude,p_accuracy:p.p_accuracy,p_exception_reason:p.p_exception_reason||'',p_device_at:p.p_device_at});if(error)throw error;return data;}
+  if(row.type==='PULL_OCC_START'){
+    const p=row.payload,{data,error}=await sb.rpc('offline_sync_pull_occurrence_start',{p_operation_id:row.id,p_trip_id:p.p_trip_id,p_step_id:p.p_step_id,p_latitude:p.p_latitude,p_longitude:p.p_longitude,p_accuracy:p.p_accuracy,p_note:p.p_note||'',p_device_at:p.p_device_at});
+    if(error)throw error;if(!data?.id)throw new Error('OCORRENCIA_SYNC_SEM_RETORNO');
+    await offlineStateSet(`pull_occ_map:${p.local_occurrence_id}`,data.id);
+    const local=pullDriverOccurrences.find(x=>x.id===p.local_occurrence_id);if(local){local.id=data.id;await cachePullOfflineSnapshot();}
+    return data;
+  }
+  if(row.type==='PULL_OCC_END'){
+    const p=row.payload,occurrenceId=offlineIsLocalId(p.p_occurrence_id)?await offlineStateGet(`pull_occ_map:${p.p_occurrence_id}`):p.p_occurrence_id;
+    if(!occurrenceId)throw new Error('OCORRENCIA_AGUARDANDO_INICIO');
+    const {data,error}=await sb.rpc('offline_sync_pull_occurrence_end',{p_operation_id:row.id,p_occurrence_id:occurrenceId,p_latitude:p.p_latitude,p_longitude:p.p_longitude,p_accuracy:p.p_accuracy,p_device_at:p.p_device_at});
+    if(error)throw error;return data;
+  }
   if(row.type==='DAMAGE_CREATE'){
     const p=row.payload,base=`${authUser.id}/offline_${row.id}`,signaturePath=`${base}/assinatura.jpg`;await offlineUploadDamageStorage(signaturePath,p.signature_blob);const uploaded=[];
     for(let i=0;i<p.items.length;i++){const x=p.items[i],photos=[];for(let j=0;j<(x.photos||[]).length;j++){const ph=x.photos[j],path=`${base}/produto_${String(i+1).padStart(2,'0')}_foto_${String(j+1).padStart(2,'0')}.jpg`;await offlineUploadDamageStorage(path,ph.blob);photos.push({photo_path:path,latitude:ph.gps.latitude,longitude:ph.gps.longitude,accuracy:ph.gps.accuracy||'',gps_at:ph.gps.capturedAt});}uploaded.push({...x,photos});}
@@ -7373,9 +7453,7 @@ async function syncOfflineQueue({
               touchedFefo=true;
             }
 
-            if(
-              row.type==='PULL_STEP'
-            ){
+            if(row.type==='PULL_STEP'||row.type==='PULL_OCC_START'||row.type==='PULL_OCC_END'){
               touchedPull=true;
             }
 
@@ -11386,7 +11464,7 @@ let invoiceAdminProducts=[];
 let nriInvoiceContext=null;
 
 async function fetchInvoiceProducts(){
-  return fetchReferencePages(()=>sb.from('products').select('code,name,active,nf_reference_code,commercial_units_per_pallet,invoice_unit').order('code'),PRODUCT_REF_LIMIT);
+  return fetchReferencePages(()=>sb.from('products').select('code,name,active,nf_reference_code,nf_reference_code_filial,commercial_units_per_pallet,invoice_unit').order('code'),PRODUCT_REF_LIMIT);
 }
 async function loadProductsAdmin(){
   if(!hasPerm('ADMIN_BASES'))return;
@@ -11395,14 +11473,14 @@ async function loadProductsAdmin(){
 }
 function renderProductsAdmin(){
   const q=norm($('productAdminSearch')?.value||'');
-  const rows=invoiceAdminProducts.filter(p=>!q||norm([p.code,p.name,p.nf_reference_code].join(' ')).includes(q));
+  const rows=invoiceAdminProducts.filter(p=>!q||norm([p.code,p.name,p.nf_reference_code,p.nf_reference_code_filial].join(' ')).includes(q));
   $('productAdminCount').textContent=`${rows.length} de ${invoiceAdminProducts.length} produtos`;
-  $('productAdminRows').innerHTML=rows.map(p=>`<tr><td><strong>${esc(p.code)}</strong></td><td>${esc(p.name)}${p.active?'':' <span class="status rejected">Inativo</span>'}</td><td>${esc(p.nf_reference_code||'—')}</td><td>${p.commercial_units_per_pallet||'—'}</td><td>${esc(p.invoice_unit||'—')}</td><td><button type="button" class="mini-btn" data-product-edit="${esc(p.code)}">Editar</button></td></tr>`).join('')||'<tr><td colspan="6">Nenhum produto encontrado.</td></tr>';
+  $('productAdminRows').innerHTML=rows.map(p=>`<tr><td><strong>${esc(p.code)}</strong></td><td>${esc(p.name)}${p.active?'':' <span class="status rejected">Inativo</span>'}</td><td>${esc(p.nf_reference_code||'—')}</td><td>${esc(p.nf_reference_code_filial||'—')}</td><td>${p.commercial_units_per_pallet||'—'}</td><td>${esc(p.invoice_unit||'—')}</td><td><button type="button" class="mini-btn" data-product-edit="${esc(p.code)}">Editar</button></td></tr>`).join('')||'<tr><td colspan="7">Nenhum produto encontrado.</td></tr>';
 }
 function editProductAdmin(code){
   const p=invoiceAdminProducts.find(x=>String(x.code)===String(code));if(!p)return;
   $('productAdminOriginalCode').value=p.code;$('productAdminCode').value=p.code;$('productAdminCode').readOnly=true;
-  $('productAdminName').value=p.name;$('productAdminReference').value=p.nf_reference_code||'';
+  $('productAdminName').value=p.name;$('productAdminReference').value=p.nf_reference_code||'';$('productAdminReferenceFilial').value=p.nf_reference_code_filial||'';
   $('productAdminPallet').value=p.commercial_units_per_pallet||'';$('productAdminUnit').value=p.invoice_unit||'';
   $('productAdminActive').checked=!!p.active;$('formProductAdmin').scrollIntoView({behavior:'smooth',block:'start'});
 }
@@ -11411,11 +11489,11 @@ function clearProductAdmin(){
 }
 async function saveProductAdmin(event){
   event.preventDefault();if(!hasPerm('ADMIN_BASES'))return;
-  const code=normalizeCode($('productAdminCode').value),name=$('productAdminName').value.trim(),reference=$('productAdminReference').value.trim().toUpperCase(),capacityText=$('productAdminPallet').value.trim(),capacity=capacityText?Number(capacityText):null,unit=$('productAdminUnit').value||null;
+  const code=normalizeCode($('productAdminCode').value),name=$('productAdminName').value.trim(),reference=$('productAdminReference').value.trim().toUpperCase(),referenceFilial=$('productAdminReferenceFilial').value.trim().toUpperCase(),capacityText=$('productAdminPallet').value.trim(),capacity=capacityText?Number(capacityText):null,unit=$('productAdminUnit').value||null;
   if(!code||!name)return toast('Informe código Promax e nome do produto.','error');
   if(capacity!==null&&(!Number.isInteger(capacity)||capacity<1))return toast('Informe um número inteiro positivo para unidades por palete.','error');
-  if(reference==='#N/D')return toast('Substitua #N/D pela referência correta ou deixe o campo vazio.','error');
-  const row={code,name,active:$('productAdminActive').checked,nf_reference_code:reference||null,commercial_units_per_pallet:capacity,invoice_unit:unit,updated_at:new Date().toISOString()};
+  if(reference==='#N/D'||referenceFilial==='#N/D')return toast('Substitua #N/D pela referência correta ou deixe o campo vazio.','error');
+  const row={code,name,active:$('productAdminActive').checked,nf_reference_code:reference||null,nf_reference_code_filial:referenceFilial||null,commercial_units_per_pallet:capacity,invoice_unit:unit,updated_at:new Date().toISOString()};
   const button=event.submitter||$('formProductAdmin').querySelector('button[type="submit"]');button.disabled=true;
   try{const {error}=await sb.from('products').upsert(row,{onConflict:'code'});if(error)throw error;clearProductAdmin();localStorage.removeItem(REF_CACHE_KEY);await Promise.all([loadProductsAdmin(),loadReferences(false)]);toast('Produto salvo.','success');}
   catch(error){toast(humanError(error),'error');}
@@ -11434,6 +11512,15 @@ async function pullInvoiceByTrip(tripId){
   const {data,error}=await sb.from('pull_trip_invoices').select('*').eq('trip_id',tripId).maybeSingle();
   if(error)throw error;return data;
 }
+async function pullInvoiceByPlan(planId){
+  const {data,error}=await sb.from('pull_trip_invoices').select('*').eq('plan_id',planId).maybeSingle();
+  if(error)throw error;return data;
+}
+async function pullInvoiceOrigin(targetId,scope){
+  const table=scope==='plan'?'pull_trip_plans':'pull_trips';
+  const {data,error}=await sb.from(table).select('origin_unit').eq('id',targetId).single();
+  if(error)throw error;return data.origin_unit;
+}
 async function pullInvoiceLink(note){
   const {data,error}=await sb.storage.from('puxada-notas').createSignedUrl(note.pdf_path,3600);
   if(error)throw error;return data.signedUrl;
@@ -11441,17 +11528,39 @@ async function pullInvoiceLink(note){
 function invoiceItemSummary(items){
   return (items||[]).map(x=>`<div class="invoice-summary-row"><strong>${esc(x.product_code)} • ${esc(x.product_name)}</strong><span>${fmtNum(x.quantity)} ${esc(x.commercial_unit)} ÷ ${fmtNum(x.commercial_units_per_pallet)} = ${x.full_pallets}${Number(x.remaining_units)>0?` + 1 parcial (${fmtNum(x.remaining_units)} ${esc(x.commercial_unit)})`:''} NRI(s)</span></div>`).join('');
 }
-async function openPullInvoiceModal(tripId){
-  if(!tripId)return;
-  openModal('Nota de Puxada','Anexe um PDF DANFE com texto selecionável',`<div id="pullInvoiceExisting" class="notice compact">Consultando nota anexada…</div><div class="field"><label for="pullInvoicePdfFile">Nota em PDF</label><input id="pullInvoicePdfFile" type="file" accept="application/pdf,.pdf"></div><div class="field"><label for="pullInvoiceNumber">Número da nota</label><input id="pullInvoiceNumber" inputmode="numeric" placeholder="Preenchido automaticamente quando encontrado"></div><div id="pullInvoicePreview" class="import-result">Selecione um arquivo para conferir os produtos antes de anexar.</div>`,[
-    {label:'Anexar PDF',class:'primary',onClick:()=>savePullInvoiceFromModal(tripId)},
-    {label:'Fechar',class:'secondary',onClick:closeModal}
-  ]);
-  $('pullInvoicePdfFile').addEventListener('change',previewPullInvoiceFile);
-  try{const note=await pullInvoiceByTrip(tripId);const box=$('pullInvoiceExisting');if(!box)return;
+let invoiceOriginPromise=null;
+let invoiceOriginError=null;
+async function openPullInvoiceModal(targetId,scope='trip',readOnly=false){
+  if(!targetId)return;
+  invoicePrepared=null;
+  invoiceOriginError=null;
+  invoiceOriginPromise=readOnly?Promise.resolve(null):pullInvoiceOrigin(targetId,scope).catch(error=>{invoiceOriginError=error;return null;});
+  const form=readOnly?'':`<div class="field"><label for="pullInvoicePdfFile">Nota em PDF</label><input id="pullInvoicePdfFile" type="file" accept="application/pdf,.pdf"></div><div class="field"><label for="pullInvoiceNumber">Número da nota</label><input id="pullInvoiceNumber" inputmode="numeric" placeholder="Preenchido automaticamente quando encontrado"></div><div id="pullInvoicePreview" class="import-result">Selecione um arquivo para conferir os produtos antes de anexar.</div>`;
+  const actions=readOnly?[]:[{label:'Anexar PDF',class:'primary',onClick:()=>savePullInvoiceFromModal(targetId,scope)}];
+  actions.push({label:'Fechar',class:'secondary',onClick:closeModal});
+  openModal('Nota de Puxada',readOnly?'Nota vinculada a esta viagem':'Anexe um PDF DANFE com texto selecionável',`<div id="pullInvoiceExisting" class="notice compact">Consultando nota anexada…</div>${form}`,actions);
+  $('pullInvoicePdfFile')?.addEventListener('change',previewPullInvoiceFile);
+  let deleteButton=null;
+  if(!readOnly){deleteButton=document.createElement('button');deleteButton.type='button';deleteButton.className='btn danger hidden';deleteButton.textContent='Excluir NF';$('modalActions').prepend(deleteButton);}
+  try{const note=scope==='plan'?await pullInvoiceByPlan(targetId):await pullInvoiceByTrip(targetId);const box=$('pullInvoiceExisting');if(!box)return;
     if(!note){box.textContent='Nenhuma nota anexada a esta puxada.';return;}
     const url=await pullInvoiceLink(note);box.innerHTML=`<strong>Nota atual: ${esc(note.invoice_number||'sem número')}</strong> • ${(note.items||[]).length} produto(s) <a href="${esc(url)}" target="_blank" rel="noopener">Abrir PDF</a><div>${invoiceItemSummary(note.items)}</div>`;
+    if(deleteButton){deleteButton.classList.remove('hidden');deleteButton.addEventListener('click',()=>deletePullInvoiceFromModal(targetId,scope,note,deleteButton));}
   }catch(error){if($('pullInvoiceExisting'))$('pullInvoiceExisting').textContent=humanError(error);}
+}
+async function deletePullInvoiceFromModal(targetId,scope,note,button){
+  if(!confirm(`Excluir a NF ${note.invoice_number||'sem número'} desta ${scope==='plan'?'viagem cadastrada':'puxada'}? Os produtos pré-preenchidos por ela deixarão de aparecer nos NRIs.`))return;
+  button.disabled=true;button.textContent='Excluindo…';
+  try{
+    const {data,error}=await sb.rpc('delete_pull_invoice',{p_trip_id:scope==='trip'?targetId:null,p_plan_id:scope==='plan'?targetId:null});if(error)throw error;
+    const removed=await sb.storage.from('puxada-notas').remove([data.pdf_path]);
+    closeModal();invoicePrepared=null;
+    toast(removed.error?'NF desvinculada. O arquivo não pôde ser removido do armazenamento.':'NF excluída desta puxada.','success');
+    if(pullActiveTrip?.id===targetId)void refreshPullInvoiceDriver();
+    if(activeView==='puxada-cadastrar')void loadPullPlans(true);
+    if(activeView==='nri-carretas')void loadPullNriPending(true);
+  }catch(error){toast(humanError(error),'error');}
+  finally{button.disabled=false;button.textContent='Excluir NF';}
 }
 let invoicePrepared=null;
 async function previewPullInvoiceFile(){
@@ -11459,27 +11568,31 @@ async function previewPullInvoiceFile(){
   if(!file){box.textContent='Selecione um PDF.';return;}
   if(file.size>10*1024*1024||file.size<100||(!/\.pdf$/i.test(file.name)&&file.type!=='application/pdf')){box.textContent='Selecione um PDF de até 10 MB.';return;}
   box.textContent='Lendo os produtos da nota…';
-  try{const [pdfjs,products]=await Promise.all([invoicePdfLibrary(),fetchInvoiceProducts()]);
-    const parsed=await window.DISB_INVOICE_NOTE.readPdf(file,pdfjs),matched=window.DISB_INVOICE_NOTE.matchProducts(parsed.lines,products);
+  try{const [pdfjs,products,originUnit]=await Promise.all([invoicePdfLibrary(),fetchInvoiceProducts(),invoiceOriginPromise]);
+    if(invoiceOriginError||!originUnit)throw invoiceOriginError||new Error('Não foi possível identificar a unidade da puxada.');
+    const parsed=await window.DISB_INVOICE_NOTE.readPdf(file,pdfjs),matched=window.DISB_INVOICE_NOTE.matchProducts(parsed.lines,products,originUnit);
     if(parsed.invoice_number)$('pullInvoiceNumber').value=parsed.invoice_number;
     invoicePrepared={file,parsed,matched};
     const nris=matched.reduce((n,x)=>n+x.full_pallets+(x.remaining_units>0?1:0),0);
     box.innerHTML=`<strong>${matched.length} produto(s) • ${nris} NRI(s)</strong><p>As linhas repetidas foram somadas por referência antes da conversão.</p>${invoiceItemSummary(matched)}`;
   }catch(error){box.textContent=humanError(error);}
 }
-async function savePullInvoiceFromModal(tripId){
+async function savePullInvoiceFromModal(targetId,scope='trip'){
   const prepared=invoicePrepared,file=$('pullInvoicePdfFile')?.files?.[0];
   if(!prepared||prepared.file!==file)return toast('Selecione e confira uma nota PDF válida.','error');
   const button=[...$('modalActions').querySelectorAll('button')].find(b=>b.textContent==='Anexar PDF');button.disabled=true;button.textContent='Anexando…';
   let path='',uploaded=false;
   try{
-    const previous=await pullInvoiceByTrip(tripId);
-    path=`${tripId}/${authUser.id}/${uuid()}.pdf`;
+    const previous=scope==='plan'?await pullInvoiceByPlan(targetId):await pullInvoiceByTrip(targetId);
+    path=`${targetId}/${authUser.id}/${uuid()}.pdf`;
     const upload=await sb.storage.from('puxada-notas').upload(path,file,{contentType:'application/pdf',upsert:false});if(upload.error)throw upload.error;uploaded=true;
-    const saved=await sb.rpc('register_pull_trip_invoice',{p_trip_id:tripId,p_pdf_path:path,p_invoice_number:$('pullInvoiceNumber').value.trim(),p_lines:prepared.parsed.lines});if(saved.error)throw saved.error;
+    const rpc=scope==='plan'?'register_pull_plan_invoice':'register_pull_trip_invoice';
+    const args=scope==='plan'?{p_plan_id:targetId}:{p_trip_id:targetId};
+    const saved=await sb.rpc(rpc,{...args,p_pdf_path:path,p_invoice_number:$('pullInvoiceNumber').value.trim(),p_lines:prepared.parsed.lines});if(saved.error)throw saved.error;
     if(previous?.pdf_path&&previous.pdf_path!==path)await sb.storage.from('puxada-notas').remove([previous.pdf_path]).catch(()=>{});
     closeModal();invoicePrepared=null;toast('Nota vinculada à puxada. Produtos e paletes estarão prontos no cadastro de NRIs.','success');
-    if(pullActiveTrip?.id===tripId)void refreshPullInvoiceDriver();
+    if(pullActiveTrip?.id===targetId)void refreshPullInvoiceDriver();
+    if(activeView==='puxada-cadastrar')void loadPullPlans(true);
     if(activeView==='nri-carretas')void loadPullNriPending(true);
   }catch(error){if(uploaded)await sb.storage.from('puxada-notas').remove([path]).catch(()=>{});toast(humanError(error),'error');}
   finally{button.disabled=false;button.textContent='Anexar PDF';}
@@ -11491,13 +11604,37 @@ async function refreshPullInvoiceDriver(){
   }catch(error){box.textContent=humanError(error);}
 }
 
+async function decoratePullPlanInvoices(){
+  if(!hasPerm('PULL_PLAN'))return;
+  const plans=pullPlans.filter(p=>p.cycle_type==='PULL'),tripIds=plans.map(p=>p.trip_id).filter(Boolean),planIds=plans.filter(p=>p.status==='PLANNED').map(p=>p.id);
+  const [tripResult,planNoteResult,tripNoteResult,endedResult]=await Promise.all([
+    tripIds.length?sb.from('pull_trips').select('id,status,nri_status').in('id',tripIds):Promise.resolve({data:[]}),
+    planIds.length?sb.from('pull_trip_invoices').select('plan_id,invoice_number').in('plan_id',planIds):Promise.resolve({data:[]}),
+    tripIds.length?sb.from('pull_trip_invoices').select('trip_id,invoice_number').in('trip_id',tripIds):Promise.resolve({data:[]}),
+    sb.from('pull_trips').select('id,trip_code,plate,factory,origin_unit,ended_at,status,nri_status').eq('origin_unit',activeUnit).eq('cycle_type','PULL').eq('status','ARRIVED').eq('nri_status','PENDING').order('ended_at',{ascending:false}).limit(100)
+  ]);
+  const error=[tripResult,planNoteResult,tripNoteResult,endedResult].find(x=>x.error)?.error;if(error)throw error;
+  const trips=new Map((tripResult.data||[]).map(x=>[x.id,x])),planNotes=new Map((planNoteResult.data||[]).map(x=>[x.plan_id,x])),tripNotes=new Map((tripNoteResult.data||[]).map(x=>[x.trip_id,x]));
+  for(const plan of plans){const card=$('pullPlansList')?.querySelector(`[data-plan-id="${plan.id}"]`),actions=card?.querySelector('.pull-plan-actions');if(!actions)continue;
+    const trip=trips.get(plan.trip_id),note=plan.status==='PLANNED'?planNotes.get(plan.id):tripNotes.get(plan.trip_id);
+    const writable=plan.status==='PLANNED'||(plan.status==='STARTED'&&trip&&(trip.status==='IN_PROGRESS'||(trip.status==='ARRIVED'&&trip.nri_status==='PENDING')));
+    if(!writable&&!note)continue;
+    const button=document.createElement('button');button.type='button';button.className='mini-btn';button.dataset.pullPlanInvoice=plan.status==='PLANNED'?plan.id:plan.trip_id;button.dataset.invoiceScope=plan.status==='PLANNED'?'plan':'trip';if(!writable)button.dataset.invoiceReadOnly='true';button.textContent=!writable?'Ver NF':note?'Ver / trocar NF':'Cadastrar NF';actions.append(button);
+  }
+  const box=$('pullPlanClosedList'),ended=endedResult.data||[];if(!box)return;
+  box.className=ended.length?'pull-plan-list':'pull-plan-list empty-state';
+  box.innerHTML=ended.length?ended.map(t=>`<article class="pull-plan-card"><div class="pull-plan-card-top"><div><small>${esc(t.trip_code||'PUXADA')} • ${esc(t.origin_unit)}</small><strong>${esc(t.plate)} → ${esc(t.factory)}</strong></div><span class="status pending">Aguardando NRI</span></div><div class="pull-plan-meta"><span>Chegada: <b>${fmtDateTime(t.ended_at)}</b></span></div><div class="pull-plan-actions"><button type="button" class="mini-btn" data-pull-plan-invoice="${t.id}" data-invoice-scope="trip">Cadastrar ou consultar NF</button></div></article>`).join(''):'Nenhum ciclo encerrado aguardando NRI nesta unidade.';
+}
+const invoiceOriginalLoadPlans=loadPullPlans;
+loadPullPlans=async function(...args){const result=await invoiceOriginalLoadPlans(...args);try{await decoratePullPlanInvoices();}catch(error){console.warn('Notas de viagens cadastradas',error);const box=$('pullPlanClosedList');if(box)box.textContent='Não foi possível carregar as notas e os ciclos encerrados.';}return result;};
+
 const invoiceOriginalLoadPull=loadPullActiveTrip;
 loadPullActiveTrip=async function(...args){const result=await invoiceOriginalLoadPull(...args);$('pullInvoiceDriverCard')?.classList.toggle('hidden',!pullActiveTrip||pullActiveTrip.cycle_type!=='PULL');if(pullActiveTrip?.cycle_type==='PULL')void refreshPullInvoiceDriver();return result;};
 const invoiceOriginalRenderFarol=renderPullFarol;
 renderPullFarol=function(...args){const result=invoiceOriginalRenderFarol(...args),box=$('pullFarolCards');box?.querySelectorAll('[data-pull-detail]').forEach(details=>{const id=details.dataset.pullDetail,t=box._rows?.find(x=>x.id===id);if(t?.cycle_type!=='PULL')return;const button=document.createElement('button');button.type='button';button.className='btn secondary wide';button.dataset.pullInvoice=id;button.textContent='Nota de Puxada';details.after(button);});return result;};
 const invoiceOriginalPending=loadPullNriPending;
 loadPullNriPending=async function(...args){const result=await invoiceOriginalPending(...args),box=$('pullNriCards'),ids=[...box?.querySelectorAll('[data-pull-nri]')||[]].map(b=>b.dataset.pullNri);if(!ids.length)return result;
-  try{const {data,error}=await sb.from('pull_trip_invoices').select('trip_id,invoice_number').in('trip_id',ids);if(error)throw error;const byTrip=new Map((data||[]).map(x=>[x.trip_id,x]));box.querySelectorAll('[data-pull-nri]').forEach(action=>{const note=byTrip.get(action.dataset.pullNri);if(!note)return;const label=document.createElement('span');label.className='status approved';label.textContent=`Nota ${note.invoice_number||'anexada'}`;action.before(label);const btn=document.createElement('button');btn.type='button';btn.className='mini-btn';btn.dataset.pullInvoice=action.dataset.pullNri;btn.textContent='Ver nota';action.before(btn);});}
+  try{const {data,error}=await sb.from('pull_trip_invoices').select('trip_id,invoice_number').in('trip_id',ids);if(error)throw error;const byTrip=new Map((data||[]).map(x=>[x.trip_id,x]));box.querySelectorAll('[data-pull-nri]').forEach(action=>{const note=byTrip.get(action.dataset.pullNri);if(note){const label=document.createElement('span');label.className='status approved';label.textContent=`Nota ${note.invoice_number||'anexada'}`;action.before(label);}if(!hasAnyPerm('NRI_CREATE,PULL_PLAN,PULL_FAROL'))return;const btn=document.createElement('button');btn.type='button';btn.className='mini-btn';btn.dataset.pullInvoice=action.dataset.pullNri;btn.textContent=note?'Ver / trocar NF':'Cadastrar NF';action.before(btn);});}
   catch(error){console.warn('Notas das puxadas pendentes',error);}return result;};
 
 const invoiceOriginalPrefill=prefillNriFromPull;
@@ -11552,6 +11689,9 @@ window.addEventListener('DOMContentLoaded',()=>{
   $('productAdminSearch')?.addEventListener('input',renderProductsAdmin);
   $('productAdminRows')?.addEventListener('click',event=>{const button=event.target.closest('[data-product-edit]');if(button)editProductAdmin(button.dataset.productEdit);});
   $('pullInvoiceDriverButton')?.addEventListener('click',()=>openPullInvoiceModal(pullActiveTrip?.id));
+  const onPlanInvoiceClick=event=>{const button=event.target.closest('[data-pull-plan-invoice]');if(button)openPullInvoiceModal(button.dataset.pullPlanInvoice,button.dataset.invoiceScope||'trip',button.dataset.invoiceReadOnly==='true');};
+  $('pullPlansList')?.addEventListener('click',onPlanInvoiceClick);
+  $('pullPlanClosedList')?.addEventListener('click',onPlanInvoiceClick);
   $('pullFarolCards')?.addEventListener('click',event=>{const button=event.target.closest('[data-pull-invoice]');if(button)openPullInvoiceModal(button.dataset.pullInvoice);});
   $('pullNriCards')?.addEventListener('click',event=>{const button=event.target.closest('[data-pull-invoice]');if(button)openPullInvoiceModal(button.dataset.pullInvoice);});
 });

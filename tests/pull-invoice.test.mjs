@@ -33,3 +33,11 @@ test('não soma o mesmo produto em unidades comerciais incompatíveis',()=>{
     {reference_code:'25078',commercial_unit:'UN',quantity:24}
   ]),/unidades comerciais diferentes/);
 });
+
+test('usa a referência da unidade de origem sem duplicar o produto',()=>{
+  const product={code:'988',name:'BRAHMA CHOPP',nf_reference_code:'25078',nf_reference_code_filial:'FIL-988',commercial_units_per_pallet:84};
+  const row=reference_code=>[{reference_code,description:'BRAHMA CHOPP',commercial_unit:'DZ',quantity:168}];
+  assert.equal(note.matchProducts(row('25078'),[product],'Matriz Caicó')[0].product_code,'988');
+  assert.equal(note.matchProducts(row('FIL-988'),[product],'Filial Pau dos Ferros')[0].product_code,'988');
+  assert.throws(()=>note.matchProducts(row('25078'),[product],'Filial Pau dos Ferros'),/não encontrado/);
+});

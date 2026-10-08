@@ -32,8 +32,9 @@
     const unitsByReference=new Map();for(const row of grouped.values()){const old=unitsByReference.get(row.reference_code);if(old&&old!==row.commercial_unit)throw new Error(`A referência ${row.reference_code} aparece com unidades comerciais diferentes (${old} e ${row.commercial_unit}). Confira a nota antes de converter.`);unitsByReference.set(row.reference_code,row.commercial_unit);}
     return [...grouped.values()];
   }
-  function matchProducts(lines,products){
-    const byReference=new Map();for(const p of products||[]){const ref=clean(p.nf_reference_code).toUpperCase();if(ref&&ref!=='#N/D'){if(byReference.has(ref))throw new Error(`O código de referência ${ref} está cadastrado em mais de um produto.`);byReference.set(ref,p);}}
+  function matchProducts(lines,products,originUnit='Matriz Caicó'){
+    const field=originUnit==='Filial Pau dos Ferros'?'nf_reference_code_filial':'nf_reference_code';
+    const byReference=new Map();for(const p of products||[]){const ref=clean(p[field]).toUpperCase();if(ref&&ref!=='#N/D'){if(byReference.has(ref))throw new Error(`O código de referência ${ref} está cadastrado em mais de um produto para ${originUnit}.`);byReference.set(ref,p);}}
     return groupLines(lines).map(row=>{const p=byReference.get(row.reference_code);if(!p)throw new Error(`Código de referência ${row.reference_code} não encontrado. Cadastre-o em Configurações > Produtos.`);const capacity=Number(p.commercial_units_per_pallet);if(!Number.isInteger(capacity)||capacity<1)throw new Error(`Informe a capacidade do palete do produto ${p.code} em Configurações > Produtos.`);if(p.invoice_unit&&clean(p.invoice_unit).toUpperCase()!==row.commercial_unit)throw new Error(`A unidade ${row.commercial_unit} da nota não confere com a unidade cadastrada para ${p.code}.`);
       const full=Math.floor(row.quantity/capacity),remainder=Number((row.quantity-full*capacity).toFixed(6));return {...row,product_code:p.code,product_name:p.name,commercial_units_per_pallet:capacity,full_pallets:full,remaining_units:remainder,pallets_exact:row.quantity/capacity};});
   }
