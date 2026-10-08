@@ -191,6 +191,7 @@ const viewMeta = {
   'puxada-config':['Configurações da Puxada','GPS, raio de auditoria e veículos'],
   'usuarios':['Usuários e perfis','Controle de acesso'],
   'contatos-clientes':['Contatos de clientes','WhatsApp e comprovantes de avaria'],
+  'produtos':['Produtos','Referências da nota fiscal e capacidade por palete'],
   'bases':['Bases / importação','Migração do Google Sheets']
 };
 
@@ -206,7 +207,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.23-track-archive',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.24-pull-invoice',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -1267,6 +1268,7 @@ function openView(name,force=false){
   if(name.startsWith('refugo-'))loadRefugoView(name).catch(e=>toast(refugoError(e),'error'));
   if(name==='usuarios')loadUsers();
   if(name==='contatos-clientes')loadCustomerContactAdmin();
+  if(name==='produtos')loadProductsAdmin();
   if(name==='bases')renderGeoCustomerResults();
   if(name==='marketplace-recebimento')loadMarketplaceModule();
   if(name==='nri-carretas'||name.startsWith('puxada-')) pullOnView(name);

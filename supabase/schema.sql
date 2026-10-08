@@ -84,6 +84,9 @@ create table if not exists public.products (
   code text primary key,
   name text not null,
   active boolean not null default true,
+  nf_reference_code text,
+  commercial_units_per_pallet integer,
+  invoice_unit text,
   updated_at timestamptz not null default now()
 );
 create table if not exists public.units (
