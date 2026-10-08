@@ -207,7 +207,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.27-signature',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.28-invoice-lots',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -11636,42 +11636,89 @@ loadPullNriPending=async function(...args){const result=await invoiceOriginalPen
   catch(error){console.warn('Notas das puxadas pendentes',error);}return result;};
 
 const invoiceOriginalPrefill=prefillNriFromPull;
+let nriInvoiceLoadId=0;
 prefillNriFromPull=async function(trip){
   invoiceOriginalPrefill(trip);nriInvoiceContext=null;
+  const loadId=nriInvoiceLoadId;
   try{const note=await pullInvoiceByTrip(trip.id);if(!note)return;
+    if(loadId!==nriInvoiceLoadId||$('nriPullTripId')?.value!==trip.id)return;
     nriInvoiceContext=note;nriDraftItems=[];
-    for(const item of note.items||[]){const common={product_code:item.product_code,product_name:item.product_name,validity_date:null,lot:'',block_date:null,pallet_damaged:false,damaged_pallets:0,damage_reason:'',invoice_number:note.invoice_number||'',damagePhotos:[],invoice_pending:true};
-      if(Number(item.full_pallets)>0)nriDraftItems.push({...common,id:uuid(),quantity:Number(item.commercial_units_per_pallet),pallets:Number(item.full_pallets)});
-      if(Number(item.remaining_units)>0)nriDraftItems.push({...common,id:uuid(),quantity:Number(item.remaining_units),pallets:1});
-    }
-    renderNriDraftItems();const total=nriDraftItems.reduce((sum,x)=>sum+x.pallets,0);
-    $('nriPullBanner').innerHTML=`<strong>${esc(trip.trip_code)} • Nota ${esc(note.invoice_number||'anexada')} • ${total} NRI(s)</strong><span>Produtos e quantidades preenchidos pela nota. Edite cada linha para informar lote e validade. Use “Dividir lotes” se um produto tiver mais de um lote ou validade.</span>`;
-  }catch(error){toast(`Não foi possível carregar a nota da puxada: ${humanError(error)}`,'error');}
+    renderNriDraftItems();const total=(note.items||[]).reduce((sum,x)=>sum+window.DISB_INVOICE_NOTE.palletAllocationState(x).totalPallets,0);
+    $('nriPullBanner').innerHTML=`<strong>${esc(trip.trip_code)} • Nota ${esc(note.invoice_number||'anexada')} • ${total} NRI(s)</strong><span>Selecione um produto e atribua lote, validade e paletes até completar a quantidade da nota.</span>`;
+  }catch(error){if(loadId===nriInvoiceLoadId)toast(`Não foi possível carregar a nota da puxada: ${humanError(error)}`,'error');}
 };
 const invoiceOriginalClearNri=clearNriRequest;
-clearNriRequest=function(...args){nriInvoiceContext=null;return invoiceOriginalClearNri(...args);};
+clearNriRequest=function(...args){nriInvoiceLoadId++;nriInvoiceContext=null;return invoiceOriginalClearNri(...args);};
 const invoiceOriginalRenderNri=renderNriDraftItems;
-renderNriDraftItems=function(...args){const result=invoiceOriginalRenderNri(...args);for(const row of $('nriItemList')?.querySelectorAll('.item-row[data-id]')||[]){const item=nriDraftItems.find(x=>x.id===row.dataset.id);if(!item)continue;
-    const values=row.querySelectorAll('.info strong');if(item.invoice_pending){if(values[2])values[2].textContent='Preencher lote';if(values[1])values[1].textContent='Preencher validade';}
-    if(nriInvoiceContext&&Number(item.pallets)>1){const actions=row.querySelector('.mini-actions');if(actions&&!actions.querySelector('[data-act="split"]')){const button=document.createElement('button');button.className='mini-btn';button.dataset.act='split';button.textContent='Dividir lotes';actions.prepend(button);}}
-  }return result;};
-const invoiceOriginalNriListClick=onNriDraftListClick;
-onNriDraftListClick=function(event){const button=event.target.closest('button[data-act]');if(button?.dataset.act==='split'){const item=nriDraftItems.find(x=>x.id===button.closest('[data-id]')?.dataset.id);if(item)splitInvoiceNriItem(item);return;}
-  const id=button?.closest('[data-id]')?.dataset.id,item=nriDraftItems.find(x=>x.id===id);const result=invoiceOriginalNriListClick(event);
-  if(button?.dataset.act==='edit'&&item?.invoice_pending){$('nriSemValidade').checked=false;updateNriValidityMode();}
-  if(button?.dataset.act==='edit'&&nriInvoiceContext&&!$('nriDamageInvoice').value)$('nriDamageInvoice').value=nriInvoiceContext.invoice_number||'';
-  return result;};
-function splitInvoiceNriItem(item){
-  if(Number(item.pallets)<2)return;
-  openModal('Dividir paletes',`${item.product_code} • ${item.product_name}`,`<p>Informe quantos paletes terão outro lote ou validade. O total da nota será mantido.</p><div class="field"><label for="invoiceSplitCount">Paletes da nova linha</label><input id="invoiceSplitCount" type="number" min="1" max="${item.pallets-1}" step="1" value="1"></div>`,[
-    {label:'Dividir',class:'primary',onClick:()=>{const count=Number($('invoiceSplitCount').value);if(!Number.isInteger(count)||count<1||count>=item.pallets)return toast('Informe uma quantidade menor que os paletes da linha.','error');if(item.pallet_damaged&&item.pallets-count<Number(item.damaged_pallets||0))return toast('Deixe na linha original os paletes marcados como avariados.','error');item.pallets-=count;nriDraftItems.push({...item,id:uuid(),pallets:count,lot:'',lots:[],validity_date:null,block_date:null,invoice_pending:true,pallet_damaged:false,damaged_pallets:0,damage_reason:'',damagePhotos:[]});clearNriItemEditor();renderNriDraftItems();closeModal();}},
-    {label:'Cancelar',class:'secondary',onClick:closeModal}
-  ]);
+function invoiceRowsForProduct(item){return nriDraftItems.filter(row=>String(row.product_code)===String(item.product_code));}
+function invoiceAllocationGroups(rows){const groups=new Map();for(const row of rows){const key=row.invoice_allocation_id||row.id;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(row);}return [...groups.entries()];}
+function invoiceLotFields(lot='',validity='',pallets=1,max=1,noValidity=false){return `<div class="grid grid-3"><div class="field"><label for="invoiceLot">Lote *</label><input id="invoiceLot" value="${esc(lot)}" maxlength="80" autocapitalize="characters" autocomplete="off" placeholder="Ex.: L2408"></div><div class="field"><label for="invoiceValidity">Validade *</label><input id="invoiceValidity" type="date" value="${esc(validity)}"><label class="check compact-check"><input id="invoiceNoValidity" type="checkbox" ${noValidity?'checked':''}> Sem validade</label></div><div class="field"><label for="invoicePallets">Qtd. de paletes *</label><input id="invoicePallets" type="number" min="1" max="${max}" step="1" value="${pallets}"></div></div>`;}
+function invoiceLotValues(){const lot=sanitizeLot($('invoiceLot')?.value),withoutValidity=!!$('invoiceNoValidity')?.checked,validity=withoutValidity?null:String($('invoiceValidity')?.value||'').trim(),pallets=Number($('invoicePallets')?.value);if(!lot)throw new Error('Informe o lote usando letras e números.');if(!withoutValidity&&(!/^\d{4}-\d{2}-\d{2}$/.test(validity)||parseShortDate(formatShortDate(validity))!==validity))throw new Error('Informe uma validade válida.');return {lot,validity,pallets};}
+function invoiceDraftRow(item,groupId,lot,validity,part){return {id:uuid(),invoice_allocation_id:groupId,product_code:item.product_code,product_name:item.product_name,validity_date:validity,lot,lots:[lot],quantity:part.quantity,pallets:part.pallets,block_date:validity?addDaysIso(validity,-30):null,pallet_damaged:false,damaged_pallets:0,damage_reason:'',invoice_number:nriInvoiceContext?.invoice_number||'',damagePhotos:[],invoice_pending:false};}
+function openInvoiceAllocation(item,groupId=null){
+  if(!nriInvoiceContext)return;
+  const group=groupId?nriDraftItems.filter(row=>row.invoice_allocation_id===groupId||row.id===groupId):[];
+  const otherRows=invoiceRowsForProduct(item).filter(row=>!group.includes(row));
+  const state=window.DISB_INVOICE_NOTE.palletAllocationState(item,otherRows),count=group.reduce((sum,row)=>sum+Number(row.pallets),0);
+  if(!state.remainingPallets)return toast('Todos os paletes deste produto já foram atribuídos.','error');
+  const partialHint=state.partialUnits?` O palete incompleto (${fmtNum(state.partialUnits)} ${esc(item.commercial_unit)}) será atribuído depois dos paletes completos.`:'';
+  const body=`<p class="muted-text">${esc(item.product_code)} • ${esc(item.product_name)}<br>${fmtNum(state.remainingPallets)} de ${fmtNum(state.totalPallets)} palete(s) disponíveis.${partialHint}</p>${invoiceLotFields(group[0]?.lot||'',group[0]?.validity_date||'',count||state.remainingPallets,state.remainingPallets,!!group.length&&!group[0]?.validity_date)}`;
+  openModal(group.length?'Editar lote da nota':'Atribuir paletes ao lote',`Nota ${nriInvoiceContext.invoice_number||'anexada'}`,body,[{label:group.length?'Salvar lote':'Adicionar lote',class:'primary',onClick:()=>{
+    try{const {lot,validity,pallets}=invoiceLotValues(),parts=window.DISB_INVOICE_NOTE.planPalletAllocation(item,otherRows,pallets);
+      if(group.some(row=>row.pallet_damaged)&&(pallets!==count||parts.length!==group.length||parts.some((part,index)=>part.quantity!==group[index].quantity||part.pallets!==group[index].pallets)))throw new Error('Remova a avaria deste lote antes de alterar os paletes.');
+      const id=groupId||uuid(),replacement=parts.map((part,index)=>{const previous=group[index];return {...invoiceDraftRow(item,id,lot,validity,part),...(previous&&previous.quantity===part.quantity&&previous.pallets===part.pallets?{...previous,lot,lots:[lot],validity_date:validity,block_date:validity?addDaysIso(validity,-30):null}:{}),invoice_allocation_id:id};});
+      if(group.length){const at=nriDraftItems.indexOf(group[0]);nriDraftItems=nriDraftItems.filter(row=>!group.includes(row));nriDraftItems.splice(at,0,...replacement);}else nriDraftItems.push(...replacement);
+      renderNriDraftItems();closeModal();
+    }catch(error){toast(humanError(error),'error');}
+  }},{label:'Cancelar',class:'secondary',onClick:closeModal}]);
+  $('invoiceNoValidity')?.addEventListener('change',event=>{$('invoiceValidity').disabled=event.target.checked;if(event.target.checked)$('invoiceValidity').value='';});
+  if($('invoiceNoValidity')?.checked)$('invoiceValidity').disabled=true;
+  $('invoiceLot')?.focus();
 }
+renderNriDraftItems=function(...args){
+  const block=$('nriProductEntryBlock');
+  if(!nriInvoiceContext){if(block){block.classList.remove('hidden','invoice-damage-edit');}if($('nriItemsTitle'))$('nriItemsTitle').textContent='Produtos adicionados';if($('nriItemsHint'))$('nriItemsHint').textContent='Edite ou exclua antes de finalizar.';return invoiceOriginalRenderNri(...args);}
+  if(block)block.classList.toggle('hidden',!nriEditingId);
+  $('nriItemsTitle').textContent='Produtos da nota';$('nriItemsHint').textContent='Clique em um produto para atribuir lote, validade e paletes.';
+  const items=nriInvoiceContext.items||[],totals=items.map(item=>window.DISB_INVOICE_NOTE.palletAllocationState(item,invoiceRowsForProduct(item))),total=totals.reduce((sum,x)=>sum+x.totalPallets,0),done=totals.reduce((sum,x)=>sum+x.allocatedPallets,0);
+  $('nriItemCounter').textContent=`${done} de ${total} NRI(s)`;$('btnCadastrarCarreta').textContent=total?`Cadastrar carreta (${total} NRIs)`:'Cadastrar carreta';$('btnCadastrarCarreta').disabled=!total||done!==total;
+  const el=$('nriItemList');el.className='invoice-product-list';el.innerHTML=items.map((item,index)=>{const state=totals[index],groups=invoiceAllocationGroups(invoiceRowsForProduct(item)),complete=state.remainingPallets===0;
+    const groupHtml=groups.map(([groupId,rows])=>{const first=rows[0],count=rows.reduce((sum,row)=>sum+Number(row.pallets),0),details=rows.map(row=>`<div class="invoice-allocation-part"><span>${row.quantity===state.capacity?'Palete completo':'Palete incompleto'} • ${row.pallets} NRI(s) • ${fmtNum(row.quantity)} ${esc(item.commercial_unit)} por NRI${row.pallet_damaged?` • ${row.damaged_pallets} avariado(s)`:''}</span><button type="button" class="mini-btn" data-act="edit" data-id="${row.id}">${row.pallet_damaged?'Editar avaria':'Palete avariado'}</button></div>`).join('');return `<div class="invoice-lot-group"><div class="invoice-lot-head"><div><strong>Lote ${esc(first.lot)} • ${first.validity_date?formatShortDate(first.validity_date):'Sem validade'}</strong><small>${count} palete(s) atribuídos</small></div><div class="mini-actions"><button type="button" class="mini-btn" data-invoice-edit="${esc(groupId)}" data-product-code="${esc(item.product_code)}">Editar</button><button type="button" class="mini-btn danger" data-invoice-delete="${esc(groupId)}">Excluir</button></div></div>${details}</div>`;}).join('');
+    return `<section class="invoice-product-card ${complete?'complete':''}"><button type="button" class="invoice-product-open" data-invoice-add="${esc(item.product_code)}" ${complete?'disabled':''}><span><small>PRODUTO ${index+1}</small><strong>${esc(item.product_code)} • ${esc(item.product_name)}</strong><em>${fmtNum(item.quantity)} ${esc(item.commercial_unit)} na nota • ${fmtNum(state.capacity)} por palete${state.partialUnits?` • último palete com ${fmtNum(state.partialUnits)}`:''}</em></span><span class="invoice-progress-label">${state.allocatedPallets}/${state.totalPallets} paletes<br><b>${complete?'Completo':`+ Atribuir ${state.remainingPallets}`}</b></span></button><div class="invoice-progress"><i style="width:${state.totalPallets?100*state.allocatedPallets/state.totalPallets:0}%"></i></div>${groupHtml||'<p class="invoice-empty">Nenhum lote atribuído.</p>'}</section>`;
+  }).join('');
+};
+const invoiceOriginalNriListClick=onNriDraftListClick;
+onNriDraftListClick=function(event){
+  if(!nriInvoiceContext)return invoiceOriginalNriListClick(event);
+  const add=event.target.closest('[data-invoice-add]');if(add){const item=(nriInvoiceContext.items||[]).find(x=>String(x.product_code)===add.dataset.invoiceAdd);if(item)openInvoiceAllocation(item);return;}
+  const edit=event.target.closest('[data-invoice-edit]');if(edit){const item=(nriInvoiceContext.items||[]).find(x=>String(x.product_code)===edit.dataset.productCode);if(item)openInvoiceAllocation(item,edit.dataset.invoiceEdit);return;}
+  const remove=event.target.closest('[data-invoice-delete]');if(remove){nriDraftItems=nriDraftItems.filter(row=>row.invoice_allocation_id!==remove.dataset.invoiceDelete&&row.id!==remove.dataset.invoiceDelete);clearNriItemEditor();renderNriDraftItems();return;}
+  const damage=event.target.closest('button[data-act="edit"]');if(!damage)return;
+  const item=nriDraftItems.find(row=>row.id===damage.dataset.id);if(!item)return;
+  nriEditingId=item.id;nriDamagePhotos=[...(item.damagePhotos||[])];$('nriDamagePallets').value=item.damaged_pallets||1;$('nriDamageReason').value=item.damage_reason||'';$('nriDamageInvoice').value=item.invoice_number||'';setNriDamageMode(!!item.pallet_damaged);$('btnCancelarNriItem').classList.remove('hidden');
+  if(!$('nriDamageInvoice').value)$('nriDamageInvoice').value=nriInvoiceContext.invoice_number||'';
+  const block=$('nriProductEntryBlock');block.classList.remove('hidden');block.classList.add('invoice-damage-edit');block.querySelector('.block-head strong').textContent='Palete avariado';block.querySelector('.block-head small').textContent='Confira e registre a avaria deste lote.';
+  $('nriInvoiceDamageSummary').classList.remove('hidden');$('nriInvoiceDamageSummary').innerHTML=`<strong>${esc(item.product_code)} • ${esc(item.product_name)}</strong><br>Lote ${esc(item.lot)} • ${item.validity_date?formatShortDate(item.validity_date):'Sem validade'} • ${item.pallets} palete(s)`;
+  $('btnAdicionarNriItem').textContent='Salvar avaria';block.scrollIntoView({behavior:'smooth',block:'start'});
+};
+const invoiceOriginalClearItem=clearNriItemEditor;
+clearNriItemEditor=function(...args){const result=invoiceOriginalClearItem(...args),block=$('nriProductEntryBlock');if(block){block.classList.remove('invoice-damage-edit');block.classList.toggle('hidden',!!nriInvoiceContext);block.querySelector('.block-head strong').textContent='Adicionar produto / lote';block.querySelector('.block-head small').textContent='Você pode incluir produtos e lotes diferentes na mesma carreta.';}$('nriInvoiceDamageSummary')?.classList.add('hidden');return result;};
+const invoiceOriginalAddNri=addNriDraftItem;
+addNriDraftItem=function(){
+  if(!nriInvoiceContext)return invoiceOriginalAddNri();
+  const item=nriDraftItems.find(row=>row.id===nriEditingId);if(!item)return toast('Selecione um lote da nota para registrar a avaria.','error');
+  const damaged=nriDamageMode,count=damaged?Number($('nriDamagePallets').value):0,reason=damaged?$('nriDamageReason').value.trim():'',invoice=damaged?$('nriDamageInvoice').value.trim():'',photos=[...nriDamagePhotos];
+  if(damaged&&(!Number.isInteger(count)||count<1||count>item.pallets))return toast(`Informe entre 1 e ${item.pallets} palete(s) avariado(s).`,'error');
+  if(damaged&&!reason)return toast('Selecione o motivo do avariado.','error');if(damaged&&!invoice)return toast('Informe o número da nota fiscal.','error');
+  if(damaged&&((photos.length<1&&reason!=='Não foi no caminhão')||photos.length>5))return toast(reason==='Não foi no caminhão'?'Adicione no máximo 5 fotos.':'Palete avariado exige de 1 a 5 fotos.','error');
+  Object.assign(item,{pallet_damaged:damaged,damaged_pallets:count,damage_reason:reason,invoice_number:invoice||nriInvoiceContext.invoice_number||'',damagePhotos:damaged?photos:[]});
+  clearNriItemEditor();renderNriDraftItems();toast('Dados do lote atualizados.','success');
+};
 const invoiceOriginalSubmitNri=submitNriRequestOnce;
 submitNriRequestOnce=async function(){
   if(nriInvoiceContext){
     const pending=nriDraftItems.find(x=>x.invoice_pending||!sanitizeLot(x.lot));if(pending)return toast(`Preencha lote e validade de ${pending.product_code} antes de emitir os NRIs.`,'error');
+    for(const item of nriInvoiceContext.items||[]){const state=window.DISB_INVOICE_NOTE.palletAllocationState(item,invoiceRowsForProduct(item));if(state.remainingPallets)return toast(`Atribua os ${state.remainingPallets} palete(s) restantes do produto ${item.product_code}.`,'error');}
     const expected=new Map(),actual=new Map();for(const x of nriInvoiceContext.items||[])expected.set(String(x.product_code),(expected.get(String(x.product_code))||0)+Number(x.quantity));
     for(const x of nriDraftItems)actual.set(String(x.product_code),(actual.get(String(x.product_code))||0)+Number(x.quantity)*Number(x.pallets));
     for(const [code,quantity] of expected)if(actual.get(code)!==quantity)return toast(`A quantidade do produto ${code} não confere com a nota: esperado ${fmtNum(quantity)}, lançado ${fmtNum(actual.get(code)||0)}.`,'error');

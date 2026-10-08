@@ -41,3 +41,14 @@ test('usa a referência da unidade de origem sem duplicar o produto',()=>{
   assert.equal(note.matchProducts(row('FIL-988'),[product],'Filial Pau dos Ferros')[0].product_code,'988');
   assert.throws(()=>note.matchProducts(row('25078'),[product],'Filial Pau dos Ferros'),/não encontrado/);
 });
+
+test('atribui lotes por paletes até completar a nota e preserva o palete parcial',()=>{
+  const item={quantity:205,commercial_units_per_pallet:100};
+  assert.deepEqual(note.planPalletAllocation(item,[],2),[{quantity:100,pallets:2}]);
+  const first=[{quantity:100,pallets:2}];
+  assert.deepEqual(note.palletAllocationState(item,first).remainingPallets,1);
+  assert.deepEqual(note.planPalletAllocation(item,first,1),[{quantity:5,pallets:1}]);
+  assert.deepEqual(note.planPalletAllocation(item,[],3),[{quantity:100,pallets:2},{quantity:5,pallets:1}]);
+  assert.throws(()=>note.planPalletAllocation(item,first,2),/entre 1 e 1/);
+  assert.equal(note.palletAllocationState(item,[...first,{quantity:5,pallets:1}]).remainingPallets,0);
+});

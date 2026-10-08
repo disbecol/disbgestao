@@ -38,6 +38,23 @@
     return groupLines(lines).map(row=>{const p=byReference.get(row.reference_code);if(!p)throw new Error(`Código de referência ${row.reference_code} não encontrado. Cadastre-o em Configurações > Produtos.`);const capacity=Number(p.commercial_units_per_pallet);if(!Number.isInteger(capacity)||capacity<1)throw new Error(`Informe a capacidade do palete do produto ${p.code} em Configurações > Produtos.`);if(p.invoice_unit&&clean(p.invoice_unit).toUpperCase()!==row.commercial_unit)throw new Error(`A unidade ${row.commercial_unit} da nota não confere com a unidade cadastrada para ${p.code}.`);
       const full=Math.floor(row.quantity/capacity),remainder=Number((row.quantity-full*capacity).toFixed(6));return {...row,product_code:p.code,product_name:p.name,commercial_units_per_pallet:capacity,full_pallets:full,remaining_units:remainder,pallets_exact:row.quantity/capacity};});
   }
+  function palletAllocationState(item,rows=[]){
+    const capacity=Number(item.commercial_units_per_pallet),quantity=Number(item.quantity);
+    if(!Number.isInteger(capacity)||capacity<1||!Number.isInteger(quantity)||quantity<1)throw new Error('Quantidade da nota ou capacidade do palete inválida.');
+    const fullPallets=Math.floor(quantity/capacity),partialUnits=quantity%capacity;
+    const allocatedFull=rows.filter(row=>Number(row.quantity)===capacity).reduce((sum,row)=>sum+Number(row.pallets),0);
+    const allocatedPartial=rows.filter(row=>Number(row.quantity)!==capacity).reduce((sum,row)=>sum+Number(row.pallets),0);
+    const remainingFull=fullPallets-allocatedFull,remainingPartial=(partialUnits?1:0)-allocatedPartial;
+    if(!Number.isInteger(allocatedFull)||!Number.isInteger(allocatedPartial)||remainingFull<0||remainingPartial<0)throw new Error('Os paletes atribuídos ultrapassam a quantidade da nota.');
+    return {capacity,partialUnits,totalPallets:fullPallets+(partialUnits?1:0),allocatedPallets:allocatedFull+allocatedPartial,remainingPallets:remainingFull+remainingPartial,remainingFull,remainingPartial};
+  }
+  function planPalletAllocation(item,rows,count){
+    const state=palletAllocationState(item,rows),requested=Number(count);
+    if(!Number.isInteger(requested)||requested<1||requested>state.remainingPallets)throw new Error(`Informe entre 1 e ${state.remainingPallets} palete(s) disponíveis na nota.`);
+    const full=Math.min(requested,state.remainingFull),partial=requested-full;
+    if(partial>state.remainingPartial)throw new Error('O palete parcial da nota já foi atribuído.');
+    return [...(full?[{quantity:state.capacity,pallets:full}]:[]),...(partial?[{quantity:state.partialUnits,pallets:1}]:[])];
+  }
   async function readPdf(file,pdfjs){
     if(!pdfjs?.getDocument)throw new Error('Leitor de PDF indisponível.');const data=new Uint8Array(await file.arrayBuffer());const task=pdfjs.getDocument({data});const pdf=await task.promise;const lines=[];let invoiceNumber='';
     try{for(let pageNumber=1;pageNumber<=pdf.numPages;pageNumber++){const page=await pdf.getPage(pageNumber),content=await page.getTextContent(),pageRows=textRows(content.items);if(!invoiceNumber){const all=pageRows.map(r=>r.parts.map(p=>p.text).join(' ')).join('\n');const found=all.match(/N[º°.]?\s*([0-9]{6,12})/i)?.[1];if(found)invoiceNumber=String(Number(found));}lines.push(...parsePage(content.items));}}
@@ -45,5 +62,5 @@
     if(!lines.length)throw new Error('Não encontrei produtos na nota. Envie um PDF DANFE com texto selecionável; imagem escaneada não pode ser lida automaticamente.');
     return {invoice_number:invoiceNumber,lines:groupLines(lines)};
   }
-  return {parsePage,groupLines,matchProducts,readPdf};
+  return {parsePage,groupLines,matchProducts,readPdf,palletAllocationState,planPalletAllocation};
 });
