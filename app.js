@@ -563,8 +563,10 @@ function bindBaseEvents(){
   $('btnImprimirTudo').addEventListener('click',()=>startPrint(filteredPending()));
   $('btnImprimirSelecionadas').addEventListener('click',()=>startPrint(pendingNris.filter(x=>selectedNris.has(x.id))));
   $('btnExcluirSelecionados').addEventListener('click',removeSelectedNris);
-  ['histNriBusca','histNriStatus','histNriUnidade','histNriDe','histNriAte'].forEach(id=>$(id).addEventListener(id==='histNriBusca'?'input':'change',renderNriHistory));
+  ['histNriBusca','histNriStatus','histNriDe','histNriAte','histNriValidade'].forEach(id=>$(id).addEventListener(id==='histNriBusca'?'input':'change',()=>{nriHistoryVisibleCount=200;renderNriHistory();}));
+  $('histNriUnidade').addEventListener('change',loadNriHistory);
   $('btnAtualizarHistNri').addEventListener('click',loadNriHistory);
+  $('btnHistNriMore').addEventListener('click',()=>{nriHistoryVisibleCount+=200;renderNriHistory();});
   $('tbodyHistNri').addEventListener('click',onNriHistoryClick);
   ['damageHistSearch','damageHistType','damageHistUnit','damageHistDe','damageHistAte'].forEach(id=>$(id)?.addEventListener(id==='damageHistSearch'?'input':'change',renderNriDamageHistory));
   $('btnDamageHistRefresh')?.addEventListener('click',loadNriDamageHistory);
@@ -1395,7 +1397,7 @@ function populateReferenceInputs(){
   if($('fefoReportUnit'))fillSelect('fefoReportUnit',unitValues,'Unidade atual');
   if($('assetStartUnit'))fillSelect('assetStartUnit',unitValues,'Selecione');
   if($('assetHistoryUnit'))fillSelect('assetHistoryUnit',unitValues,'Unidade atual');
-  fillSelect('pendUnidade',unitValues,'Unidade atual'); fillSelect('histNriUnidade',unitValues,'Unidade atual');
+  fillSelect('pendUnidade',unitValues,'Unidade atual'); fillSelect('histNriUnidade',[...new Set([...myUnits,...unitValues])],'Todas as minhas unidades');
   ['nriUnidade','fefoStartUnit','fefoReportUnit','assetStartUnit','assetHistoryUnit','pendUnidade','histNriUnidade'].forEach(id=>{const el=$(id);if(el&&activeUnit)el.value=activeUnit;});
   updateNriTypeFields();
 }
@@ -1481,16 +1483,18 @@ async function submitNriRequest(e){
 }
 async function loadPending(silent=false){if(!canNri())return;try{const {data,error}=await sb.from('nris').select('*').eq('unit',activeUnit).eq('status','PENDENTE').order('created_at',{ascending:false}).limit(1500);if(error)throw error;pendingNris=(data||[]).map(mapNri);await loadNriDamageIndex(pendingNris);selectedNris=new Set([...selectedNris].filter(id=>pendingNris.some(x=>x.id===id)));renderPending();$('badgePendentes').textContent=pendingNris.length;}catch(e){if(!silent)toast(humanError(e),'error');}}
 function mapNri(r){return {...r,codigoProduto:r.product_code,nomeProduto:r.product_name,unidade:r.unit,tipo:r.request_type||'AMBEV',validade:r.validity_date,lote:r.lot,recebimento:r.receipt_date,bloqueio:r.block_date,conferente:r.checker_name,hora:fmtTime(r.receipt_time),motorista:r.driver,placa:r.plate,fabrica:r.factory,quantidade:r.quantity};}
-async function loadNriDamageIndex(records=[]){
-  nriDamageIndex=new Map();
+async function getNriDamageIndex(records=[]){
+  const index=new Map();
   const requestIds=[...new Set(records.map(x=>x.request_id).filter(Boolean))];
   for(let i=0;i<requestIds.length;i+=100){
     const chunk=requestIds.slice(i,i+100);
     const {data,error}=await sb.from('nri_damage_items').select('*,nri_damage_photos(*)').in('request_id',chunk);
     if(error)throw error;
-    (data||[]).forEach(d=>{const arr=nriDamageIndex.get(d.request_id)||[];arr.push(d);nriDamageIndex.set(d.request_id,arr);});
+    (data||[]).forEach(d=>{const arr=index.get(d.request_id)||[];arr.push(d);index.set(d.request_id,arr);});
   }
+  return index;
 }
+async function loadNriDamageIndex(records=[]){nriDamageIndex=await getNriDamageIndex(records);}
 function nriDamageForRecord(r){
   const items=nriDamageIndex.get(r?.request_id)||[];
   const code=normalizeCode(r?.product_code||r?.codigoProduto||''),lot=String(r?.lot||r?.lote||'').trim().toUpperCase();
@@ -1574,9 +1578,33 @@ async function startPrint(records,reprint=false){
 async function finishPrint(result){if(!printOperation)return;const op=printOperation;printOperation=null;closeModal();if(result==='IMPRESSO'&&!op.reprint){const ids=new Set(op.records.map(x=>x.id));pendingNris=pendingNris.filter(x=>!ids.has(x.id));renderPending();$('badgePendentes').textContent=pendingNris.length;}try{const {error}=await sb.rpc('confirm_nri_print',{p_ids:op.records.map(x=>x.id),p_reprint:!!op.reprint,p_result:result});if(error)throw error;toast(result==='IMPRESSO'?'Impressão confirmada.':'Cancelamento registrado.',result==='IMPRESSO'?'success':'');}catch(e){toast(humanError(e),'error');loadPending(true);}}
 function htmlEtiqueta(r,print){const img=print?`<img alt="" onerror="imgFallback(this,'${jsEsc(r.codigoProduto)}',1)" src="${CFG.PRODUCT_IMAGE_FOLDER||'imagens_produtos'}/${encodeURIComponent(r.codigoProduto)}.png">`:`<img alt="" data-product="1">`;const semValidade=!r.validade;const validadeTexto=semValidade?'SEM VALIDADE':fmtDate(r.validade);const bloqueioTexto=semValidade?'--':fmtDate(r.bloqueio);return `<div class="nri-preview-label"><div class="nri-top"><div class="nri-code-label">CÓDIGO:</div><div class="nri-code-value">${esc(r.codigoProduto)}</div><div class="nri-id">${esc(r.nri)}</div></div><div class="nri-product-title">${img}<strong>${esc(r.nomeProduto)}</strong></div><div class="nri-mini-strip"><div class="nri-mini-cell"><b>UNIDADE:</b>${esc(r.unidade)} <b style="margin-left:12px">TIPO:</b>${esc(r.tipo||'AMBEV')}</div></div><div class="nri-validade"><span>VALIDADE:</span><strong class="${semValidade?'sem-validade':''}">${validadeTexto}</strong></div><div class="nri-dates"><div class="nri-date-cell"><b>RECEB:</b><strong>${fmtDate(r.recebimento)}</strong></div><div class="nri-date-cell"><b>BLOQUEIO:</b><strong>${bloqueioTexto}</strong></div></div><div class="nri-meta"><div class="nri-meta-cell"><b>Conferente</b><span>${esc(r.conferente)}</span></div><div class="nri-meta-cell"><b>Hora</b><span>${esc(r.hora)}</span></div><div class="nri-meta-cell"><b>Motorista</b><span>${esc(r.motorista)}</span></div><div class="nri-meta-cell"><b>Placa</b><span>${esc(r.placa)}</span></div></div><div class="nri-bottom"><div><b>Fábrica:</b>${esc(r.fabrica)}</div><div><b>Quantidade:</b>${esc(r.quantidade)}</div><div><b>NRI:</b>${esc(r.nri)}</div></div></div>`;}
 function printDocument(records){const pages=records.map(r=>`<section class="page">${htmlEtiqueta(r,true)}${htmlEtiqueta(r,true)}${htmlEtiqueta(r,true)}</section>`).join('');return `<!doctype html><html><head><base href="${document.baseURI}"><meta charset="utf-8"><style>@page{size:A4 portrait;margin:5mm}*{box-sizing:border-box}body{margin:0;font-family:Arial;color:#686868}.page{height:287mm;display:flex;flex-direction:column;justify-content:space-between;page-break-after:always}.page:last-child{page-break-after:auto}.nri-preview-label{height:89mm;width:100%;border:1.2px solid #777;background:#fff;color:#686868;overflow:hidden}.nri-top{display:grid;grid-template-columns:auto 1fr auto;align-items:stretch;height:12mm;border-bottom:2px solid #777}.nri-code-label{display:flex;align-items:center;padding:0 2.2mm;font-size:18pt;font-weight:1000;border-right:2px solid #777}.nri-code-value{display:flex;align-items:center;padding:0 3mm;font-size:31pt;line-height:.82;font-weight:1000;color:#4b4f54}.nri-id{display:flex;align-items:center;padding:0 2mm;font-size:10pt;font-weight:900}.nri-product-title{height:18mm;border-bottom:1px solid #777;display:flex;align-items:center;justify-content:center;gap:3mm;padding:1mm 3mm;text-align:center}.nri-product-title img{width:14mm;height:14mm;object-fit:contain}.nri-product-title strong{font-size:24pt;line-height:.96;font-weight:1000}.nri-mini-strip{height:4.5mm;border-bottom:1px solid #777}.nri-mini-cell{display:flex;align-items:center;padding:.2mm 1.8mm;font-size:9pt;font-weight:700}.nri-mini-cell b{font-size:8.5pt;font-weight:1000;margin-right:1.3mm}.nri-validade{display:grid;grid-template-columns:31% 69%;height:28mm;border-bottom:1px solid #777;align-items:center}.nri-validade span{height:100%;display:flex;align-items:center;padding:1.5mm 2.5mm;border-right:1px solid #777;font-size:25pt;font-weight:1000}.nri-validade strong{font-size:58pt;line-height:.84;text-align:center;font-weight:1000;color:#4b4f54}.nri-validade strong.sem-validade{font-size:28pt;line-height:1}.nri-dates{display:grid;grid-template-columns:1fr 1fr;height:10mm;border-bottom:1px solid #777}.nri-date-cell{display:grid;grid-template-columns:auto 1fr;align-items:center}.nri-date-cell+.nri-date-cell{border-left:1px solid #777}.nri-date-cell b{padding:1mm 1.8mm;font-size:10.5pt}.nri-date-cell strong{text-align:center;padding:1mm 1.4mm;border-left:1px solid #777;font-size:13.5pt}.nri-meta{display:grid;grid-template-columns:1.55fr .85fr 1.15fr 1fr;height:7mm;border-bottom:1px solid #777}.nri-meta-cell{text-align:center;border-right:1px solid #777;overflow:hidden}.nri-meta-cell:last-child{border-right:0}.nri-meta-cell b{display:block;padding:.08mm .6mm 0;font-size:7.8pt;text-decoration:underline}.nri-meta-cell span{display:block;padding:.05mm .6mm 0;font-size:9.6pt;font-weight:700;white-space:nowrap}.nri-bottom{display:grid;grid-template-columns:1.8fr .75fr 1.1fr;height:5.5mm}.nri-bottom>div{display:flex;align-items:center;padding:.2mm 1.6mm;font-size:9.5pt;font-weight:700;border-right:1px solid #777}.nri-bottom>div:last-child{border-right:0}</style></head><body>${pages}<script>function imgFallback(img,code,i){var ex=['png','jpg','jpeg','webp'];i=i||0;if(i>=ex.length){img.style.display='none';return;}img.onerror=function(){imgFallback(img,code,i+1)};img.src='${CFG.PRODUCT_IMAGE_FOLDER||'imagens_produtos'}/'+encodeURIComponent(code)+'.'+ex[i];}<\/script></body></html>`;}
-async function loadNriHistory(){if(!hasPerm('NRI_HISTORY'))return;try{let q=sb.from('nris').select('*').eq('unit',activeUnit).order('created_at',{ascending:false}).limit(2000);const {data,error}=await q;if(error)throw error;historyNris=(data||[]).map(mapNri);await loadNriDamageIndex(historyNris);renderNriHistory();}catch(e){toast(humanError(e),'error');}}
-function filteredNriHistory(){const q=norm($('histNriBusca').value),status=$('histNriStatus').value,u=$('histNriUnidade').value,de=$('histNriDe').value,ate=$('histNriAte').value;return historyNris.filter(x=>(!status||x.status===status)&&(!u||x.unidade===u)&&(!de||String(x.created_at).slice(0,10)>=de)&&(!ate||String(x.created_at).slice(0,10)<=ate)&&(!q||norm([x.nri,x.codigoProduto,x.nomeProduto,x.lote,x.placa,x.conferente,x.created_by_username,x.created_by_name].join(' ')).includes(q)));}
-function renderNriHistory(){const arr=filteredNriHistory();$('tbodyHistNri').innerHTML=arr.length?arr.map(x=>{const hasDamage=nriDamageForRecord(x).length>0;return `<tr><td>${fmtDateTime(x.created_at)}</td><td><strong>${esc(x.nri)}</strong><small>${esc(x.codigoProduto)} • ${esc(x.nomeProduto)}</small></td><td>${esc(x.lote)}<small>${x.validade?fmtDate(x.validade):'Sem Validade'}</small></td><td>${esc(x.unidade)}<small>${esc(x.placa)} • ${esc(x.motorista)}</small></td><td>${nriDamageSummaryHtml(x)}</td><td>${esc(x.created_by_name||x.created_by_username||'—')}<small>${esc(x.conferente)}</small></td><td>${statusBadge(x.status)}</td><td><div class="mini-actions"><button class="mini-btn" data-act="preview" data-id="${x.id}">Ver NRI</button>${hasDamage?`<button class="mini-btn danger" data-act="damage" data-id="${x.id}">Ver avaria</button>`:''}${hasPerm('NRI_PRINT')?`<button class="mini-btn" data-act="reprint" data-id="${x.id}">Reimprimir</button>`:''}</div></td></tr>`;}).join(''):'<tr><td colspan="8">Nenhum registro.</td></tr>';}
+let nriHistoryLoadId=0;
+let nriHistoryLoading=false;
+let nriHistoryVisibleCount=200;
+async function loadNriHistory(){
+  if(!hasPerm('NRI_HISTORY'))return;
+  const loadId=++nriHistoryLoadId,unit=$('histNriUnidade').value,pageSize=1000,rows=[];
+  nriHistoryLoading=true;
+  $('tbodyHistNri').innerHTML='<tr><td colspan="8">Buscando NRIs…</td></tr>';
+  $('histNriResultCount').textContent='';$('btnHistNriMore').classList.add('hidden');
+  try{
+    for(let from=0;;from+=pageSize){
+      let q=sb.from('nris').select('*').order('created_at',{ascending:false}).order('id',{ascending:false}).range(from,from+pageSize-1);
+      if(unit)q=q.eq('unit',unit);
+      const {data,error}=await q;
+      if(error)throw error;if(loadId!==nriHistoryLoadId)return;
+      const page=data||[];rows.push(...page);
+      $('tbodyHistNri').innerHTML=`<tr><td colspan="8">Buscando NRIs… ${fmtNum(rows.length)} carregadas.</td></tr>`;
+      if(page.length<pageSize)break;
+    }
+    $('tbodyHistNri').innerHTML='<tr><td colspan="8">Carregando avarias das NRIs…</td></tr>';
+    const mapped=rows.map(mapNri),damageIndex=await getNriDamageIndex(mapped);
+    if(loadId!==nriHistoryLoadId)return;
+    historyNris=mapped;nriDamageIndex=damageIndex;nriHistoryVisibleCount=200;nriHistoryLoading=false;renderNriHistory();
+  }catch(e){if(loadId===nriHistoryLoadId){nriHistoryLoading=false;historyNris=[];$('tbodyHistNri').innerHTML='<tr><td colspan="8">Não foi possível carregar o histórico. Tente atualizar.</td></tr>';toast(humanError(e),'error');}}
+}
+function filteredNriHistory(){const q=norm($('histNriBusca').value),status=$('histNriStatus').value,u=$('histNriUnidade').value,de=$('histNriDe').value,ate=$('histNriAte').value,validity=$('histNriValidade').value;return historyNris.filter(x=>(!status||x.status===status)&&(!u||x.unidade===u)&&(!de||String(x.created_at).slice(0,10)>=de)&&(!ate||String(x.created_at).slice(0,10)<=ate)&&(!validity||x.validade===validity)&&(!q||norm([x.nri,x.codigoProduto,x.nomeProduto,x.lote,x.placa,x.conferente,x.created_by_username,x.created_by_name].join(' ')).includes(q)));}
+function renderNriHistory(){if(nriHistoryLoading)return;const arr=filteredNriHistory(),visible=arr.slice(0,nriHistoryVisibleCount);$('tbodyHistNri').innerHTML=visible.length?visible.map(x=>{const hasDamage=nriDamageForRecord(x).length>0;return `<tr><td>${fmtDateTime(x.created_at)}</td><td><strong>${esc(x.nri)}</strong><small>${esc(x.codigoProduto)} • ${esc(x.nomeProduto)}</small></td><td>${esc(x.lote)}<small>${x.validade?fmtDate(x.validade):'Sem Validade'}</small></td><td>${esc(x.unidade)}<small>${esc(x.placa)} • ${esc(x.motorista)}</small></td><td>${nriDamageSummaryHtml(x)}</td><td>${esc(x.created_by_name||x.created_by_username||'—')}<small>${esc(x.conferente)}</small></td><td>${statusBadge(x.status)}</td><td><div class="mini-actions"><button class="mini-btn" data-act="preview" data-id="${x.id}">Ver NRI</button>${hasDamage?`<button class="mini-btn danger" data-act="damage" data-id="${x.id}">Ver avaria</button>`:''}${hasPerm('NRI_PRINT')?`<button class="mini-btn" data-act="reprint" data-id="${x.id}">Reimprimir</button>`:''}</div></td></tr>`;}).join(''):'<tr><td colspan="8">Nenhum registro.</td></tr>';$('histNriResultCount').textContent=`Mostrando ${fmtNum(visible.length)} de ${fmtNum(arr.length)} NRI(s)`;$('btnHistNriMore').classList.toggle('hidden',visible.length>=arr.length);}
 function onNriHistoryClick(e){const b=e.target.closest('button[data-act]');if(!b)return;const r=historyNris.find(x=>x.id===b.dataset.id);if(!r)return;if(b.dataset.act==='preview')showNriPreview(r);else if(b.dataset.act==='damage')showNriDamageDetail(r);else if(b.dataset.act==='reprint')startPrint([r],true);}
 
 // AVARIAS --------------------------------------------------------------------

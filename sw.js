@@ -1,7 +1,7 @@
-const CACHE='disb-gestao-v1.7.28-invoice-lots';
+const CACHE='disb-gestao-v1.7.29-nri-validity';
 const IMAGE_CACHE=`${CACHE}-images`;
 const IMAGE_CACHE_LIMIT=200;
-const STATIC=['./','index.html','styles.css?v=1.7.28-invoice-lots','visual-refresh.css?v=1.7.1-visual','pull-dashboard.css?v=1.7.1-pull-dashboard','damage-geofence.css?v=2','refugo.css?v=1.7.16','share-reports.js?v=1.7.22','pull-report.js?v=2','invoice-note.js?v=1.7.28','vendor/supabase.js','vendor/leaflet.js','vendor/leaflet.css','vendor/images/layers.png','vendor/images/layers-2x.png','vendor/images/marker-icon.png','vendor/images/marker-icon-2x.png','vendor/images/marker-shadow.png','vendor/pdf-lib.min.js','vendor/pdfjs.min.js','vendor/pdfjs.worker.min.js','app.js?v=1.7.28-invoice-lots','config.js?v=1.7.0','manifest.webmanifest','assets/icon-192.png','assets/icon-512.png'];
+const STATIC=['./','index.html','styles.css?v=1.7.28-invoice-lots','visual-refresh.css?v=1.7.1-visual','pull-dashboard.css?v=1.7.1-pull-dashboard','damage-geofence.css?v=2','refugo.css?v=1.7.16','share-reports.js?v=1.7.22','pull-report.js?v=2','invoice-note.js?v=1.7.28','vendor/supabase.js','vendor/leaflet.js','vendor/leaflet.css','vendor/images/layers.png','vendor/images/layers-2x.png','vendor/images/marker-icon.png','vendor/images/marker-icon-2x.png','vendor/images/marker-shadow.png','vendor/pdf-lib.min.js','vendor/pdfjs.min.js','vendor/pdfjs.worker.min.js','app.js?v=1.7.29-nri-validity','config.js?v=1.7.0','manifest.webmanifest','assets/icon-192.png','assets/icon-512.png'];
 const STATIC_URLS=new Set(STATIC.map(path=>new URL(path,self.registration.scope).href));
 const EXTERNAL_STATIC_URLS=new Set();
 const IMAGE_PATHS=['assets/','imagens_produtos/'].map(path=>new URL(path,self.registration.scope).pathname);
