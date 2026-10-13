@@ -207,7 +207,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.31-keg-liters',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.32-pull-camera',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -2906,6 +2906,8 @@ let pullMapInstances=[];
 let pullMapContexts=new Map();
 let pullAttachmentPreviewUrl=null;
 let pullAttachmentUploading=false;
+let pullAttachmentCapturing=false;
+let pullAttachmentNativeFile=null;
 let pullRenderedTripId=null;
 
 function bindPullEvents(){
@@ -2919,14 +2921,8 @@ function bindPullEvents(){
   $('pullAssignedPlans')?.addEventListener('click',onPullAssignedPlanClick);
   $('pullAssignedRefresh')?.addEventListener('click',()=>loadAssignedPullPlans());
   $('formPullAttachment')?.addEventListener('submit',submitPullAttachment);
-  $('pullAttachmentCamera')?.addEventListener('click',()=>{
-    const input=$('pullAttachmentFile');
-    if(!input)return;
-    input.value='';
-    updatePullAttachmentCaptureUi();
-    input.click();
-  });
-  $('pullAttachmentFile')?.addEventListener('change',updatePullAttachmentCaptureUi);
+  $('pullAttachmentCamera')?.addEventListener('click',takePullAttachmentPhoto);
+  $('pullAttachmentFile')?.addEventListener('change',()=>{pullAttachmentNativeFile=null;updatePullAttachmentCaptureUi();});
   $('formPullStart')?.addEventListener('submit',event=>event.preventDefault());
   $('btnPullNextStep')?.addEventListener('click',recordPullNextStep);
   $('btnPullRefreshSteps')?.addEventListener('click',async()=>{
@@ -3252,7 +3248,7 @@ async function fetchPullTripAttachments(tripId){
   }));
 }
 function updatePullAttachmentCaptureUi(){
-  const file=$('pullAttachmentFile')?.files?.[0];
+  const file=pullAttachmentNativeFile||$('pullAttachmentFile')?.files?.[0];
   const preview=$('pullAttachmentPreview');
   if(pullAttachmentPreviewUrl){URL.revokeObjectURL(pullAttachmentPreviewUrl);pullAttachmentPreviewUrl=null;}
   if(preview){
@@ -3265,8 +3261,25 @@ function updatePullAttachmentCaptureUi(){
     }else preview.textContent='Nenhuma foto tirada.';
   }
   const full=pullTripAttachments.length>=10;
-  if($('pullAttachmentCamera'))$('pullAttachmentCamera').disabled=full||pullAttachmentUploading;
-  if($('pullAttachmentSave'))$('pullAttachmentSave').disabled=full||!file||pullAttachmentUploading;
+  if($('pullAttachmentCamera'))$('pullAttachmentCamera').disabled=full||pullAttachmentUploading||pullAttachmentCapturing;
+  if($('pullAttachmentSave'))$('pullAttachmentSave').disabled=full||!file||pullAttachmentUploading||pullAttachmentCapturing;
+}
+async function takePullAttachmentPhoto(){
+  if(pullAttachmentUploading||pullAttachmentCapturing||pullTripAttachments.length>=10)return;
+  const input=$('pullAttachmentFile');if(!input)return;
+  if(!isNativeCapacitor()){
+    pullAttachmentNativeFile=null;input.value='';updatePullAttachmentCaptureUi();input.click();return;
+  }
+  const button=$('pullAttachmentCamera');pullAttachmentCapturing=true;button.textContent='Abrindo câmera…';updatePullAttachmentCaptureUi();
+  const tripId=pullActiveTrip?.id,nativeCamera=window.DISB_PULL_CAMERA;
+  try{
+    if(!nativeCamera?.capture)throw new Error('Câmera nativa indisponível. Instale a versão mais recente do APK.');
+    const file=await nativeCamera.capture(window.Capacitor);
+    if(!tripId||pullActiveTrip?.id!==tripId)return;
+    pullAttachmentNativeFile=file;input.value='';updatePullAttachmentCaptureUi();
+  }catch(error){
+    if(!nativeCamera?.cancelled?.(error))toast(humanError(error),'error');
+  }finally{pullAttachmentCapturing=false;button.textContent='📷 Tirar foto';updatePullAttachmentCaptureUi();}
 }
 async function loadPullTripAttachments(tripId,boxId='pullAttachmentList',driverView=false){
   const box=$(boxId);if(!box)return;
@@ -3287,7 +3300,7 @@ async function loadPullTripAttachments(tripId,boxId='pullAttachmentList',driverV
 async function submitPullAttachment(event){
   event.preventDefault();
   if(pullAttachmentUploading)return;
-  const trip=pullActiveTrip,file=$('pullAttachmentFile')?.files?.[0];
+  const trip=pullActiveTrip,file=pullAttachmentNativeFile||$('pullAttachmentFile')?.files?.[0];
   if(!trip||!file)return;
   if(!navigator.onLine)return toast('Conecte-se à internet para anexar uma foto.','error');
   if(!file.type.startsWith('image/'))return toast('Selecione uma imagem.','error');
@@ -3302,6 +3315,7 @@ async function submitPullAttachment(event){
     uploaded=true;
     const saved=await sb.rpc('register_pull_trip_attachment',{p_trip_id:trip.id,p_photo_path:path,p_observation:''});
     if(saved.error)throw saved.error;
+    pullAttachmentNativeFile=null;
     $('formPullAttachment').reset();
     updatePullAttachmentCaptureUi();
     toast('Foto anexada ao ciclo.','success');
@@ -3388,6 +3402,7 @@ function renderPullDriver(){
   const active=!!pullActiveTrip;
   if(active&&pullRenderedTripId!==pullActiveTrip.id){
     if($('pullDriverDetails'))$('pullDriverDetails').open=false;
+    pullAttachmentNativeFile=null;$('formPullAttachment')?.reset();updatePullAttachmentCaptureUi();
     pullRenderedTripId=pullActiveTrip.id;
   }else if(!active)pullRenderedTripId=null;
   $('view-puxada-viagem')?.classList.toggle('pull-trip-in-progress',active);
@@ -3395,7 +3410,7 @@ function renderPullDriver(){
   $('pullDriverActive')?.classList.toggle('hidden',!active);
   if(!active){
     stopPullTracking();stopPullClock();
-    $('formPullAttachment')?.reset();updatePullAttachmentCaptureUi();
+    pullAttachmentNativeFile=null;$('formPullAttachment')?.reset();updatePullAttachmentCaptureUi();
     if($('pullStartGps')){$('pullStartGps').className='gps-status';$('pullStartGps').textContent=`Tolerância GPS carregada: até ±${pullGpsTarget()} m. A localização será capturada ao iniciar.`;}
     return;
   }
