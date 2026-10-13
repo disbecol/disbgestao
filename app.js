@@ -207,7 +207,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.30-multi-invoice',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.30-multi-invoice-b',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -11573,9 +11573,11 @@ async function renderPullInvoiceExisting(targetId,scope,readOnly=false){
   const notes=scope==='plan'?await pullInvoicesByPlan(targetId):await pullInvoicesByTrip(targetId);
   const box=$('pullInvoiceExisting');if(!box)return;
   if(!notes.length){box.textContent='Nenhuma nota anexada a esta puxada.';return;}
-  const links=await Promise.all(notes.map(note=>pullInvoiceLink(note)));
-  const combined=window.DISB_INVOICE_NOTE.combineInvoices(notes),total=combined.reduce((sum,item)=>sum+window.DISB_INVOICE_NOTE.palletAllocationState(item).totalPallets,0);
-  box.innerHTML=`<strong>${notes.length} ${notes.length===1?'nota anexada':'notas anexadas'}</strong><p>Total do ciclo: ${combined.length} produto(s) • ${total} NRI(s)</p>`+notes.map((note,index)=>`<div class="invoice-existing-note"><div class="invoice-existing-head"><span><strong>NF ${esc(note.invoice_number||'sem número')}</strong> • ${(note.items||[]).length} produto(s) • <a href="${esc(links[index])}" target="_blank" rel="noopener">Abrir PDF</a></span>${readOnly?'':`<button type="button" class="mini-btn danger" data-delete-invoice="${esc(note.id)}">Excluir NF</button>`}</div><div>${invoiceItemSummary(note.items)}</div></div>`).join('');
+  const links=await Promise.all(notes.map(note=>pullInvoiceLink(note).catch(()=>null)));
+  let totalHtml='';
+  try{const combined=window.DISB_INVOICE_NOTE.combineInvoices(notes),total=combined.reduce((sum,item)=>sum+window.DISB_INVOICE_NOTE.palletAllocationState(item).totalPallets,0);totalHtml=`<p>Total do ciclo: ${combined.length} produto(s) • ${total} NRI(s)</p>`;}
+  catch(error){totalHtml=`<p class="status bad">Confira as notas: ${esc(humanError(error))}</p>`;}
+  box.innerHTML=`<strong>${notes.length} ${notes.length===1?'nota anexada':'notas anexadas'}</strong>${totalHtml}`+notes.map((note,index)=>`<div class="invoice-existing-note"><div class="invoice-existing-head"><span><strong>NF ${esc(note.invoice_number||'sem número')}</strong> • ${(note.items||[]).length} produto(s) • ${links[index]?`<a href="${esc(links[index])}" target="_blank" rel="noopener">Abrir PDF</a>`:'PDF indisponível'}</span>${readOnly?'':`<button type="button" class="mini-btn danger" data-delete-invoice="${esc(note.id)}">Excluir NF</button>`}</div><div>${invoiceItemSummary(note.items)}</div></div>`).join('');
   if(!readOnly)box.querySelectorAll('[data-delete-invoice]').forEach(button=>button.addEventListener('click',()=>{
     const note=notes.find(item=>item.id===button.dataset.deleteInvoice);if(note)void deletePullInvoiceFromModal(targetId,scope,note,button);
   }));
@@ -11625,7 +11627,7 @@ async function savePullInvoiceFromModal(targetId,scope='trip'){
     if(pullActiveTrip?.id===targetId)void refreshPullInvoiceDriver();
     if(activeView==='puxada-cadastrar')void loadPullPlans(true);
     if(activeView==='nri-carretas')void loadPullNriPending(true);
-  }catch(error){if(uploaded&&!registered)await sb.storage.from('puxada-notas').remove([path]).catch(()=>{});toast(String(error?.message||'').includes('NOTA_JA_ANEXADA')?'Esta NF já está anexada à puxada.':humanError(error),'error');}
+  }catch(error){if(uploaded&&!registered)await sb.storage.from('puxada-notas').remove([path]).catch(()=>{});toast(registered?'NF salva, mas não foi possível atualizar a lista. Reabra as notas para conferir.':String(error?.message||'').includes('NOTA_JA_ANEXADA')?'Esta NF já está anexada à puxada.':humanError(error),'error');}
   finally{button.disabled=false;button.textContent='Anexar PDF';}
 }
 async function refreshPullInvoiceDriver(){
