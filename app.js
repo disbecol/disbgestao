@@ -207,7 +207,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.28-invoice-lots',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.30-multi-invoice',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -11534,13 +11534,13 @@ async function invoicePdfLibrary(){
   }).catch(error=>{pdfScriptPromise=null;throw error;});
   return pdfScriptPromise;
 }
-async function pullInvoiceByTrip(tripId){
-  const {data,error}=await sb.from('pull_trip_invoices').select('*').eq('trip_id',tripId).maybeSingle();
-  if(error)throw error;return data;
+async function pullInvoicesByTrip(tripId){
+  const {data,error}=await sb.from('pull_trip_invoices').select('*').eq('trip_id',tripId).order('created_at',{ascending:true});
+  if(error)throw error;return data||[];
 }
-async function pullInvoiceByPlan(planId){
-  const {data,error}=await sb.from('pull_trip_invoices').select('*').eq('plan_id',planId).maybeSingle();
-  if(error)throw error;return data;
+async function pullInvoicesByPlan(planId){
+  const {data,error}=await sb.from('pull_trip_invoices').select('*').eq('plan_id',planId).order('created_at',{ascending:true});
+  if(error)throw error;return data||[];
 }
 async function pullInvoiceOrigin(targetId,scope){
   const table=scope==='plan'?'pull_trip_plans':'pull_trips';
@@ -11564,23 +11564,29 @@ async function openPullInvoiceModal(targetId,scope='trip',readOnly=false){
   const form=readOnly?'':`<div class="field"><label for="pullInvoicePdfFile">Nota em PDF</label><input id="pullInvoicePdfFile" type="file" accept="application/pdf,.pdf"></div><div class="field"><label for="pullInvoiceNumber">Número da nota</label><input id="pullInvoiceNumber" inputmode="numeric" placeholder="Preenchido automaticamente quando encontrado"></div><div id="pullInvoicePreview" class="import-result">Selecione um arquivo para conferir os produtos antes de anexar.</div>`;
   const actions=readOnly?[]:[{label:'Anexar PDF',class:'primary',onClick:()=>savePullInvoiceFromModal(targetId,scope)}];
   actions.push({label:'Fechar',class:'secondary',onClick:closeModal});
-  openModal('Nota de Puxada',readOnly?'Nota vinculada a esta viagem':'Anexe um PDF DANFE com texto selecionável',`<div id="pullInvoiceExisting" class="notice compact">Consultando nota anexada…</div>${form}`,actions);
+  openModal('Notas de Puxada',readOnly?'Notas vinculadas a esta viagem':'Anexe um PDF DANFE por vez. As notas deste ciclo serão somadas para os NRIs.',`<div id="pullInvoiceExisting" class="notice compact">Consultando notas anexadas…</div>${form}`,actions);
   $('pullInvoicePdfFile')?.addEventListener('change',previewPullInvoiceFile);
-  let deleteButton=null;
-  if(!readOnly){deleteButton=document.createElement('button');deleteButton.type='button';deleteButton.className='btn danger hidden';deleteButton.textContent='Excluir NF';$('modalActions').prepend(deleteButton);}
-  try{const note=scope==='plan'?await pullInvoiceByPlan(targetId):await pullInvoiceByTrip(targetId);const box=$('pullInvoiceExisting');if(!box)return;
-    if(!note){box.textContent='Nenhuma nota anexada a esta puxada.';return;}
-    const url=await pullInvoiceLink(note);box.innerHTML=`<strong>Nota atual: ${esc(note.invoice_number||'sem número')}</strong> • ${(note.items||[]).length} produto(s) <a href="${esc(url)}" target="_blank" rel="noopener">Abrir PDF</a><div>${invoiceItemSummary(note.items)}</div>`;
-    if(deleteButton){deleteButton.classList.remove('hidden');deleteButton.addEventListener('click',()=>deletePullInvoiceFromModal(targetId,scope,note,deleteButton));}
-  }catch(error){if($('pullInvoiceExisting'))$('pullInvoiceExisting').textContent=humanError(error);}
+  try{await renderPullInvoiceExisting(targetId,scope,readOnly);}
+  catch(error){if($('pullInvoiceExisting'))$('pullInvoiceExisting').textContent=humanError(error);}
+}
+async function renderPullInvoiceExisting(targetId,scope,readOnly=false){
+  const notes=scope==='plan'?await pullInvoicesByPlan(targetId):await pullInvoicesByTrip(targetId);
+  const box=$('pullInvoiceExisting');if(!box)return;
+  if(!notes.length){box.textContent='Nenhuma nota anexada a esta puxada.';return;}
+  const links=await Promise.all(notes.map(note=>pullInvoiceLink(note)));
+  const combined=window.DISB_INVOICE_NOTE.combineInvoices(notes),total=combined.reduce((sum,item)=>sum+window.DISB_INVOICE_NOTE.palletAllocationState(item).totalPallets,0);
+  box.innerHTML=`<strong>${notes.length} ${notes.length===1?'nota anexada':'notas anexadas'}</strong><p>Total do ciclo: ${combined.length} produto(s) • ${total} NRI(s)</p>`+notes.map((note,index)=>`<div class="invoice-existing-note"><div class="invoice-existing-head"><span><strong>NF ${esc(note.invoice_number||'sem número')}</strong> • ${(note.items||[]).length} produto(s) • <a href="${esc(links[index])}" target="_blank" rel="noopener">Abrir PDF</a></span>${readOnly?'':`<button type="button" class="mini-btn danger" data-delete-invoice="${esc(note.id)}">Excluir NF</button>`}</div><div>${invoiceItemSummary(note.items)}</div></div>`).join('');
+  if(!readOnly)box.querySelectorAll('[data-delete-invoice]').forEach(button=>button.addEventListener('click',()=>{
+    const note=notes.find(item=>item.id===button.dataset.deleteInvoice);if(note)void deletePullInvoiceFromModal(targetId,scope,note,button);
+  }));
 }
 async function deletePullInvoiceFromModal(targetId,scope,note,button){
   if(!confirm(`Excluir a NF ${note.invoice_number||'sem número'} desta ${scope==='plan'?'viagem cadastrada':'puxada'}? Os produtos pré-preenchidos por ela deixarão de aparecer nos NRIs.`))return;
   button.disabled=true;button.textContent='Excluindo…';
   try{
-    const {data,error}=await sb.rpc('delete_pull_invoice',{p_trip_id:scope==='trip'?targetId:null,p_plan_id:scope==='plan'?targetId:null});if(error)throw error;
+    const {data,error}=await sb.rpc('delete_pull_invoice',{p_invoice_id:note.id});if(error)throw error;
     const removed=await sb.storage.from('puxada-notas').remove([data.pdf_path]);
-    closeModal();invoicePrepared=null;
+    await renderPullInvoiceExisting(targetId,scope);
     toast(removed.error?'NF desvinculada. O arquivo não pôde ser removido do armazenamento.':'NF excluída desta puxada.','success');
     if(pullActiveTrip?.id===targetId)void refreshPullInvoiceDriver();
     if(activeView==='puxada-cadastrar')void loadPullPlans(true);
@@ -11607,26 +11613,26 @@ async function savePullInvoiceFromModal(targetId,scope='trip'){
   const prepared=invoicePrepared,file=$('pullInvoicePdfFile')?.files?.[0];
   if(!prepared||prepared.file!==file)return toast('Selecione e confira uma nota PDF válida.','error');
   const button=[...$('modalActions').querySelectorAll('button')].find(b=>b.textContent==='Anexar PDF');button.disabled=true;button.textContent='Anexando…';
-  let path='',uploaded=false;
+  let path='',uploaded=false,registered=false;
   try{
-    const previous=scope==='plan'?await pullInvoiceByPlan(targetId):await pullInvoiceByTrip(targetId);
     path=`${targetId}/${authUser.id}/${uuid()}.pdf`;
     const upload=await sb.storage.from('puxada-notas').upload(path,file,{contentType:'application/pdf',upsert:false});if(upload.error)throw upload.error;uploaded=true;
     const rpc=scope==='plan'?'register_pull_plan_invoice':'register_pull_trip_invoice';
     const args=scope==='plan'?{p_plan_id:targetId}:{p_trip_id:targetId};
-    const saved=await sb.rpc(rpc,{...args,p_pdf_path:path,p_invoice_number:$('pullInvoiceNumber').value.trim(),p_lines:prepared.parsed.lines});if(saved.error)throw saved.error;
-    if(previous?.pdf_path&&previous.pdf_path!==path)await sb.storage.from('puxada-notas').remove([previous.pdf_path]).catch(()=>{});
-    closeModal();invoicePrepared=null;toast('Nota vinculada à puxada. Produtos e paletes estarão prontos no cadastro de NRIs.','success');
+    const saved=await sb.rpc(rpc,{...args,p_pdf_path:path,p_invoice_number:$('pullInvoiceNumber').value.trim(),p_lines:prepared.parsed.lines});if(saved.error)throw saved.error;registered=true;
+    invoicePrepared=null;$('pullInvoicePdfFile').value='';$('pullInvoiceNumber').value='';$('pullInvoicePreview').textContent='Selecione outra nota em PDF para acrescentar a esta puxada.';
+    await renderPullInvoiceExisting(targetId,scope);toast('Nota acrescentada à puxada. Os produtos de todas as notas serão somados nos NRIs.','success');
     if(pullActiveTrip?.id===targetId)void refreshPullInvoiceDriver();
     if(activeView==='puxada-cadastrar')void loadPullPlans(true);
     if(activeView==='nri-carretas')void loadPullNriPending(true);
-  }catch(error){if(uploaded)await sb.storage.from('puxada-notas').remove([path]).catch(()=>{});toast(humanError(error),'error');}
+  }catch(error){if(uploaded&&!registered)await sb.storage.from('puxada-notas').remove([path]).catch(()=>{});toast(String(error?.message||'').includes('NOTA_JA_ANEXADA')?'Esta NF já está anexada à puxada.':humanError(error),'error');}
   finally{button.disabled=false;button.textContent='Anexar PDF';}
 }
 async function refreshPullInvoiceDriver(){
   const box=$('pullInvoiceDriverStatus');if(!box||!pullActiveTrip||pullActiveTrip.cycle_type!=='PULL')return;
-  try{const note=await pullInvoiceByTrip(pullActiveTrip.id);if(!note){box.textContent='Nenhuma nota anexada.';return;}
-    const url=await pullInvoiceLink(note);box.innerHTML=`<strong>Nota ${esc(note.invoice_number||'anexada')}</strong> • ${(note.items||[]).length} produto(s) <a href="${esc(url)}" target="_blank" rel="noopener">Abrir PDF</a>`;
+  try{const notes=await pullInvoicesByTrip(pullActiveTrip.id);if(!notes.length){box.textContent='Nenhuma nota anexada.';return;}
+    const links=await Promise.all(notes.map(note=>pullInvoiceLink(note)));
+    box.innerHTML=`<strong>${notes.length} ${notes.length===1?'nota anexada':'notas anexadas'}</strong><div>${notes.map((note,index)=>`<div>NF ${esc(note.invoice_number||'sem número')} • ${(note.items||[]).length} produto(s) • <a href="${esc(links[index])}" target="_blank" rel="noopener">Abrir PDF</a></div>`).join('')}</div>`;
   }catch(error){box.textContent=humanError(error);}
 }
 
@@ -11640,16 +11646,18 @@ async function decoratePullPlanInvoices(){
     sb.from('pull_trips').select('id,trip_code,plate,factory,origin_unit,ended_at,status,nri_status').eq('origin_unit',activeUnit).eq('cycle_type','PULL').eq('status','ARRIVED').eq('nri_status','PENDING').order('ended_at',{ascending:false}).limit(100)
   ]);
   const error=[tripResult,planNoteResult,tripNoteResult,endedResult].find(x=>x.error)?.error;if(error)throw error;
-  const trips=new Map((tripResult.data||[]).map(x=>[x.id,x])),planNotes=new Map((planNoteResult.data||[]).map(x=>[x.plan_id,x])),tripNotes=new Map((tripNoteResult.data||[]).map(x=>[x.trip_id,x]));
+  const trips=new Map((tripResult.data||[]).map(x=>[x.id,x])),planNotes=new Map(),tripNotes=new Map();
+  for(const note of planNoteResult.data||[]){const list=planNotes.get(note.plan_id)||[];list.push(note);planNotes.set(note.plan_id,list);}
+  for(const note of tripNoteResult.data||[]){const list=tripNotes.get(note.trip_id)||[];list.push(note);tripNotes.set(note.trip_id,list);}
   for(const plan of plans){const card=$('pullPlansList')?.querySelector(`[data-plan-id="${plan.id}"]`),actions=card?.querySelector('.pull-plan-actions');if(!actions)continue;
-    const trip=trips.get(plan.trip_id),note=plan.status==='PLANNED'?planNotes.get(plan.id):tripNotes.get(plan.trip_id);
+    const trip=trips.get(plan.trip_id),notes=plan.status==='PLANNED'?planNotes.get(plan.id):tripNotes.get(plan.trip_id);
     const writable=plan.status==='PLANNED'||(plan.status==='STARTED'&&trip&&(trip.status==='IN_PROGRESS'||(trip.status==='ARRIVED'&&trip.nri_status==='PENDING')));
-    if(!writable&&!note)continue;
-    const button=document.createElement('button');button.type='button';button.className='mini-btn';button.dataset.pullPlanInvoice=plan.status==='PLANNED'?plan.id:plan.trip_id;button.dataset.invoiceScope=plan.status==='PLANNED'?'plan':'trip';if(!writable)button.dataset.invoiceReadOnly='true';button.textContent=!writable?'Ver NF':note?'Ver / trocar NF':'Cadastrar NF';actions.append(button);
+    if(!writable&&!notes?.length)continue;
+    const button=document.createElement('button');button.type='button';button.className='mini-btn';button.dataset.pullPlanInvoice=plan.status==='PLANNED'?plan.id:plan.trip_id;button.dataset.invoiceScope=plan.status==='PLANNED'?'plan':'trip';if(!writable)button.dataset.invoiceReadOnly='true';button.textContent=!writable?`Ver ${notes.length} NF(s)`:notes?.length?`Ver / adicionar NF (${notes.length})`:'Cadastrar NF';actions.append(button);
   }
   const box=$('pullPlanClosedList'),ended=endedResult.data||[];if(!box)return;
   box.className=ended.length?'pull-plan-list':'pull-plan-list empty-state';
-  box.innerHTML=ended.length?ended.map(t=>`<article class="pull-plan-card"><div class="pull-plan-card-top"><div><small>${esc(t.trip_code||'PUXADA')} • ${esc(t.origin_unit)}</small><strong>${esc(t.plate)} → ${esc(t.factory)}</strong></div><span class="status pending">Aguardando NRI</span></div><div class="pull-plan-meta"><span>Chegada: <b>${fmtDateTime(t.ended_at)}</b></span></div><div class="pull-plan-actions"><button type="button" class="mini-btn" data-pull-plan-invoice="${t.id}" data-invoice-scope="trip">Cadastrar ou consultar NF</button></div></article>`).join(''):'Nenhum ciclo encerrado aguardando NRI nesta unidade.';
+  box.innerHTML=ended.length?ended.map(t=>`<article class="pull-plan-card"><div class="pull-plan-card-top"><div><small>${esc(t.trip_code||'PUXADA')} • ${esc(t.origin_unit)}</small><strong>${esc(t.plate)} → ${esc(t.factory)}</strong></div><span class="status pending">Aguardando NRI</span></div><div class="pull-plan-meta"><span>Chegada: <b>${fmtDateTime(t.ended_at)}</b></span></div><div class="pull-plan-actions"><button type="button" class="mini-btn" data-pull-plan-invoice="${t.id}" data-invoice-scope="trip">Cadastrar ou consultar NFs</button></div></article>`).join(''):'Nenhum ciclo encerrado aguardando NRI nesta unidade.';
 }
 const invoiceOriginalLoadPlans=loadPullPlans;
 loadPullPlans=async function(...args){const result=await invoiceOriginalLoadPlans(...args);try{await decoratePullPlanInvoices();}catch(error){console.warn('Notas de viagens cadastradas',error);const box=$('pullPlanClosedList');if(box)box.textContent='Não foi possível carregar as notas e os ciclos encerrados.';}return result;};
@@ -11657,10 +11665,10 @@ loadPullPlans=async function(...args){const result=await invoiceOriginalLoadPlan
 const invoiceOriginalLoadPull=loadPullActiveTrip;
 loadPullActiveTrip=async function(...args){const result=await invoiceOriginalLoadPull(...args);$('pullInvoiceDriverCard')?.classList.toggle('hidden',!pullActiveTrip||pullActiveTrip.cycle_type!=='PULL');if(pullActiveTrip?.cycle_type==='PULL')void refreshPullInvoiceDriver();return result;};
 const invoiceOriginalRenderFarol=renderPullFarol;
-renderPullFarol=function(...args){const result=invoiceOriginalRenderFarol(...args),box=$('pullFarolCards');box?.querySelectorAll('[data-pull-detail]').forEach(details=>{const id=details.dataset.pullDetail,t=box._rows?.find(x=>x.id===id);if(t?.cycle_type!=='PULL')return;const button=document.createElement('button');button.type='button';button.className='btn secondary wide';button.dataset.pullInvoice=id;button.textContent='Nota de Puxada';details.after(button);});return result;};
+renderPullFarol=function(...args){const result=invoiceOriginalRenderFarol(...args),box=$('pullFarolCards');box?.querySelectorAll('[data-pull-detail]').forEach(details=>{const id=details.dataset.pullDetail,t=box._rows?.find(x=>x.id===id);if(t?.cycle_type!=='PULL')return;const button=document.createElement('button');button.type='button';button.className='btn secondary wide';button.dataset.pullInvoice=id;button.textContent='Notas de Puxada';details.after(button);});return result;};
 const invoiceOriginalPending=loadPullNriPending;
 loadPullNriPending=async function(...args){const result=await invoiceOriginalPending(...args),box=$('pullNriCards'),ids=[...box?.querySelectorAll('[data-pull-nri]')||[]].map(b=>b.dataset.pullNri);if(!ids.length)return result;
-  try{const {data,error}=await sb.from('pull_trip_invoices').select('trip_id,invoice_number').in('trip_id',ids);if(error)throw error;const byTrip=new Map((data||[]).map(x=>[x.trip_id,x]));box.querySelectorAll('[data-pull-nri]').forEach(action=>{const note=byTrip.get(action.dataset.pullNri);if(note){const label=document.createElement('span');label.className='status approved';label.textContent=`Nota ${note.invoice_number||'anexada'}`;action.before(label);}if(!hasAnyPerm('NRI_CREATE,PULL_PLAN,PULL_FAROL'))return;const btn=document.createElement('button');btn.type='button';btn.className='mini-btn';btn.dataset.pullInvoice=action.dataset.pullNri;btn.textContent=note?'Ver / trocar NF':'Cadastrar NF';action.before(btn);});}
+  try{const {data,error}=await sb.from('pull_trip_invoices').select('trip_id,invoice_number').in('trip_id',ids);if(error)throw error;const byTrip=new Map();for(const note of data||[])byTrip.set(note.trip_id,(byTrip.get(note.trip_id)||0)+1);box.querySelectorAll('[data-pull-nri]').forEach(action=>{const count=byTrip.get(action.dataset.pullNri)||0;if(count){const label=document.createElement('span');label.className='status approved';label.textContent=`${count} ${count===1?'NF anexada':'NFs anexadas'}`;action.before(label);}if(!hasAnyPerm('NRI_CREATE,PULL_PLAN,PULL_FAROL'))return;const btn=document.createElement('button');btn.type='button';btn.className='mini-btn';btn.dataset.pullInvoice=action.dataset.pullNri;btn.textContent=count?`Ver / adicionar NF (${count})`:'Cadastrar NF';action.before(btn);});}
   catch(error){console.warn('Notas das puxadas pendentes',error);}return result;};
 
 const invoiceOriginalPrefill=prefillNriFromPull;
@@ -11668,11 +11676,12 @@ let nriInvoiceLoadId=0;
 prefillNriFromPull=async function(trip){
   invoiceOriginalPrefill(trip);nriInvoiceContext=null;
   const loadId=nriInvoiceLoadId;
-  try{const note=await pullInvoiceByTrip(trip.id);if(!note)return;
+  try{const notes=await pullInvoicesByTrip(trip.id);if(!notes.length)return;
     if(loadId!==nriInvoiceLoadId||$('nriPullTripId')?.value!==trip.id)return;
-    nriInvoiceContext=note;nriDraftItems=[];
-    renderNriDraftItems();const total=(note.items||[]).reduce((sum,x)=>sum+window.DISB_INVOICE_NOTE.palletAllocationState(x).totalPallets,0);
-    $('nriPullBanner').innerHTML=`<strong>${esc(trip.trip_code)} • Nota ${esc(note.invoice_number||'anexada')} • ${total} NRI(s)</strong><span>Selecione um produto e atribua lote, validade e paletes até completar a quantidade da nota.</span>`;
+    const items=window.DISB_INVOICE_NOTE.combineInvoices(notes);
+    nriInvoiceContext={notes,items,invoice_number:notes.length===1?notes[0].invoice_number:''};nriDraftItems=[];
+    renderNriDraftItems();const total=items.reduce((sum,x)=>sum+window.DISB_INVOICE_NOTE.palletAllocationState(x).totalPallets,0);
+    $('nriPullBanner').innerHTML=`<strong>${esc(trip.trip_code)} • ${notes.length} ${notes.length===1?'nota':'notas'} • ${total} NRI(s)</strong><span>Os produtos das notas foram somados. Atribua lote, validade e paletes até completar cada produto.</span>`;
   }catch(error){if(loadId===nriInvoiceLoadId)toast(`Não foi possível carregar a nota da puxada: ${humanError(error)}`,'error');}
 };
 const invoiceOriginalClearNri=clearNriRequest;
@@ -11682,7 +11691,7 @@ function invoiceRowsForProduct(item){return nriDraftItems.filter(row=>String(row
 function invoiceAllocationGroups(rows){const groups=new Map();for(const row of rows){const key=row.invoice_allocation_id||row.id;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(row);}return [...groups.entries()];}
 function invoiceLotFields(lot='',validity='',pallets=1,max=1,noValidity=false){return `<div class="grid grid-3"><div class="field"><label for="invoiceLot">Lote *</label><input id="invoiceLot" value="${esc(lot)}" maxlength="80" autocapitalize="characters" autocomplete="off" placeholder="Ex.: L2408"></div><div class="field"><label for="invoiceValidity">Validade *</label><input id="invoiceValidity" type="date" value="${esc(validity)}"><label class="check compact-check"><input id="invoiceNoValidity" type="checkbox" ${noValidity?'checked':''}> Sem validade</label></div><div class="field"><label for="invoicePallets">Qtd. de paletes *</label><input id="invoicePallets" type="number" min="1" max="${max}" step="1" value="${pallets}"></div></div>`;}
 function invoiceLotValues(){const lot=sanitizeLot($('invoiceLot')?.value),withoutValidity=!!$('invoiceNoValidity')?.checked,validity=withoutValidity?null:String($('invoiceValidity')?.value||'').trim(),pallets=Number($('invoicePallets')?.value);if(!lot)throw new Error('Informe o lote usando letras e números.');if(!withoutValidity&&(!/^\d{4}-\d{2}-\d{2}$/.test(validity)||parseShortDate(formatShortDate(validity))!==validity))throw new Error('Informe uma validade válida.');return {lot,validity,pallets};}
-function invoiceDraftRow(item,groupId,lot,validity,part){return {id:uuid(),invoice_allocation_id:groupId,product_code:item.product_code,product_name:item.product_name,validity_date:validity,lot,lots:[lot],quantity:part.quantity,pallets:part.pallets,block_date:validity?addDaysIso(validity,-30):null,pallet_damaged:false,damaged_pallets:0,damage_reason:'',invoice_number:nriInvoiceContext?.invoice_number||'',damagePhotos:[],invoice_pending:false};}
+function invoiceDraftRow(item,groupId,lot,validity,part){return {id:uuid(),invoice_allocation_id:groupId,product_code:item.product_code,product_name:item.product_name,validity_date:validity,lot,lots:[lot],quantity:part.quantity,pallets:part.pallets,block_date:validity?addDaysIso(validity,-30):null,pallet_damaged:false,damaged_pallets:0,damage_reason:'',invoice_number:item.invoice_numbers?.length===1?item.invoice_numbers[0]:'',damagePhotos:[],invoice_pending:false};}
 function openInvoiceAllocation(item,groupId=null){
   if(!nriInvoiceContext)return;
   const group=groupId?nriDraftItems.filter(row=>row.invoice_allocation_id===groupId||row.id===groupId):[];
@@ -11691,7 +11700,7 @@ function openInvoiceAllocation(item,groupId=null){
   if(!state.remainingPallets)return toast('Todos os paletes deste produto já foram atribuídos.','error');
   const partialHint=state.partialUnits?` O palete incompleto (${fmtNum(state.partialUnits)} ${esc(item.commercial_unit)}) será atribuído depois dos paletes completos.`:'';
   const body=`<p class="muted-text">${esc(item.product_code)} • ${esc(item.product_name)}<br>${fmtNum(state.remainingPallets)} de ${fmtNum(state.totalPallets)} palete(s) disponíveis.${partialHint}</p>${invoiceLotFields(group[0]?.lot||'',group[0]?.validity_date||'',count||state.remainingPallets,state.remainingPallets,!!group.length&&!group[0]?.validity_date)}`;
-  openModal(group.length?'Editar lote da nota':'Atribuir paletes ao lote',`Nota ${nriInvoiceContext.invoice_number||'anexada'}`,body,[{label:group.length?'Salvar lote':'Adicionar lote',class:'primary',onClick:()=>{
+  openModal(group.length?'Editar lote da nota':'Atribuir paletes ao lote',`${nriInvoiceContext.notes.length} ${nriInvoiceContext.notes.length===1?'nota anexada':'notas anexadas'}`,body,[{label:group.length?'Salvar lote':'Adicionar lote',class:'primary',onClick:()=>{
     try{const {lot,validity,pallets}=invoiceLotValues(),parts=window.DISB_INVOICE_NOTE.planPalletAllocation(item,otherRows,pallets);
       if(group.some(row=>row.pallet_damaged)&&(pallets!==count||parts.length!==group.length||parts.some((part,index)=>part.quantity!==group[index].quantity||part.pallets!==group[index].pallets)))throw new Error('Remova a avaria deste lote antes de alterar os paletes.');
       const id=groupId||uuid(),replacement=parts.map((part,index)=>{const previous=group[index];return {...invoiceDraftRow(item,id,lot,validity,part),...(previous&&previous.quantity===part.quantity&&previous.pallets===part.pallets?{...previous,lot,lots:[lot],validity_date:validity,block_date:validity?addDaysIso(validity,-30):null}:{}),invoice_allocation_id:id};});
@@ -11707,12 +11716,12 @@ renderNriDraftItems=function(...args){
   const block=$('nriProductEntryBlock');
   if(!nriInvoiceContext){if(block){block.classList.remove('hidden','invoice-damage-edit');}if($('nriItemsTitle'))$('nriItemsTitle').textContent='Produtos adicionados';if($('nriItemsHint'))$('nriItemsHint').textContent='Edite ou exclua antes de finalizar.';return invoiceOriginalRenderNri(...args);}
   if(block)block.classList.toggle('hidden',!nriEditingId);
-  $('nriItemsTitle').textContent='Produtos da nota';$('nriItemsHint').textContent='Clique em um produto para atribuir lote, validade e paletes.';
+  $('nriItemsTitle').textContent='Produtos das notas';$('nriItemsHint').textContent='Clique em um produto para atribuir lote, validade e paletes.';
   const items=nriInvoiceContext.items||[],totals=items.map(item=>window.DISB_INVOICE_NOTE.palletAllocationState(item,invoiceRowsForProduct(item))),total=totals.reduce((sum,x)=>sum+x.totalPallets,0),done=totals.reduce((sum,x)=>sum+x.allocatedPallets,0);
   $('nriItemCounter').textContent=`${done} de ${total} NRI(s)`;$('btnCadastrarCarreta').textContent=total?`Cadastrar carreta (${total} NRIs)`:'Cadastrar carreta';$('btnCadastrarCarreta').disabled=!total||done!==total;
   const el=$('nriItemList');el.className='invoice-product-list';el.innerHTML=items.map((item,index)=>{const state=totals[index],groups=invoiceAllocationGroups(invoiceRowsForProduct(item)),complete=state.remainingPallets===0;
     const groupHtml=groups.map(([groupId,rows])=>{const first=rows[0],count=rows.reduce((sum,row)=>sum+Number(row.pallets),0),details=rows.map(row=>`<div class="invoice-allocation-part"><span>${row.quantity===state.capacity?'Palete completo':'Palete incompleto'} • ${row.pallets} NRI(s) • ${fmtNum(row.quantity)} ${esc(item.commercial_unit)} por NRI${row.pallet_damaged?` • ${row.damaged_pallets} avariado(s)`:''}</span><button type="button" class="mini-btn" data-act="edit" data-id="${row.id}">${row.pallet_damaged?'Editar avaria':'Palete avariado'}</button></div>`).join('');return `<div class="invoice-lot-group"><div class="invoice-lot-head"><div><strong>Lote ${esc(first.lot)} • ${first.validity_date?formatShortDate(first.validity_date):'Sem validade'}</strong><small>${count} palete(s) atribuídos</small></div><div class="mini-actions"><button type="button" class="mini-btn" data-invoice-edit="${esc(groupId)}" data-product-code="${esc(item.product_code)}">Editar</button><button type="button" class="mini-btn danger" data-invoice-delete="${esc(groupId)}">Excluir</button></div></div>${details}</div>`;}).join('');
-    return `<section class="invoice-product-card ${complete?'complete':''}"><button type="button" class="invoice-product-open" data-invoice-add="${esc(item.product_code)}" ${complete?'disabled':''}><span><small>PRODUTO ${index+1}</small><strong>${esc(item.product_code)} • ${esc(item.product_name)}</strong><em>${fmtNum(item.quantity)} ${esc(item.commercial_unit)} na nota • ${fmtNum(state.capacity)} por palete${state.partialUnits?` • último palete com ${fmtNum(state.partialUnits)}`:''}</em></span><span class="invoice-progress-label">${state.allocatedPallets}/${state.totalPallets} paletes<br><b>${complete?'Completo':`+ Atribuir ${state.remainingPallets}`}</b></span></button><div class="invoice-progress"><i style="width:${state.totalPallets?100*state.allocatedPallets/state.totalPallets:0}%"></i></div>${groupHtml||'<p class="invoice-empty">Nenhum lote atribuído.</p>'}</section>`;
+    return `<section class="invoice-product-card ${complete?'complete':''}"><button type="button" class="invoice-product-open" data-invoice-add="${esc(item.product_code)}" ${complete?'disabled':''}><span><small>PRODUTO ${index+1}</small><strong>${esc(item.product_code)} • ${esc(item.product_name)}</strong><em>${fmtNum(item.quantity)} ${esc(item.commercial_unit)} nas notas • ${fmtNum(state.capacity)} por palete${state.partialUnits?` • último palete com ${fmtNum(state.partialUnits)}`:''}${item.invoice_numbers?.length?` • NF ${esc(item.invoice_numbers.join(', '))}`:''}</em></span><span class="invoice-progress-label">${state.allocatedPallets}/${state.totalPallets} paletes<br><b>${complete?'Completo':`+ Atribuir ${state.remainingPallets}`}</b></span></button><div class="invoice-progress"><i style="width:${state.totalPallets?100*state.allocatedPallets/state.totalPallets:0}%"></i></div>${groupHtml||'<p class="invoice-empty">Nenhum lote atribuído.</p>'}</section>`;
   }).join('');
 };
 const invoiceOriginalNriListClick=onNriDraftListClick;
@@ -11724,7 +11733,7 @@ onNriDraftListClick=function(event){
   const damage=event.target.closest('button[data-act="edit"]');if(!damage)return;
   const item=nriDraftItems.find(row=>row.id===damage.dataset.id);if(!item)return;
   nriEditingId=item.id;nriDamagePhotos=[...(item.damagePhotos||[])];$('nriDamagePallets').value=item.damaged_pallets||1;$('nriDamageReason').value=item.damage_reason||'';$('nriDamageInvoice').value=item.invoice_number||'';setNriDamageMode(!!item.pallet_damaged);$('btnCancelarNriItem').classList.remove('hidden');
-  if(!$('nriDamageInvoice').value)$('nriDamageInvoice').value=nriInvoiceContext.invoice_number||'';
+  if(!$('nriDamageInvoice').value){const product=(nriInvoiceContext.items||[]).find(x=>String(x.product_code)===String(item.product_code));$('nriDamageInvoice').value=product?.invoice_numbers?.length===1?product.invoice_numbers[0]:'';}
   const block=$('nriProductEntryBlock');block.classList.remove('hidden');block.classList.add('invoice-damage-edit');block.querySelector('.block-head strong').textContent='Palete avariado';block.querySelector('.block-head small').textContent='Confira e registre a avaria deste lote.';
   $('nriInvoiceDamageSummary').classList.remove('hidden');$('nriInvoiceDamageSummary').innerHTML=`<strong>${esc(item.product_code)} • ${esc(item.product_name)}</strong><br>Lote ${esc(item.lot)} • ${item.validity_date?formatShortDate(item.validity_date):'Sem validade'} • ${item.pallets} palete(s)`;
   $('btnAdicionarNriItem').textContent='Salvar avaria';block.scrollIntoView({behavior:'smooth',block:'start'});
@@ -11739,7 +11748,7 @@ addNriDraftItem=function(){
   if(damaged&&(!Number.isInteger(count)||count<1||count>item.pallets))return toast(`Informe entre 1 e ${item.pallets} palete(s) avariado(s).`,'error');
   if(damaged&&!reason)return toast('Selecione o motivo do avariado.','error');if(damaged&&!invoice)return toast('Informe o número da nota fiscal.','error');
   if(damaged&&((photos.length<1&&reason!=='Não foi no caminhão')||photos.length>5))return toast(reason==='Não foi no caminhão'?'Adicione no máximo 5 fotos.':'Palete avariado exige de 1 a 5 fotos.','error');
-  Object.assign(item,{pallet_damaged:damaged,damaged_pallets:count,damage_reason:reason,invoice_number:invoice||nriInvoiceContext.invoice_number||'',damagePhotos:damaged?photos:[]});
+  Object.assign(item,{pallet_damaged:damaged,damaged_pallets:count,damage_reason:reason,invoice_number:invoice,damagePhotos:damaged?photos:[]});
   clearNriItemEditor();renderNriDraftItems();toast('Dados do lote atualizados.','success');
 };
 const invoiceOriginalSubmitNri=submitNriRequestOnce;

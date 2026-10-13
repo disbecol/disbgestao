@@ -52,3 +52,24 @@ test('atribui lotes por paletes até completar a nota e preserva o palete parcia
   assert.throws(()=>note.planPalletAllocation(item,first,2),/entre 1 e 1/);
   assert.equal(note.palletAllocationState(item,[...first,{quantity:5,pallets:1}]).remainingPallets,0);
 });
+
+test('soma o mesmo produto em duas NFs do ciclo antes de calcular os paletes',()=>{
+  const item={product_code:'988',product_name:'BRAHMA CHOPP',commercial_unit:'DZ',commercial_units_per_pallet:84};
+  const notes=[
+    {invoice_number:'101',items:[{...item,quantity:70},{product_code:'20217',product_name:'ORIGINAL',commercial_unit:'CX',commercial_units_per_pallet:90,quantity:90}]},
+    {invoice_number:'102',items:[{...item,quantity:98}]}
+  ];
+  const combined=note.combineInvoices(notes);
+  assert.deepEqual(combined.map(x=>[x.product_code,x.quantity,x.full_pallets,x.remaining_units,x.invoice_numbers]),[
+    ['988',168,2,0,['101','102']],['20217',90,1,0,['101']]
+  ]);
+  assert.equal(note.palletAllocationState(combined[0]).totalPallets,2);
+  assert.deepEqual(note.combineInvoices([]),[]);
+});
+
+test('impede misturar capacidades diferentes para o mesmo produto entre NFs',()=>{
+  assert.throws(()=>note.combineInvoices([
+    {items:[{product_code:'988',commercial_unit:'DZ',commercial_units_per_pallet:84,quantity:84}]},
+    {items:[{product_code:'988',commercial_unit:'DZ',commercial_units_per_pallet:90,quantity:90}]}
+  ]),/capacidade por palete diferente/);
+});

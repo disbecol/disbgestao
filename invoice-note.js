@@ -38,6 +38,23 @@
     return groupLines(lines).map(row=>{const p=byReference.get(row.reference_code);if(!p)throw new Error(`Código de referência ${row.reference_code} não encontrado. Cadastre-o em Configurações > Produtos.`);const capacity=Number(p.commercial_units_per_pallet);if(!Number.isInteger(capacity)||capacity<1)throw new Error(`Informe a capacidade do palete do produto ${p.code} em Configurações > Produtos.`);if(p.invoice_unit&&clean(p.invoice_unit).toUpperCase()!==row.commercial_unit)throw new Error(`A unidade ${row.commercial_unit} da nota não confere com a unidade cadastrada para ${p.code}.`);
       const full=Math.floor(row.quantity/capacity),remainder=Number((row.quantity-full*capacity).toFixed(6));return {...row,product_code:p.code,product_name:p.name,commercial_units_per_pallet:capacity,full_pallets:full,remaining_units:remainder,pallets_exact:row.quantity/capacity};});
   }
+  function combineInvoices(notes){
+    const byProduct=new Map();
+    for(const note of notes||[]){
+      for(const item of note.items||[]){
+        const code=clean(item.product_code),unit=clean(item.commercial_unit).toUpperCase();
+        const capacity=Number(item.commercial_units_per_pallet),quantity=Number(item.quantity);
+        if(!code||!unit||!Number.isInteger(capacity)||capacity<1||!Number.isInteger(quantity)||quantity<1)throw new Error('Uma das notas contém produto ou quantidade inválida.');
+        let combined=byProduct.get(code);
+        if(!combined){combined={...item,quantity:0,invoice_numbers:[]};byProduct.set(code,combined);}
+        if(clean(combined.commercial_unit).toUpperCase()!==unit||Number(combined.commercial_units_per_pallet)!==capacity)throw new Error(`O produto ${code} tem unidade ou capacidade por palete diferente entre as notas. Confira o cadastro antes de emitir os NRIs.`);
+        combined.quantity+=quantity;
+        const number=clean(note.invoice_number);
+        if(number&&!combined.invoice_numbers.includes(number))combined.invoice_numbers.push(number);
+      }
+    }
+    return [...byProduct.values()].map(item=>({...item,full_pallets:Math.floor(item.quantity/item.commercial_units_per_pallet),remaining_units:item.quantity%item.commercial_units_per_pallet}));
+  }
   function palletAllocationState(item,rows=[]){
     const capacity=Number(item.commercial_units_per_pallet),quantity=Number(item.quantity);
     if(!Number.isInteger(capacity)||capacity<1||!Number.isInteger(quantity)||quantity<1)throw new Error('Quantidade da nota ou capacidade do palete inválida.');
@@ -62,5 +79,5 @@
     if(!lines.length)throw new Error('Não encontrei produtos na nota. Envie um PDF DANFE com texto selecionável; imagem escaneada não pode ser lida automaticamente.');
     return {invoice_number:invoiceNumber,lines:groupLines(lines)};
   }
-  return {parsePage,groupLines,matchProducts,readPdf,palletAllocationState,planPalletAllocation};
+  return {parsePage,groupLines,matchProducts,combineInvoices,readPdf,palletAllocationState,planPalletAllocation};
 });
