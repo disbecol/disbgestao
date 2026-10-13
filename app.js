@@ -207,7 +207,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.30-multi-invoice-b',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.31-keg-liters',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -11490,7 +11490,7 @@ let invoiceAdminProducts=[];
 let nriInvoiceContext=null;
 
 async function fetchInvoiceProducts(){
-  return fetchReferencePages(()=>sb.from('products').select('code,name,active,nf_reference_code,nf_reference_code_filial,commercial_units_per_pallet,invoice_unit').order('code'),PRODUCT_REF_LIMIT);
+  return fetchReferencePages(()=>sb.from('products').select('code,name,active,nf_reference_code,nf_reference_code_filial,commercial_units_per_pallet,invoice_unit,invoice_liters_per_unit').order('code'),PRODUCT_REF_LIMIT);
 }
 async function loadProductsAdmin(){
   if(!hasPerm('ADMIN_BASES'))return;
@@ -11501,13 +11501,13 @@ function renderProductsAdmin(){
   const q=norm($('productAdminSearch')?.value||'');
   const rows=invoiceAdminProducts.filter(p=>!q||norm([p.code,p.name,p.nf_reference_code,p.nf_reference_code_filial].join(' ')).includes(q));
   $('productAdminCount').textContent=`${rows.length} de ${invoiceAdminProducts.length} produtos`;
-  $('productAdminRows').innerHTML=rows.map(p=>`<tr><td><strong>${esc(p.code)}</strong></td><td>${esc(p.name)}${p.active?'':' <span class="status rejected">Inativo</span>'}</td><td>${esc(p.nf_reference_code||'—')}</td><td>${esc(p.nf_reference_code_filial||'—')}</td><td>${p.commercial_units_per_pallet||'—'}</td><td>${esc(p.invoice_unit||'—')}</td><td><button type="button" class="mini-btn" data-product-edit="${esc(p.code)}">Editar</button></td></tr>`).join('')||'<tr><td colspan="7">Nenhum produto encontrado.</td></tr>';
+  $('productAdminRows').innerHTML=rows.map(p=>`<tr><td><strong>${esc(p.code)}</strong></td><td>${esc(p.name)}${p.active?'':' <span class="status rejected">Inativo</span>'}</td><td>${esc(p.nf_reference_code||'—')}</td><td>${esc(p.nf_reference_code_filial||'—')}</td><td>${p.commercial_units_per_pallet||'—'}</td><td>${esc(p.invoice_unit==='L'?`L (${p.invoice_liters_per_unit||'?'} L/barril)`:p.invoice_unit||'—')}</td><td><button type="button" class="mini-btn" data-product-edit="${esc(p.code)}">Editar</button></td></tr>`).join('')||'<tr><td colspan="7">Nenhum produto encontrado.</td></tr>';
 }
 function editProductAdmin(code){
   const p=invoiceAdminProducts.find(x=>String(x.code)===String(code));if(!p)return;
   $('productAdminOriginalCode').value=p.code;$('productAdminCode').value=p.code;$('productAdminCode').readOnly=true;
   $('productAdminName').value=p.name;$('productAdminReference').value=p.nf_reference_code||'';$('productAdminReferenceFilial').value=p.nf_reference_code_filial||'';
-  $('productAdminPallet').value=p.commercial_units_per_pallet||'';$('productAdminUnit').value=p.invoice_unit||'';
+  $('productAdminPallet').value=p.commercial_units_per_pallet||'';$('productAdminUnit').value=p.invoice_unit||'';$('productAdminLiters').value=p.invoice_liters_per_unit||'';
   $('productAdminActive').checked=!!p.active;$('formProductAdmin').scrollIntoView({behavior:'smooth',block:'start'});
 }
 function clearProductAdmin(){
@@ -11515,11 +11515,12 @@ function clearProductAdmin(){
 }
 async function saveProductAdmin(event){
   event.preventDefault();if(!hasPerm('ADMIN_BASES'))return;
-  const code=normalizeCode($('productAdminCode').value),name=$('productAdminName').value.trim(),reference=$('productAdminReference').value.trim().toUpperCase(),referenceFilial=$('productAdminReferenceFilial').value.trim().toUpperCase(),capacityText=$('productAdminPallet').value.trim(),capacity=capacityText?Number(capacityText):null,unit=$('productAdminUnit').value||null;
+  const code=normalizeCode($('productAdminCode').value),name=$('productAdminName').value.trim(),reference=$('productAdminReference').value.trim().toUpperCase(),referenceFilial=$('productAdminReferenceFilial').value.trim().toUpperCase(),capacityText=$('productAdminPallet').value.trim(),capacity=capacityText?Number(capacityText):null,unit=$('productAdminUnit').value||null,litersText=$('productAdminLiters').value.trim(),liters=litersText?Number(litersText):null;
   if(!code||!name)return toast('Informe código Promax e nome do produto.','error');
   if(capacity!==null&&(!Number.isInteger(capacity)||capacity<1))return toast('Informe um número inteiro positivo para unidades por palete.','error');
+  if(unit==='L'&&(!Number.isSafeInteger(liters)||liters<1))return toast('Informe os litros por barril para produtos faturados em L.','error');
   if(reference==='#N/D'||referenceFilial==='#N/D')return toast('Substitua #N/D pela referência correta ou deixe o campo vazio.','error');
-  const row={code,name,active:$('productAdminActive').checked,nf_reference_code:reference||null,nf_reference_code_filial:referenceFilial||null,commercial_units_per_pallet:capacity,invoice_unit:unit,updated_at:new Date().toISOString()};
+  const row={code,name,active:$('productAdminActive').checked,nf_reference_code:reference||null,nf_reference_code_filial:referenceFilial||null,commercial_units_per_pallet:capacity,invoice_unit:unit,invoice_liters_per_unit:unit==='L'?liters:null,updated_at:new Date().toISOString()};
   const button=event.submitter||$('formProductAdmin').querySelector('button[type="submit"]');button.disabled=true;
   try{const {error}=await sb.from('products').upsert(row,{onConflict:'code'});if(error)throw error;clearProductAdmin();localStorage.removeItem(REF_CACHE_KEY);await Promise.all([loadProductsAdmin(),loadReferences(false)]);toast('Produto salvo.','success');}
   catch(error){toast(humanError(error),'error');}
@@ -11552,7 +11553,7 @@ async function pullInvoiceLink(note){
   if(error)throw error;return data.signedUrl;
 }
 function invoiceItemSummary(items){
-  return (items||[]).map(x=>`<div class="invoice-summary-row"><strong>${esc(x.product_code)} • ${esc(x.product_name)}</strong><span>${fmtNum(x.quantity)} ${esc(x.commercial_unit)} ÷ ${fmtNum(x.commercial_units_per_pallet)} = ${x.full_pallets}${Number(x.remaining_units)>0?` + 1 parcial (${fmtNum(x.remaining_units)} ${esc(x.commercial_unit)})`:''} NRI(s)</span></div>`).join('');
+  return (items||[]).map(x=>`<div class="invoice-summary-row"><strong>${esc(x.product_code)} • ${esc(x.product_name)}</strong><span>${x.source_unit==='L'?`${fmtNum(x.source_quantity)} L = ${fmtNum(x.quantity)} barris • `:''}${fmtNum(x.quantity)} ${esc(x.commercial_unit)} ÷ ${fmtNum(x.commercial_units_per_pallet)} = ${x.full_pallets}${Number(x.remaining_units)>0?` + 1 parcial (${fmtNum(x.remaining_units)} ${esc(x.commercial_unit)})`:''} NRI(s)</span></div>`).join('');
 }
 let invoiceOriginPromise=null;
 let invoiceOriginError=null;

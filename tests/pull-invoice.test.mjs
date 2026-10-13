@@ -73,3 +73,23 @@ test('impede misturar capacidades diferentes para o mesmo produto entre NFs',()=
     {items:[{product_code:'988',commercial_unit:'DZ',commercial_units_per_pallet:90,quantity:90}]}
   ]),/capacidade por palete diferente/);
 });
+
+test('converte litros da NF de chopp 50 L em barris antes de calcular NRIs',()=>{
+  const product={code:'838',name:'CHOPP BRAHMA CLARO BARRIL KEG 50L',nf_reference_code:'25066',invoice_unit:'L',invoice_liters_per_unit:50,commercial_units_per_pallet:16};
+  const rows=note.groupLines([
+    {reference_code:'25066',description:'CHOPP BRAHMA CLARO BARRIL KEG 50L',commercial_unit:'L',quantity:500},
+    {reference_code:'25066',description:'CHOPP BRAHMA CLARO BARRIL KEG 50L',commercial_unit:'LT',quantity:200}
+  ]);
+  const [item]=note.matchProducts(rows,[product]);
+  assert.deepEqual([item.source_quantity,item.source_unit,item.quantity,item.commercial_unit,item.full_pallets,item.remaining_units],[700,'L',14,'UN',0,14]);
+  assert.equal(note.palletAllocationState(item).totalPallets,1);
+  assert.throws(()=>note.matchProducts([{...rows[0],quantity:715}],[product]),/barris inteiros/);
+});
+
+test('converte chopp de 30 L e preserva a soma de NFs em barris',()=>{
+  const product={code:'828',name:'CHOPP BRAHMA CLARO BARRIL KEG 30L',nf_reference_code:'25064',invoice_unit:'L',invoice_liters_per_unit:30,commercial_units_per_pallet:12};
+  const item=note.matchProducts([{reference_code:'25064',description:product.name,commercial_unit:'L',quantity:390}],[product])[0];
+  assert.deepEqual([item.quantity,item.full_pallets,item.remaining_units],[13,1,1]);
+  const combined=note.combineInvoices([{invoice_number:'1',items:[item]},{invoice_number:'2',items:[{...item,quantity:11}]}]);
+  assert.deepEqual([combined[0].quantity,combined[0].full_pallets,combined[0].remaining_units],[24,2,0]);
+});

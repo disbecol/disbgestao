@@ -1,7 +1,8 @@
 /* DANFE text extraction and commercial-unit to pallet conversion. */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;root.DISB_INVOICE_NOTE=api;})(typeof globalThis!=='undefined'?globalThis:this,function(){
-  const units=new Set(['CX','DZ','UN','UND','UNID','UNIDADE','DUZIA','DÚZIA','CAIXA']);
+  const units=new Set(['CX','DZ','UN','UND','UNID','UNIDADE','DUZIA','DÚZIA','CAIXA','L','LT']);
   const clean=v=>String(v??'').trim();
+  const unit=v=>{const value=clean(v).toUpperCase();return value==='LT'?'L':value;};
   const numeric=v=>{const s=clean(v).replace(/\./g,'').replace(',','.');return /^\d+(?:\.\d+)?$/.test(s)?Number(s):NaN;};
   function textRows(items){
     const lines=[];
@@ -21,13 +22,13 @@
       const qtyPart=row.parts.find(p=>p.x>unitPart.x+5&&p.x<unitPart.x+85&&Number.isFinite(numeric(p.text)));if(!qtyPart)continue;
       const description=row.parts.filter(p=>p.x>codePart.x+10&&p.x<unitPart.x-4).map(p=>p.text).join(' ').replace(/\s+/g,' ').trim();
       if(!description)continue;
-      output.push({reference_code:codePart.text.toUpperCase(),description,commercial_unit:unitPart.text.toUpperCase(),quantity:numeric(qtyPart.text)});
+      output.push({reference_code:codePart.text.toUpperCase(),description,commercial_unit:unit(unitPart.text),quantity:numeric(qtyPart.text)});
     }
     return output;
   }
   function groupLines(lines){
-    const grouped=new Map();for(const row of lines||[]){const code=clean(row.reference_code).toUpperCase(),unit=clean(row.commercial_unit).toUpperCase(),qty=Number(row.quantity);if(!code||!units.has(unit)||!Number.isFinite(qty)||qty<=0)throw new Error('A nota contém um item com código, unidade ou quantidade inválida.');const key=code+'|'+unit;
-      if(!grouped.has(key))grouped.set(key,{reference_code:code,description:clean(row.description),commercial_unit:unit,quantity:0,source_lines:0});const target=grouped.get(key);target.quantity+=qty;target.source_lines++;
+    const grouped=new Map();for(const row of lines||[]){const code=clean(row.reference_code).toUpperCase(),commercialUnit=unit(row.commercial_unit),qty=Number(row.quantity);if(!code||!units.has(commercialUnit)||!Number.isSafeInteger(qty)||qty<=0)throw new Error('A nota contém um item com código, unidade ou quantidade inválida.');const key=code+'|'+commercialUnit;
+      if(!grouped.has(key))grouped.set(key,{reference_code:code,description:clean(row.description),commercial_unit:commercialUnit,quantity:0,source_lines:0});const target=grouped.get(key);target.quantity+=qty;target.source_lines++;
     }
     const unitsByReference=new Map();for(const row of grouped.values()){const old=unitsByReference.get(row.reference_code);if(old&&old!==row.commercial_unit)throw new Error(`A referência ${row.reference_code} aparece com unidades comerciais diferentes (${old} e ${row.commercial_unit}). Confira a nota antes de converter.`);unitsByReference.set(row.reference_code,row.commercial_unit);}
     return [...grouped.values()];
@@ -35,8 +36,15 @@
   function matchProducts(lines,products,originUnit='Matriz Caicó'){
     const field=originUnit==='Filial Pau dos Ferros'?'nf_reference_code_filial':'nf_reference_code';
     const byReference=new Map();for(const p of products||[]){const ref=clean(p[field]).toUpperCase();if(ref&&ref!=='#N/D'){if(byReference.has(ref))throw new Error(`O código de referência ${ref} está cadastrado em mais de um produto para ${originUnit}.`);byReference.set(ref,p);}}
-    return groupLines(lines).map(row=>{const p=byReference.get(row.reference_code);if(!p)throw new Error(`Código de referência ${row.reference_code} não encontrado. Cadastre-o em Configurações > Produtos.`);const capacity=Number(p.commercial_units_per_pallet);if(!Number.isInteger(capacity)||capacity<1)throw new Error(`Informe a capacidade do palete do produto ${p.code} em Configurações > Produtos.`);if(p.invoice_unit&&clean(p.invoice_unit).toUpperCase()!==row.commercial_unit)throw new Error(`A unidade ${row.commercial_unit} da nota não confere com a unidade cadastrada para ${p.code}.`);
-      const full=Math.floor(row.quantity/capacity),remainder=Number((row.quantity-full*capacity).toFixed(6));return {...row,product_code:p.code,product_name:p.name,commercial_units_per_pallet:capacity,full_pallets:full,remaining_units:remainder,pallets_exact:row.quantity/capacity};});
+    return groupLines(lines).map(row=>{const p=byReference.get(row.reference_code);if(!p)throw new Error(`Código de referência ${row.reference_code} não encontrado. Cadastre-o em Configurações > Produtos.`);const capacity=Number(p.commercial_units_per_pallet);if(!Number.isSafeInteger(capacity)||capacity<1)throw new Error(`Informe a capacidade do palete do produto ${p.code} em Configurações > Produtos.`);if(p.invoice_unit&&unit(p.invoice_unit)!==row.commercial_unit)throw new Error(`A unidade ${row.commercial_unit} da nota não confere com a unidade cadastrada para ${p.code}.`);
+      let quantity=row.quantity,commercialUnit=row.commercial_unit,source={};
+      if(row.commercial_unit==='L'){
+        const liters=Number(p.invoice_liters_per_unit);
+        if(unit(p.invoice_unit)!=='L'||!Number.isSafeInteger(liters)||liters<1)throw new Error(`Informe a unidade L e os litros por barril do produto ${p.code} em Configurações > Produtos.`);
+        if(quantity%liters!==0)throw new Error(`A nota informa ${quantity} L do produto ${p.code}, quantidade que não corresponde a barris inteiros de ${liters} L.`);
+        source={source_quantity:quantity,source_unit:'L',liters_per_unit:liters};quantity/=liters;commercialUnit='UN';
+      }
+      const full=Math.floor(quantity/capacity),remainder=quantity-full*capacity;return {...row,...source,commercial_unit:commercialUnit,quantity,product_code:p.code,product_name:p.name,commercial_units_per_pallet:capacity,full_pallets:full,remaining_units:remainder,pallets_exact:quantity/capacity};});
   }
   function combineInvoices(notes){
     const byProduct=new Map();
