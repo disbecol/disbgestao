@@ -176,7 +176,7 @@ const viewMeta = {
   'materiais-cadastro':['Cadastro de Materiais','Materiais controlados no estoque do armazém'],
   'materiais-movimentacoes':['Movimentações de Materiais','Entradas, saídas e ajustes de inventário'],
   'refugo-afericao':['Aferição de Refugo','Mapa, vasilhames e tempo individual'],
-  'refugo-historico':['Histórico de Refugo','Consulte e baixe o CSV de cada aferição'],
+  'refugo-historico':['Histórico de Refugo','Consulte e baixe CSV por mapa ou por dia'],
   'refugo-cadastros':['Cadastros de Refugo','Tipos e motivos'],
   'ativo-giro-contagem':['Ativo de Giro','Contagem diária com adições cumulativas'],
   'ativo-giro-historico':['Histórico de Ativo de Giro','Totais consolidados por contagem'],
@@ -10656,6 +10656,7 @@ async function loadRefugoView(name){
   if(name==='refugo-cadastros'){await loadRefugoCatalog();renderRefugoCatalog();}
 }
 async function loadRefugoHistory(){
+  const day=$('refugoHistoryDate');if(day&&!day.value)day.value=localIsoDate(new Date());
   refugoHistory=await refugoFetchAll(()=>sb.from('refugo_sessions').select('*').eq('unit',activeUnit).order('started_at',{ascending:false}).order('id',{ascending:false}));
   renderRefugoHistory();
 }
@@ -10691,14 +10692,33 @@ async function saveRefugoCsv(name,matrix){
   const saved=await files.writeFile({path:name,data,directory:'CACHE'});
   await share.share({title:`Aferição de Refugo ${name}`,url:saved.uri,dialogTitle:'Salvar ou compartilhar CSV'});
 }
-async function downloadRefugoCsv(session,items){
-  const reasons=[...new Set(items.flatMap(item=>(item.refugo_item_reasons||[]).map(r=>r.reason_name)))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+function refugoCsvMatrix(entries){
+  const reasons=[...new Set(entries.flatMap(({item})=>(item.refugo_item_reasons||[]).map(r=>r.reason_name)))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
   const headers=['Unidade','Mapa','Situação','Aferido por','Início do mapa','Fim do mapa','Tipo de vasilhame','Início do item','Fim do item','Duração','Quantidade aferida','Quantidade refugada','Quantidade aproveitada',...reasons.map(r=>`Motivo: ${r}`),'Observação'];
-  const rows=items.map(item=>{
+  const rows=entries.map(({session,item})=>{
     const byReason=new Map((item.refugo_item_reasons||[]).map(r=>[r.reason_name,Number(r.quantity)]));
     return [session.unit,session.map_number,session.status,session.created_by_name,fmtDateTime(session.started_at),session.completed_at||session.cancelled_at?fmtDateTime(session.completed_at||session.cancelled_at):'',item.type_name,fmtDateTime(item.started_at),fmtDateTime(item.ended_at),refugoDuration(item.started_at,item.ended_at),Number(item.quantity_checked),Number(item.quantity_rejected),Number(item.quantity_checked)-Number(item.quantity_rejected),...reasons.map(r=>byReason.get(r)||0),item.note].map(refugoCsvText);
   });
-  await saveRefugoCsv(`refugo_mapa_${session.map_number}_${localIsoDate(new Date(session.started_at))}.csv`,[headers.map(refugoCsvText),...rows]);
+  return [headers.map(refugoCsvText),...rows];
+}
+async function downloadRefugoCsv(session,items){
+  await saveRefugoCsv(`refugo_mapa_${session.map_number}_${localIsoDate(new Date(session.started_at))}.csv`,refugoCsvMatrix(items.map(item=>({session,item}))));
+}
+async function downloadRefugoDailyCsv(day){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(day))throw new Error('Selecione a data da aferição.');
+  const sessions=refugoHistory.filter(session=>localIsoDate(new Date(session.started_at))===day);
+  if(!sessions.length)throw new Error('Não há mapas iniciados nessa data nesta unidade.');
+  const bySession=new Map(sessions.map(session=>[session.id,session]));
+  const entries=[];
+  for(let index=0;index<sessions.length;index+=100){
+    const ids=sessions.slice(index,index+100).map(session=>session.id);
+    const items=await refugoFetchAll(()=>sb.from('refugo_items').select('*,refugo_item_reasons(reason_id,reason_name,quantity)').in('session_id',ids).eq('status','COMPLETED').order('started_at').order('id'));
+    for(const item of items){const session=bySession.get(item.session_id);if(session)entries.push({session,item});}
+  }
+  if(!entries.length)throw new Error('Não há vasilhames concluídos nessa data nesta unidade.');
+  entries.sort((a,b)=>a.item.started_at.localeCompare(b.item.started_at)||String(a.item.id).localeCompare(String(b.item.id)));
+  const unit=norm(activeUnit).replace(/[^a-z0-9]+/g,'_');
+  await saveRefugoCsv(`refugo_dia_${day}_${unit}.csv`,refugoCsvMatrix(entries));
 }
 function renderRefugoCatalog(){
   const box=$('refugoCatalogRows');if(!box)return;
@@ -10737,6 +10757,7 @@ function bindRefugoEvents(){
   $('refugoRefresh').addEventListener('click',()=>void loadRefugoView('refugo-afericao').catch(e=>toast(refugoError(e),'error')));
   $('refugoHistoryRefresh').addEventListener('click',()=>void loadRefugoHistory().catch(e=>toast(refugoError(e),'error')));
   $('refugoHistorySearch').addEventListener('input',renderRefugoHistory);
+  $('refugoDailyCsv').addEventListener('click',()=>void refugoRun(()=>downloadRefugoDailyCsv($('refugoHistoryDate')?.value||'')));
   $('refugoHistoryRows').addEventListener('click',event=>{const view=event.target.closest('[data-refugo-view]'),csv=event.target.closest('[data-refugo-csv]');const id=view?.dataset.refugoView||csv?.dataset.refugoCsv;if(!id)return;const session=refugoHistory.find(s=>s.id===id);if(!session)return;void refugoRun(async()=>{if(view)await openRefugoHistory(session);else await downloadRefugoCsv(session,(await refugoItemsFor(id)).filter(x=>x.status==='COMPLETED'));});});
   $('refugoCatalogForm').addEventListener('submit',refugoSaveCatalog);
   $('refugoCatalogClear').addEventListener('click',refugoClearCatalog);

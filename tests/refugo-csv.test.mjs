@@ -15,7 +15,8 @@ let exported;
 const context={
   Date,
   fmtDateTime:value=>String(value||''),
-  localIsoDate:()=> '2026-10-05',
+  localIsoDate:value=>new Date(value).toISOString().slice(0,10),
+  norm:value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim(),
   isNativeCapacitor:()=>false,
   downloadCsv:(name,matrix)=>{exported={name,matrix};}
 };
@@ -47,6 +48,32 @@ test('CSV de um mapa traz uma linha por vasilhame e colunas de motivos',async()=
   assert.equal(first[header.indexOf('Motivo: Trincado')],'1');
   assert.equal(second[header.indexOf('Motivo: Trincado')],'0');
   assert.equal(first[header.indexOf('Observação')],"'=SOMA(1;2)");
+});
+
+test('CSV do dia reúne mapas da unidade e mantém os motivos de cada item',async()=>{
+  context.activeUnit='Matriz Caicó';
+  context.refugoHistory=[
+    {id:'mapa-1',unit:'Matriz Caicó',map_number:'100',status:'COMPLETED',created_by_name:'João',started_at:'2026-10-05T10:00:00Z'},
+    {id:'mapa-2',unit:'Matriz Caicó',map_number:'101',status:'COMPLETED',created_by_name:'Maria',started_at:'2026-10-05T12:00:00Z'},
+    {id:'mapa-3',unit:'Matriz Caicó',map_number:'102',status:'COMPLETED',created_by_name:'Pedro',started_at:'2026-10-04T10:00:00Z'}
+  ];
+  const items=[
+    {id:'item-1',session_id:'mapa-1',status:'COMPLETED',type_name:'300ml',started_at:'2026-10-05T10:05:00Z',ended_at:'2026-10-05T10:10:00Z',quantity_checked:10,quantity_rejected:2,refugo_item_reasons:[{reason_name:'Quebrado',quantity:2}]},
+    {id:'item-2',session_id:'mapa-2',status:'COMPLETED',type_name:'600ml',started_at:'2026-10-05T12:05:00Z',ended_at:'2026-10-05T12:10:00Z',quantity_checked:20,quantity_rejected:1,refugo_item_reasons:[{reason_name:'Trincado',quantity:1}]},
+    {id:'item-3',session_id:'mapa-3',status:'COMPLETED',type_name:'1L',started_at:'2026-10-04T10:05:00Z',ended_at:'2026-10-04T10:10:00Z',quantity_checked:30,quantity_rejected:0,refugo_item_reasons:[]}
+  ];
+  let requestedIds;
+  context.sb={from:()=>({select(){return this;},in(_field,ids){requestedIds=ids;return this;},eq(){return this;},order(){return this;}})};
+  context.refugoFetchAll=async makeQuery=>{makeQuery();return items.filter(item=>requestedIds.includes(item.session_id));};
+  await context.downloadRefugoDailyCsv('2026-10-05');
+  assert.equal(requestedIds.join(','),'mapa-1,mapa-2');
+  assert.equal(exported.name,'refugo_dia_2026-10-05_matriz_caico.csv');
+  assert.equal(exported.matrix.length,3);
+  const [header,first,second]=exported.matrix;
+  assert.equal(first[header.indexOf('Mapa')],'100');
+  assert.equal(second[header.indexOf('Mapa')],'101');
+  assert.equal(first[header.indexOf('Motivo: Trincado')],'0');
+  assert.equal(second[header.indexOf('Motivo: Quebrado')],'0');
 });
 
 test('APK salva o CSV em cache e abre o compartilhamento nativo',async()=>{
