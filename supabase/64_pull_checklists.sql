@@ -157,7 +157,7 @@ begin
   select * into v_req from public.pull_checklist_requirements(p_trip_id)
     where checkpoint_code=p_checkpoint_code;
   if not found then raise exception 'CHECKLIST_NAO_PREVISTO'; end if;
-  if auth.uid()<>case when v_req.driver_no=1 then v_trip.driver1_id else v_trip.driver2_id end then
+  if auth.uid()<>(case when v_req.driver_no=1 then v_trip.driver1_id else v_trip.driver2_id end) then
     raise exception 'CHECKLIST_MOTORISTA_INCORRETO'; end if;
   select action_code into v_last from public.pull_events where trip_id=p_trip_id
     order by step_order desc limit 1;
