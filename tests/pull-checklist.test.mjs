@@ -3,8 +3,16 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
+test('código principal carrega o checklist no mesmo escopo',()=>{
+  const source=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
+  const context={window:{addEventListener(){}},document:{addEventListener(){}},navigator:{},setInterval(){},setTimeout(){}};
+  assert.doesNotThrow(()=>vm.runInNewContext(source,context,{timeout:3000}));
+});
+
 function checklistContext(){
-  const source=fs.readFileSync(new URL('../pull-checklist.js',import.meta.url),'utf8');
+  const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
+  const source=app.split('// PULL_CHECKLIST_BEGIN')[1]?.split('// PULL_CHECKLIST_END')[0];
+  assert.ok(source,'O checklist precisa estar incorporado ao código principal.');
   const stubs=['clearPullPlanForm','pullPlanCardHtml','onPullPlansClick','savePullPlan',
     'loadPullActiveTrip','renderPullDriver','recordPullNextStep','processOfflineRecord',
     'syncOfflineQueue','humanPullError','humanPullPlanError','loadPullConfig',
