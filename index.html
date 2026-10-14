@@ -7,7 +7,7 @@
   <title>Disb Gestão</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="vendor/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=1.7.30-multi-invoice">
+  <link rel="stylesheet" href="styles.css?v=1.7.33-pull-checklist">
   <link rel="stylesheet" href="visual-refresh.css?v=1.7.1-visual">
   <link rel="stylesheet" href="pull-dashboard.css?v=1.7.1-pull-dashboard">
   <link rel="stylesheet" href="damage-geofence.css?v=2">
@@ -20,7 +20,7 @@
         <div class="login-logo"><img src="assets/icon-192.png" alt="Disb Gestão"></div>
         <span class="eyebrow light">ARMAZÉM • ENTREGA • CONFERÊNCIA</span>
         <h1>Disb Gestão</h1>
-        <p>NRI, Ativo de Giro, Refugo, avarias, vendas, conferência, FEFO e Puxada em um único aplicativo.</p><div class="login-version">v1.7.32</div>
+        <p>NRI, Ativo de Giro, Refugo, avarias, vendas, conferência, FEFO e Puxada em um único aplicativo.</p><div class="login-version">v1.7.33</div>
         <div class="feature-list">
           <span>✓ Cadastro por carreta e impressão de NRIs</span>
           <span>✓ Avarias de entrega e vendas com evidências</span>
@@ -47,7 +47,7 @@
 
   <div id="appShell" class="app-shell hidden">
     <aside id="sidebar" class="sidebar">
-      <div class="brand-row"><div class="brand-box"><img src="assets/icon-192.png" alt="Disb Gestão"></div><div><strong>Disb Gestão</strong><span>Supabase • tempo real</span></div></div><div class="app-version-badge">v1.7.32</div>
+      <div class="brand-row"><div class="brand-box"><img src="assets/icon-192.png" alt="Disb Gestão"></div><div><strong>Disb Gestão</strong><span>Supabase • tempo real</span></div></div><div class="app-version-badge">v1.7.33</div>
       <button class="nav-item home-nav-item" data-view="home"><span aria-hidden="true">⌂</span>Home</button>
       <div class="nav-area open" data-area="armazem" data-permission-any="NRI_PENDING_VIEW,MARKETPLACE_RECEIVE,NRI_CREATE,NRI_PRINT,NRI_HISTORY,NRI_DAMAGE_HISTORY,CONF_CREATE,CONF_OWN_HISTORY,CONF_HISTORY,CONF_DASHBOARD,FEFO_CREATE,FEFO_ACTIVE,FEFO_REPORT,ROTATING_ASSET_CREATE,ROTATING_ASSET_HISTORY,MATERIAL_INVENTORY,MATERIAL_STOCK_VIEW,MATERIAL_CATALOG,MATERIAL_MOVEMENT,REFUGO_AFERIR,REFUGO_HISTORICO,REFUGO_CONFIG">
         <button type="button" class="nav-area-toggle" aria-expanded="true"><span class="area-icon">▦</span><span class="area-name">Armazém</span><span class="area-chevron">⌄</span></button>
@@ -533,7 +533,7 @@
           <div class="field"><label for="pullPlanDriver1">Motorista 1 *</label><select id="pullPlanDriver1" required><option value="">Selecione</option></select></div>
           <div class="field" id="pullPlanDriver2Field"><label for="pullPlanDriver2">Motorista 2 *</label><select id="pullPlanDriver2"><option value="">Selecione</option></select></div>
           <div class="field" id="pullPlanScheduledField"><label for="pullPlanScheduled">Data e horário de agendamento na fábrica *</label><input id="pullPlanScheduled" type="datetime-local"></div>
-        </div><label class="pull-solo-choice"><input id="pullPlanSolo" type="checkbox"><span><strong>Viagem sozinho</strong><small>O Motorista 1 executará as etapas aplicáveis, sem Motorista 2.</small></span></label>
+        </div><fieldset class="pull-week-choice"><legend>Posição da viagem na semana *</legend><div class="pull-week-buttons" id="pullPlanWeekChoice" role="radiogroup" aria-label="Posição da viagem na semana"><label><input type="radio" name="pullPlanWeek" value="FIRST" required><span>Primeira viagem da semana</span></label><label><input type="radio" name="pullPlanWeek" value="ROUTINE"><span>Viagem de rotina</span></label><label><input type="radio" name="pullPlanWeek" value="LAST"><span>Última viagem da semana</span></label></div></fieldset><label class="pull-solo-choice"><input id="pullPlanSolo" type="checkbox"><span><strong>Viagem sozinho</strong><small>O Motorista 1 executará as etapas aplicáveis, sem Motorista 2.</small></span></label>
         <div class="actions right"><button id="pullPlanClear" type="button" class="btn secondary">Limpar</button><button id="pullPlanSave" type="submit" class="btn primary">Cadastrar viagem</button></div></form></div>
         <div class="card"><div class="pull-plan-list-head"><div class="section-title">Viagens cadastradas</div><button id="pullPlansRefresh" type="button" class="btn secondary">Atualizar</button></div><div id="pullPlansList" class="pull-plan-list empty-state">Carregando viagens…</div></div>
         <div class="card"><div class="section-title">Ciclos encerrados aguardando NRI</div><p class="muted-text">É possível cadastrar a NF após a chegada, enquanto os NRIs ainda não foram emitidos.</p><div id="pullPlanClosedList" class="pull-plan-list empty-state">Carregando ciclos…</div></div>
@@ -561,6 +561,7 @@
           </form>
         </div>
         <div id="pullDriverActive" class="hidden">
+          <div id="pullChecklistCard" class="card pull-checklist-card hidden" aria-live="polite"></div>
           <div class="card pull-next-card"><div class="pull-next-head"><small>PRÓXIMA ETAPA</small><button id="btnPullRefreshSteps" type="button" class="btn secondary" aria-label="Atualizar etapas desta viagem">↻ Atualizar etapas</button></div><h2 id="pullNextStepName">—</h2><p id="pullNextStepHint">Carregando etapa…</p><button id="btnPullNextStep" class="btn primary wide">Registrar próxima etapa</button></div>
           <div class="card"><div class="section-title">Ocorrências</div><p class="muted-text">Descanso, abastecimento e outras exceções podem ser apontadas sem alterar a sequência principal.</p><div id="pullOpenOccurrence" class="pull-open-occurrence hidden"></div><div id="pullOccurrenceButtons" class="pull-occurrence-buttons"></div></div>
           <details id="pullDriverDetails" class="card pull-driver-details"><summary>Dados da viagem e agendamento</summary><div class="pull-driver-detail-summary"><div><small id="pullActiveTypeLabel">CICLO EM ANDAMENTO</small><h2 id="pullActiveCode">—</h2><span id="pullActiveSummary">—</span></div><div class="pull-live-time"><small>TEMPO EM VIAGEM</small><strong id="pullActiveElapsed">00:00:00</strong></div></div><div class="grid grid-3 pull-driver-info"><div class="detail-card"><small>PLACA</small><strong id="pullActivePlate">—</strong></div><div class="detail-card"><small>FÁBRICA</small><strong id="pullActiveFactory">—</strong></div><div class="detail-card"><small>MOTORISTA ATUAL</small><strong id="pullActiveDriver">—</strong></div></div><div id="pullActiveSchedule" class="pull-appointment-summary hidden"></div></details>
@@ -640,6 +641,7 @@
       <!-- PUXADA - CONFIGURACOES -->
       <section id="view-puxada-config" class="view admin-only role-puxada" data-permission="PULL_CONFIG">
         <div class="page-head"><div><div class="breadcrumb">Puxada / Admin</div><h1>Configurações</h1><p>GPS, raio de auditoria das fábricas, veículos, etapas e ocorrências. A origem é escolhida pelo motorista em cada viagem.</p></div><span class="page-chip admin">CONFIG</span></div>
+        <div class="card pull-question-admin"><div class="section-title">Checklist de verificação da carreta</div><p class="muted-text">Edite, adicione ou desative perguntas. O histórico mantém o texto respondido pelo motorista.</p><form id="formPullChecklistQuestion"><input id="pullChecklistQuestionId" type="hidden"><div class="grid grid-3"><div class="field span-2"><label for="pullChecklistQuestionText">Pergunta *</label><input id="pullChecklistQuestionText" maxlength="300" required></div><div class="field"><label for="pullChecklistQuestionOrder">Ordem *</label><input id="pullChecklistQuestionOrder" type="number" min="1" required></div></div><label class="check"><input id="pullChecklistQuestionCritical" type="checkbox"> Item crítico</label><div class="actions right"><button id="pullChecklistQuestionClear" type="button" class="btn secondary">Nova pergunta</button><button type="submit" class="btn primary">Salvar pergunta</button></div></form><div id="pullChecklistQuestionList" class="compact-list"></div></div>
         <div class="card"><div class="section-title">Configuração geral</div><form id="formPullSettings"><div class="grid grid-3"><div class="field"><label>Tolerância máxima do GPS para registrar etapa (m)</label><input id="pullGpsAccuracy" type="number" min="5" max="500"><small>Configurável de 5 a 500 m. Para os aparelhos atuais, comece com 200 m e reduza se o GPS conseguir maior precisão. Quanto menor, mais rigoroso.</small></div><div class="field"><label>Intervalo do rastreio (s)</label><input id="pullTrackInterval" type="number" min="5" max="3600"></div><div class="field"><label>Distância mínima entre pontos (m)</label><input id="pullTrackDistance" type="number" min="0" max="10000"></div></div><div class="actions right"><button class="btn primary">Salvar configuração</button></div></form></div>
         <div class="admin-grid">
           <div class="card"><div class="section-title">Fábricas e raio de auditoria</div><form id="formPullFactory"><input id="pullFactoryOriginal" type="hidden"><div class="field"><label>Fábrica *</label><select id="pullFactoryName" required></select></div><div class="grid grid-3"><div class="field"><label>Latitude *</label><input id="pullFactoryLat" type="number" step="any" required></div><div class="field"><label>Longitude *</label><input id="pullFactoryLon" type="number" step="any" required></div><div class="field"><label>Raio (m) *</label><input id="pullFactoryRadius" type="number" min="1" required></div></div><div class="actions"><button id="btnPullFactoryGps" type="button" class="btn secondary">Usar minha localização</button><button type="submit" class="btn primary">Salvar localização/raio</button></div></form><div id="pullFactoryList" class="compact-list"></div></div>
@@ -878,6 +880,7 @@
   <script src="share-reports.js?v=1.7.22"></script>
   <script src="invoice-note.js?v=1.7.31-keg-liters"></script>
   <script src="pull-camera.js?v=1.7.32-pull-camera"></script>
-  <script src="app.js?v=1.7.32-pull-camera"></script>
+  <script src="app.js?v=1.7.33-pull-checklist"></script>
+  <script src="pull-checklist.js?v=1.7.33"></script>
 </body>
 </html>
