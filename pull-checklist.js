@@ -22,34 +22,8 @@ async function pullCachedVehicleKm(){
   return operation?.status==='ERROR'?null:local;
 }
 
-function pullSelectedWeek(){return document.querySelector('input[name="pullPlanWeek"]:checked')?.value||'';}
-function pullSetWeek(value){document.querySelectorAll('input[name="pullPlanWeek"]').forEach(input=>{input.checked=input.value===value;});}
-const clearPullPlanFormBeforeChecklist=clearPullPlanForm;
-clearPullPlanForm=function(){clearPullPlanFormBeforeChecklist();pullSetWeek('');};
 const pullPlanCardHtmlBeforeChecklist=pullPlanCardHtml;
 pullPlanCardHtml=function(plan,analyst=false){const html=pullPlanCardHtmlBeforeChecklist(plan,analyst);const label=pullWeekLabels[plan.week_trip_type]||'Regra semanal anterior';return html.replace('<div class="pull-plan-meta">',`<div class="pull-plan-meta"><span><b>${esc(label)}</b></span>`);};
-const onPullPlansClickBeforeChecklist=onPullPlansClick;
-onPullPlansClick=async function(event){
-  const id=event.target.closest('[data-pull-plan-edit]')?.dataset.pullPlanEdit;
-  await onPullPlansClickBeforeChecklist(event);
-  if(id){const plan=pullPlans.find(row=>row.id===id);pullSetWeek(plan?.week_trip_type||'ROUTINE');}
-};
-savePullPlan=async function(event){
-  event.preventDefault();if(!hasPerm('PULL_PLAN'))return;
-  const week=pullSelectedWeek();if(!week)return toast('Selecione a posição da viagem na semana.','error');
-  const type=$('pullPlanType').value,scheduledRaw=$('pullPlanScheduled').value;
-  const scheduledAt=scheduledRaw?new Date(scheduledRaw).toISOString():null;
-  if(type==='PULL'&&!scheduledAt)return toast('Informe a data e o horário de agendamento na fábrica.','error');
-  const args={p_plan_id:$('pullPlanId').value||null,p_cycle_type:type,p_origin_unit:$('pullPlanOrigin').value,
-    p_plate:$('pullPlanPlate').value,p_factory:$('pullPlanFactory').value,
-    p_driver1:$('pullPlanDriver1').value,p_driver2:$('pullPlanDriver2').value||null,
-    p_solo_trip:type==='TRANSFER'||$('pullPlanSolo').checked,p_scheduled_at:scheduledAt,p_week_trip_type:week};
-  const button=$('pullPlanSave');button.disabled=true;button.textContent='Salvando…';
-  try{const {error}=await sb.rpc('save_pull_trip_plan',args);if(error)throw error;
-    toast('Viagem cadastrada com regra semanal e checklist.','success');clearPullPlanForm();await loadPullPlans(true);
-  }catch(error){toast(humanPullPlanError(error),'error');}
-  finally{button.disabled=false;button.textContent=$('pullPlanId').value?'Salvar alterações':'Cadastrar viagem';}
-};
 
 async function pullLoadChecklistState(){
   if(!pullActiveTrip?.week_trip_type){pullChecklistQuestions=[];pullChecklistRequirements=[];pullChecklistRuns=[];pullChecklistLastKm=null;pullChecklistStateReady=true;renderPullDriver();return;}

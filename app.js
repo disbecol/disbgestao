@@ -207,7 +207,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.34-checklist-km-route',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.37-plan-fix',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -2911,7 +2911,7 @@ let pullAttachmentNativeFile=null;
 let pullRenderedTripId=null;
 
 function bindPullEvents(){
-  $('formPullPlan')?.addEventListener('submit',savePullPlan);
+  $('formPullPlan')?.addEventListener('submit',event=>savePullPlan(event));
   $('pullPlanType')?.addEventListener('change',updatePullPlanFields);
   $('pullPlanSolo')?.addEventListener('change',updatePullPlanFields);
   $('pullPlanDriver1')?.addEventListener('change',updatePullPlanFields);
@@ -3100,6 +3100,7 @@ function updatePullPlanFields(){
 function clearPullPlanForm(){
   const form=$('formPullPlan');if(!form)return;
   form.reset();$('pullPlanId').value='';
+  form.querySelectorAll('input[name="pullPlanWeek"]').forEach(input=>{input.checked=false;});
   $('pullPlanType').value='PULL';
   $('pullPlanOrigin').disabled=false;$('pullPlanFactory').disabled=false;
   $('pullPlanOrigin').value=activeUnit||'';
@@ -3111,7 +3112,10 @@ function humanPullPlanError(error){
   const message=String(error?.message||error||'');
   const labels={AGENDAMENTO_OBRIGATORIO:'Informe o horário agendado na fábrica.',JUSTIFICATIVA_AGENDAMENTO_OBRIGATORIA:'Informe uma justificativa de 5 a 500 caracteres.',AGENDAMENTO_SEM_ALTERACAO:'O novo horário é igual ao agendamento atual.',MOTORISTA_1_INVALIDO:'Selecione um Motorista 1 ativo.',MOTORISTA_2_INVALIDO:'Selecione um Motorista 2 ativo e diferente do primeiro.',MOTORISTA_1_SEM_ACESSO_UNIDADE:'O Motorista 1 precisa ter acesso à unidade de origem.',MOTORISTA_2_SEM_ACESSO_UNIDADE:'O Motorista 2 precisa ter acesso à unidade de origem.',VIAGEM_INDISPONIVEL:'Esta viagem já foi iniciada ou cancelada.',VIAGEM_NAO_EDITAVEL:'Esta viagem não pode mais ser editada.',VIAGEM_NAO_CANCELAVEL:'Esta viagem não pode mais ser cancelada.',APENAS_MOTORISTA_1_INICIA:'Somente o Motorista 1 pode iniciar esta viagem.',LIMITE_FOTOS_PUXADA:'O ciclo já possui o limite de 10 fotos.',FOTO_NAO_ENCONTRADA:'A foto não foi encontrada no armazenamento.',PLACA_INVALIDA:'Selecione um veículo ativo.',UNIDADE_SEM_ACESSO:'Seu usuário não tem acesso à unidade desta viagem.'};
   const code=Object.keys(labels).find(key=>message.includes(key));
-  return code?labels[code]:humanGpsOrPullError(error);
+  if(code)return labels[code];
+  // O cadastro não usa GPS: "permission denied" do banco não é permissão de localização.
+  if(error?.code===1||/PERMISSAO_LOCALIZACAO|GPS_|geolocation|PositionError/i.test(message))return humanGpsError(error);
+  return humanPullError(error);
 }
 function pullPlanCardHtml(plan,analyst=false){
   const canStart=plan.status==='PLANNED'&&plan.driver1_id===authUser?.id;
@@ -3142,12 +3146,14 @@ async function loadPullPlans(silent=false){
 }
 async function savePullPlan(event){
   event.preventDefault();if(!hasPerm('PULL_PLAN'))return;
+  const week=document.querySelector('input[name="pullPlanWeek"]:checked')?.value;
+  if(!week)return toast('Selecione a posição da viagem na semana.','error');
   const type=$('pullPlanType').value,scheduledRaw=$('pullPlanScheduled').value;
   const scheduledAt=scheduledRaw?new Date(scheduledRaw).toISOString():null;
   if(type==='PULL'&&!scheduledAt)return toast('Informe a data e o horário de agendamento na fábrica.','error');
-  const args={p_plan_id:$('pullPlanId').value||null,p_cycle_type:type,p_origin_unit:$('pullPlanOrigin').value,p_plate:$('pullPlanPlate').value,p_factory:$('pullPlanFactory').value,p_driver1:$('pullPlanDriver1').value,p_driver2:$('pullPlanDriver2').value||null,p_solo_trip:type==='TRANSFER'||$('pullPlanSolo').checked,p_scheduled_at:scheduledAt};
+  const args={p_plan_id:$('pullPlanId').value||null,p_cycle_type:type,p_origin_unit:$('pullPlanOrigin').value,p_plate:$('pullPlanPlate').value,p_factory:$('pullPlanFactory').value,p_driver1:$('pullPlanDriver1').value,p_driver2:$('pullPlanDriver2').value||null,p_solo_trip:type==='TRANSFER'||$('pullPlanSolo').checked,p_scheduled_at:scheduledAt,p_week_trip_type:week};
   const button=$('pullPlanSave');button.disabled=true;button.textContent='Salvando…';
-  try{const {error}=await sb.rpc('save_pull_trip_plan',args);if(error)throw error;toast('Viagem cadastrada e atribuída aos motoristas.','success');clearPullPlanForm();await loadPullPlans(true);}catch(error){toast(humanPullPlanError(error),'error');}
+  try{const {error}=await sb.rpc('save_pull_trip_plan',args);if(error)throw error;toast('Viagem cadastrada com regra semanal e checklist.','success');clearPullPlanForm();await loadPullPlans(true);}catch(error){toast(humanPullPlanError(error),'error');}
   finally{button.disabled=false;button.textContent=$('pullPlanId').value?'Salvar alterações':'Cadastrar viagem';}
 }
 async function onPullPlansClick(event){
@@ -3172,6 +3178,7 @@ async function onPullPlansClick(event){
   $('pullPlanDriver1').value=plan.driver1_id;$('pullPlanSolo').checked=plan.solo_trip;
   updatePullPlanFields();$('pullPlanDriver2').value=plan.driver2_id||'';
   $('pullPlanScheduled').value=plan.scheduled_at?`${localIsoDate(new Date(plan.scheduled_at))}T${localTime(new Date(plan.scheduled_at))}`:'';
+  document.querySelectorAll('input[name="pullPlanWeek"]').forEach(input=>{input.checked=input.value===(plan.week_trip_type||'ROUTINE');});
   $('pullPlanSave').textContent='Salvar alterações';
   $('formPullPlan').scrollIntoView({behavior:'smooth',block:'start'});
 }
@@ -4894,7 +4901,22 @@ function statusBadge(s){const cls=s==='IMPRESSO'||s==='APROVADO'||s==='LANCADO'?
 function dashStatus(s){return s==='OK'?'<span class="status ok">Sem diferença</span>':s==='DIVERGENTE'?'<span class="status bad">Com diferença</span>':'<span class="status pending">Sem base MAPAS</span>';}
 function toast(msg,type=''){const t=$('toast');t.textContent=msg;t.className=`toast show ${type}`;clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.className='toast',3600);}
 function humanError(e){const m=String(e?.message||e?.error_description||e||'Erro desconhecido');if(m.includes('FORBIDDEN'))return 'Seu perfil não possui permissão para esta ação.';if(m.includes('JWT'))return 'Sua sessão expirou. Entre novamente.';if(m.includes('Failed to fetch'))return 'Falha de conexão. Verifique a internet.';return m;}
-function humanGpsError(e){const code=e?.code;const msg=String(e?.message||e||'erro ao obter localização.');if(/GPS_PRECISAO_APROXIMADA/i.test(msg))return 'o Android está fornecendo localização aproximada. Abra Configurações > Apps > Disb Gestão > Permissões > Localização e ative “Usar localização precisa”.';if(/GPS_PRECISAO_INSUFICIENTE/i.test(msg)){const best=e?.bestAccuracy??Number(msg.split(':')[1]);const max=e?.maxAccuracy??Number(msg.split(':')[2])??200;return Number.isFinite(best)?`a melhor precisão obtida foi ±${Math.round(best)} m. É necessário chegar a ±${Math.round(max||200)} m ou menos. Aguarde alguns segundos em local aberto, com Localização Precisa ativada, e tente novamente.`:`não foi possível obter uma posição com precisão de até ±${Math.round(max||200)} m. Confirme Localização Precisa e tente em local aberto.`;}if(code===1||/PERMISSAO_LOCALIZACAO_NEGADA|permission denied|permission/i.test(msg))return 'permissão de localização não concedida. No Android, abra Configurações > Apps > Disb Gestão > Permissões > Localização e permita durante o uso, com Localização Precisa ativada.';if(code===2)return 'localização indisponível no aparelho. Confirme se o GPS do celular está ativado.';if(code===3)return 'tempo esgotado ao obter GPS. Aguarde sinal melhor e tente novamente.';return msg;}
+function humanGpsError(e){
+  const code=e?.code,msg=String(e?.message||e||'erro ao obter localização.');
+  const native=isNativeCapacitor();
+  if(/GPS_PRECISAO_APROXIMADA/i.test(msg))return 'o Android está fornecendo localização aproximada. Abra Configurações > Apps > Disb Gestão > Permissões > Localização e ative “Usar localização precisa”.';
+  if(/GPS_PRECISAO_INSUFICIENTE/i.test(msg)){
+    const best=e?.bestAccuracy??Number(msg.split(':')[1]);
+    const max=e?.maxAccuracy??Number(msg.split(':')[2])??200;
+    return Number.isFinite(best)?`a melhor precisão obtida foi ±${Math.round(best)} m. É necessário chegar a ±${Math.round(max||200)} m ou menos. Aguarde alguns segundos em local aberto e tente novamente.`:`não foi possível obter uma posição com precisão de até ±${Math.round(max||200)} m. Aguarde em local aberto e tente novamente.`;
+  }
+  if(code===1||/PERMISSAO_LOCALIZACAO_NEGADA|permission denied|permission/i.test(msg))return native
+    ?'Permissão de localização não concedida. No Android, abra Configurações > Apps > Disb Gestão > Permissões > Localização e permita durante o uso, com Localização Precisa ativada.'
+    :'Permissão de localização não concedida. No navegador, permita o acesso à localização nas configurações deste site; confira também se a localização do Windows está ativada.';
+  if(code===2)return native?'Localização indisponível no aparelho. Confirme se o GPS do celular está ativado.':'Localização indisponível no navegador. Confira se a localização do Windows está ativada.';
+  if(code===3)return 'Tempo esgotado ao obter localização. Aguarde sinal melhor e tente novamente.';
+  return msg;
+}
 function normalizeUsername(v){return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,'.').replace(/[^a-z0-9._-]/g,'');}
 function normalizeCode(v){return String(v||'').replace(/\D/g,'').replace(/^0+(?=\d)/,'');}
 function norm(v){return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();}
