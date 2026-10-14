@@ -44,3 +44,15 @@ test('resposta NOK exige observação antes de salvar',()=>{
   }});
   assert.equal(vm.runInContext('pullCollectAnswers()[0].observation',ctx),'Freio com ruído');
 });
+
+test('KM é obrigatório e alertas usam o último registro da placa',()=>{
+  const ctx=checklistContext();
+  ctx.$=()=>({value:''});
+  assert.throws(()=>vm.runInContext('pullReadOdometer()',ctx),/quilometragem atual/);
+  ctx.$=()=>({value:'125430'});
+  assert.equal(vm.runInContext('pullReadOdometer()',ctx),125430);
+  assert.equal(vm.runInContext('pullKmComparison(999,1000).alert',ctx),'LOWER');
+  assert.equal(vm.runInContext('pullKmComparison(2499,1000).alert',ctx),'');
+  assert.equal(vm.runInContext('pullKmComparison(2500,1000).alert',ctx),'JUMP');
+  assert.equal(vm.runInContext('pullKmComparison(1052,1000).delta',ctx),52);
+});

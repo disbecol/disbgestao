@@ -207,7 +207,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.33-pull-checklist',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.34-checklist-km-route',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -3746,7 +3746,7 @@ async function loadPullTripRouteV172(tripId,status){
   if(error&&!['42P01','PGRST205'].includes(error.code))throw error;
   if(!data)return loadPullTripTrackRowsV171(tripId);
 
-  return (Array.isArray(data.route_points)?data.route_points:[])
+  const archived=(Array.isArray(data.route_points)?data.route_points:[])
     .map((point,index)=>{
       const latitude=Number(point?.[0]);
       const longitude=Number(point?.[1]);
@@ -3764,6 +3764,12 @@ async function loadPullTripRouteV172(tripId,status){
       };
     })
     .filter(Boolean);
+
+  // Pontos sincronizados após o arquivamento permanecem visíveis até o cron
+  // incorporá-los ao snapshot. Não os substituímos por retas entre etapas.
+  const late=await loadPullTripTrackRowsV171(tripId);
+  return archived.concat(late.map(row=>({...row,archived:true,
+    archived_original_points:Number(data.original_points)||0})));
 }
 
 async function openPullTripDetail(id,live=false){
