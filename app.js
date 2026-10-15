@@ -207,7 +207,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.39-nri-offline-print',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.40-nri-offline-print',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -9215,13 +9215,12 @@ async function startPullNativeTrackingV170(){
 
       rememberPullGpsSample(p);
 
-      // O POST nativo cuida do online. A fila local cobre ausencia de internet
-      // enquanto o WebView continua vivo.
-      if(!navigator.onLine || !token){
-        if(p.accuracy==null||p.accuracy<=100){
-          queuePullTrackPointV170(trip.id,p)
-            .catch(e=>console.warn('[PUXADA GPS OFFLINE]',e));
-        }
+      // Guarda uma copia local mesmo quando o Android informa estar online:
+      // o POST nativo pode falhar antes que navigator.onLine mude de estado.
+      // O servidor elimina repeticoes pela mesma chave de ingestao.
+      if(p.accuracy==null||p.accuracy<=100){
+        queuePullTrackPointV170(trip.id,p)
+          .catch(e=>console.warn('[PUXADA GPS OFFLINE]',e));
       }
     }
   );
