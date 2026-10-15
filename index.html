@@ -7,7 +7,7 @@
   <title>Disb Gestão</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="vendor/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=1.7.34-checklist-km-route">
+  <link rel="stylesheet" href="styles.css?v=1.7.39-nri-offline-print">
   <link rel="stylesheet" href="visual-refresh.css?v=1.7.1-visual">
   <link rel="stylesheet" href="pull-dashboard.css?v=1.7.1-pull-dashboard">
   <link rel="stylesheet" href="damage-geofence.css?v=2">
@@ -20,7 +20,7 @@
         <div class="login-logo"><img src="assets/icon-192.png" alt="Disb Gestão"></div>
         <span class="eyebrow light">ARMAZÉM • ENTREGA • CONFERÊNCIA</span>
         <h1>Disb Gestão</h1>
-        <p>NRI, Ativo de Giro, Refugo, avarias, vendas, conferência, FEFO e Puxada em um único aplicativo.</p><div class="login-version">v1.7.38</div>
+        <p>NRI, Ativo de Giro, Refugo, avarias, vendas, conferência, FEFO e Puxada em um único aplicativo.</p><div class="login-version">v1.7.39</div>
         <div class="feature-list">
           <span>✓ Cadastro por carreta e impressão de NRIs</span>
           <span>✓ Avarias de entrega e vendas com evidências</span>
@@ -47,7 +47,7 @@
 
   <div id="appShell" class="app-shell hidden">
     <aside id="sidebar" class="sidebar">
-      <div class="brand-row"><div class="brand-box"><img src="assets/icon-192.png" alt="Disb Gestão"></div><div><strong>Disb Gestão</strong><span>Supabase • tempo real</span></div></div><div class="app-version-badge">v1.7.38</div>
+      <div class="brand-row"><div class="brand-box"><img src="assets/icon-192.png" alt="Disb Gestão"></div><div><strong>Disb Gestão</strong><span>Supabase • tempo real</span></div></div><div class="app-version-badge">v1.7.39</div>
       <button class="nav-item home-nav-item" data-view="home"><span aria-hidden="true">⌂</span>Home</button>
       <div class="nav-area open" data-area="armazem" data-permission-any="NRI_PENDING_VIEW,MARKETPLACE_RECEIVE,NRI_CREATE,NRI_PRINT,NRI_HISTORY,NRI_DAMAGE_HISTORY,CONF_CREATE,CONF_OWN_HISTORY,CONF_HISTORY,CONF_DASHBOARD,FEFO_CREATE,FEFO_ACTIVE,FEFO_REPORT,ROTATING_ASSET_CREATE,ROTATING_ASSET_HISTORY,MATERIAL_INVENTORY,MATERIAL_STOCK_VIEW,MATERIAL_CATALOG,MATERIAL_MOVEMENT,REFUGO_AFERIR,REFUGO_HISTORICO,REFUGO_CONFIG">
         <button type="button" class="nav-area-toggle" aria-expanded="true"><span class="area-icon">▦</span><span class="area-name">Armazém</span><span class="area-chevron">⌄</span></button>
@@ -267,7 +267,7 @@
         <div class="page-head"><div><div class="breadcrumb">Armazém / NRI</div><h1>Impressões pendentes</h1><p>Três etiquetas idênticas por NRI em uma folha A4.</p></div><span class="page-chip">IMPRESSÃO</span></div>
         <div class="card">
           <div class="filters grid grid-3"><div class="field"><label>Produto, NRI, lote ou placa</label><input id="pendFiltro" placeholder="Pesquisar..."></div><div class="field"><label>Unidade</label><select id="pendUnidade"><option value="">Todas</option></select></div><div class="actions end"><button id="btnSelecionarPendentes" class="btn secondary">Selecionar visíveis</button></div></div>
-          <div class="toolbar"><button id="btnImprimirTudo" class="btn primary">Imprimir tudo</button><button id="btnImprimirSelecionadas" class="btn secondary">Imprimir selecionadas</button><button id="btnExcluirSelecionados" class="btn danger" type="button" disabled>Excluir selecionados</button><span id="pendSelectionStatus" class="counter" role="status" aria-live="polite">0 selecionadas</span></div>
+          <div class="toolbar"><button id="btnImprimirTudo" class="btn primary">Imprimir tudo</button><button id="btnImprimirSelecionadas" class="btn secondary">Imprimir selecionadas</button><button id="btnNriAndroidPrintQueue" type="button" class="btn secondary hidden">Fila de impressão do Android</button><button id="btnExcluirSelecionados" class="btn danger" type="button" disabled>Excluir selecionados</button><span id="pendSelectionStatus" class="counter" role="status" aria-live="polite">0 selecionadas</span></div>
           <div class="table-wrap"><table><thead><tr><th></th><th>NRI / Produto</th><th>Lote / Validade</th><th>Unidade / Transporte</th><th>Avaria</th><th>Quantidade</th><th>Ações</th></tr></thead><tbody id="tbodyPendentes"></tbody></table></div>
         </div>
       </section>
@@ -881,6 +881,6 @@
   <script src="share-reports.js?v=1.7.22"></script>
   <script src="invoice-note.js?v=1.7.31-keg-liters"></script>
   <script src="pull-camera.js?v=1.7.32-pull-camera"></script>
-  <script src="app.js?v=1.7.38-checklist-bundle"></script>
+  <script src="app.js?v=1.7.39-nri-offline-print"></script>
 </body>
 </html>

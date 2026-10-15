@@ -207,7 +207,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.38-checklist-bundle',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.39-nri-offline-print',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -562,6 +562,8 @@ function bindBaseEvents(){
   $('btnSelecionarPendentes').addEventListener('click',toggleVisiblePendingSelection);
   $('btnImprimirTudo').addEventListener('click',()=>startPrint(filteredPending()));
   $('btnImprimirSelecionadas').addEventListener('click',()=>startPrint(pendingNris.filter(x=>selectedNris.has(x.id))));
+  if(isNativeCapacitor())$('btnNriAndroidPrintQueue')?.classList.remove('hidden');
+  $('btnNriAndroidPrintQueue')?.addEventListener('click',manageNriAndroidPrintQueue);
   $('btnExcluirSelecionados').addEventListener('click',removeSelectedNris);
   ['histNriBusca','histNriStatus','histNriDe','histNriAte','histNriValidade'].forEach(id=>$(id).addEventListener(id==='histNriBusca'?'input':'change',()=>{nriHistoryVisibleCount=200;renderNriHistory();}));
   $('histNriUnidade').addEventListener('change',loadNriHistory);
@@ -984,6 +986,8 @@ async function onModuleSettingsClick(event){
 async function logout(){
 
   offlineClearIdentityV171();
+  printOperation=null;
+  printStarting=false;
 
   teardownRealtime();
   teardownPullRealtime();
@@ -1465,9 +1469,9 @@ function addNriDraftItem(){
 }
 function renderNriDraftItems(){
   const total=nriDraftItems.reduce((s,x)=>s+x.pallets,0);$('nriItemCounter').textContent=`${nriDraftItems.length} item(ns) • ${total} NRI(s)`;$('btnCadastrarCarreta').textContent=total?`Cadastrar carreta (${total} NRIs)`:'Cadastrar carreta';
-  const el=$('nriItemList'); if(!nriDraftItems.length){el.className='item-list empty-state';el.textContent='Nenhum produto adicionado.';return;} el.className='item-list';el.innerHTML=nriDraftItems.map(x=>`<div class="item-row" data-id="${x.id}"><div class="info"><small>Produto</small><strong>${esc(x.product_code)} • ${esc(x.product_name)}</strong></div><div class="info"><small>Validade</small><strong>${x.validity_date?formatShortDate(x.validity_date):'Sem Validade'}</strong></div><div class="info"><small>Lote(s)</small><strong>${esc(x.lot)}</strong></div><div class="info"><small>Quantidade</small><strong>${fmtNum(x.quantity)}</strong></div><div class="info"><small>Paletes / NRIs</small><strong>${x.pallets}</strong></div><div class="mini-actions"><button class="mini-btn" data-act="edit">Editar</button><button class="mini-btn danger" data-act="del">Excluir</button></div></div>`).join('');
+  const el=$('nriItemList'); if(!nriDraftItems.length){el.className='item-list empty-state';el.textContent='Nenhum produto adicionado.';return;} el.className='item-list';el.innerHTML=nriDraftItems.map(x=>`<div class="item-row" data-id="${x.id}"><div class="info"><small>Produto</small><strong>${esc(x.product_code)} • ${esc(x.product_name)}</strong></div><div class="info"><small>Validade</small><strong>${x.validity_date?formatShortDate(x.validity_date):'Sem Validade'}</strong></div><div class="info"><small>Lote(s)</small><strong>${esc(x.lot)}</strong></div><div class="info"><small>Quantidade</small><strong>${fmtNum(x.quantity)}</strong></div><div class="info"><small>Paletes / NRIs</small><strong>${x.pallets}</strong></div><div class="mini-actions"><button type="button" class="mini-btn" data-act="edit">Editar</button><button type="button" class="mini-btn danger" data-act="del">Excluir</button></div></div>`).join('');
 }
-function onNriDraftListClick(e){const b=e.target.closest('button[data-act]');if(!b)return;const row=b.closest('[data-id]');const item=nriDraftItems.find(x=>x.id===row.dataset.id);if(!item)return;if(b.dataset.act==='del'){nriDraftItems=nriDraftItems.filter(x=>x.id!==item.id);renderNriDraftItems();if(nriEditingId===item.id)clearNriItemEditor();return;}nriEditingId=item.id;$('nriCodigo').value=item.product_code;$('nriSemValidade').checked=!item.validity_date;$('nriValidade').value=formatShortDate(item.validity_date);$('nriLote').value=sanitizeLot(item.lot);$('nriQuantidade').value=item.quantity;$('nriPaletes').value=item.pallets;$('nriBloqueio').value=item.block_date?formatShortDate(item.block_date):'--';updateNriValidityMode();onProductCode();$('btnAdicionarNriItem').textContent='Salvar alteração';$('btnCancelarNriItem').classList.remove('hidden');}
+function onNriDraftListClick(e){const b=e.target.closest('button[data-act]');if(!b)return;e.preventDefault();const row=b.closest('[data-id]');const item=nriDraftItems.find(x=>x.id===row.dataset.id);if(!item)return;if(b.dataset.act==='del'){nriDraftItems=nriDraftItems.filter(x=>x.id!==item.id);renderNriDraftItems();if(nriEditingId===item.id)clearNriItemEditor();return;}nriEditingId=item.id;$('nriCodigo').value=item.product_code;$('nriSemValidade').checked=!item.validity_date;$('nriValidade').value=formatShortDate(item.validity_date);$('nriLote').value=sanitizeLot(item.lot);$('nriQuantidade').value=item.quantity;$('nriPaletes').value=item.pallets;$('nriBloqueio').value=item.block_date?formatShortDate(item.block_date):'--';updateNriValidityMode();onProductCode();$('btnAdicionarNriItem').textContent='Salvar alteração';$('btnCancelarNriItem').classList.remove('hidden');}
 function clearNriItemEditor(){nriEditingId=null;['nriCodigo','nriValidade','nriLote','nriBloqueio'].forEach(id=>$(id).value='');$('nriSemValidade').checked=false;updateNriValidityMode();$('nriQuantidade').value=1;$('nriPaletes').value=1;$('produtoPlaceholder').classList.remove('hidden');$('produtoImagem').classList.add('hidden');$('produtoInfo').classList.add('hidden');$('btnAdicionarNriItem').textContent='+ Adicionar à carreta';$('btnCancelarNriItem').classList.add('hidden');}
 function clearNriRequest(){damageSubmitOperations.nri=null;nriDraftItems=[];renderNriDraftItems();clearNriItemEditor();clearNriPullContext();['nriUnidade','nriMotorista','nriFabrica','nriPlaca'].forEach(id=>$(id).value='');$('nriTipo').value='AMBEV';updateNriTypeFields();$('nriRecebimento').value=localIsoDate(new Date());$('nriHora').value=localTime(new Date());$('nriConferente').value=profile?.name||'';}
 async function submitNriRequest(e){
@@ -1554,7 +1558,21 @@ async function removeSelectedNris(){
   finally{updatePendingSelectionActions();}
 }
 function showNriPreview(r){openModal(`NRI ${r.nri}`,`${r.codigoProduto} • ${r.nomeProduto}`,htmlEtiqueta(r,false),[{label:'Imprimir',class:'primary',onClick:()=>{closeModal();startPrint([r],r.status==='IMPRESSO');}}]);setTimeout(()=>{const img=$('modalBody').querySelector('img[data-product]');if(img)setProductImage(img,r.codigoProduto);},10);}
-async function startPrint(records,reprint=false){
+function nriNativePrintPlugin(){const cap=window.Capacitor;return cap?.Plugins?.NativePrint||cap?.registerPlugin?.('NativePrint');}
+async function manageNriAndroidPrintQueue(){
+  const printer=nriNativePrintPlugin();if(!printer?.getPendingJobs)return toast('Atualize o APK para consultar a fila de impressão do Android.','error');
+  try{
+    const {count=0}=await printer.getPendingJobs();
+    if(!count)return toast('Não há impressões de NRI pendentes no Android.','success');
+    openModal('Fila de impressão do Android',`${count} trabalho${count===1?'':'s'} de NRI`,
+      '<p>O Android mantém os trabalhos de impressão após sair do aplicativo. Confira se a impressora ainda está trabalhando antes de cancelar a fila.</p>',
+      [{label:'Manter fila',class:'secondary',onClick:closeModal},{label:`Cancelar ${count} trabalho${count===1?'':'s'}`,class:'danger',onClick:async()=>{
+        try{const result=await printer.cancelPendingJobs();closeModal();toast(`${result.count||0} impressão${result.count===1?' cancelada':'ões canceladas'} no Android.`,'success');}
+        catch(error){toast(humanError(error),'error');}
+      }}]);
+  }catch(error){toast(humanError(error),'error');}
+}
+async function startPrint(records,reprint=false,ignoreNativeQueue=false){
   if(!records?.length)return toast('Selecione ao menos uma NRI.','error');
   if(printOperation||printStarting)return toast('Conclua a impressão anterior antes de iniciar outra.','error');
   printStarting=true;
@@ -1562,7 +1580,18 @@ async function startPrint(records,reprint=false){
     if(isNativeCapacitor()){
       const cap=window.Capacitor;
       if(!cap.isPluginAvailable?.('NativePrint'))throw new Error('Impressão indisponível neste APK. Instale a versão atualizada.');
-      const nativePrint=cap.Plugins?.NativePrint||cap.registerPlugin?.('NativePrint');
+      const nativePrint=nriNativePrintPlugin();
+      if(!ignoreNativeQueue&&nativePrint.getPendingJobs){
+        const {count=0}=await nativePrint.getPendingJobs();
+        if(count){
+          openModal('Impressões em espera no Android',`${count} trabalho${count===1?'':'s'} de NRI ainda na fila`,
+            '<p>Confira a fila do Android antes de criar outra impressão. Você pode manter os trabalhos anteriores ou cancelá-los.</p>',
+            [{label:'Voltar',class:'secondary',onClick:closeModal},{label:'Imprimir mesmo assim',class:'primary',onClick:()=>{closeModal();startPrint(records,reprint,true);}},{label:'Cancelar fila anterior',class:'danger',onClick:async()=>{
+              try{await nativePrint.cancelPendingJobs();closeModal();startPrint(records,reprint,true);}catch(error){toast(humanError(error),'error');}
+            }}]);
+          return;
+        }
+      }
       await nativePrint.printHtml({html:printDocument(records)});
     }else{
       const frame=$('printFrame'),doc=frame.contentWindow.document;
@@ -1753,7 +1782,7 @@ function renderAvariaItems(){
   $('avItemCounter').textContent=`${avariaItems.length} produto(s)`;const el=$('avItemList');
   if(!avariaItems.length){el.className='item-list empty-state';el.textContent='Nenhum produto adicionado.';return;}
   el.className='item-list';
-  el.innerHTML=avariaItems.map(x=>`<div class="item-row" data-id="${x.id}"><div class="info"><small>Produto • Código ${esc(x.product_code||'—')}</small><strong>${esc(x.product_name||x.product)}</strong></div><div class="info"><small>Lote(s)</small><strong>${esc(x.lot)}</strong></div><div class="info"><small>Quantidade</small><strong>${fmtNum(x.quantity)} ${esc(x.unit)}</strong></div><div class="info"><small>Motivo</small><strong>${esc(x.reason)}</strong></div><div class="info"><small>Evidências</small><strong>${x.photos.length?`${x.photos.length} foto(s) • GPS ✓`:'Foto dispensada pelo motivo'}</strong></div><div class="mini-actions"><button class="mini-btn" data-act="edit">Editar</button><button class="mini-btn danger" data-act="del">Excluir</button></div></div>`).join('');
+  el.innerHTML=avariaItems.map(x=>`<div class="item-row" data-id="${x.id}"><div class="info"><small>Produto • Código ${esc(x.product_code||'—')}</small><strong>${esc(x.product_name||x.product)}</strong></div><div class="info"><small>Lote(s)</small><strong>${esc(x.lot)}</strong></div><div class="info"><small>Quantidade</small><strong>${fmtNum(x.quantity)} ${esc(x.unit)}</strong></div><div class="info"><small>Motivo</small><strong>${esc(x.reason)}</strong></div><div class="info"><small>Evidências</small><strong>${x.photos.length?`${x.photos.length} foto(s) • GPS ✓`:'Foto dispensada pelo motivo'}</strong></div><div class="mini-actions"><button type="button" class="mini-btn" data-act="edit">Editar</button><button type="button" class="mini-btn danger" data-act="del">Excluir</button></div></div>`).join('');
 }
 function onAvariaItemListClick(e){
   const b=e.target.closest('button[data-act]');if(!b)return;const item=avariaItems.find(x=>x.id===b.closest('[data-id]').dataset.id);if(!item)return;
@@ -2905,6 +2934,7 @@ let pullClockTimer=null;
 let pullMapInstances=[];
 let pullMapContexts=new Map();
 let pullAttachmentPreviewUrl=null;
+const pullAttachmentOfflineUrls=new Map();
 let pullAttachmentUploading=false;
 let pullAttachmentCapturing=false;
 let pullAttachmentNativeFile=null;
@@ -3244,7 +3274,7 @@ function renderPullActiveSchedule(){
   box.innerHTML=`<div><small>AGENDAMENTO</small><strong>${fmtDateTime(trip.appointment_at)}</strong></div><div><small>CHEGADA À FÁBRICA</small><strong>${fmtDateTime(trip.arrived_factory_at)}</strong></div><div><small>ANTECEDÊNCIA REAL</small><strong>${m?fmtMinutes(m.actual):'Aguardando'}</strong></div><div><small>CONSIDERADA PELA FÁBRICA</small><strong>${m?fmtMinutes(m.factory):'Aguardando'}</strong></div>`;
 }
 function pullAttachmentCard(row){
-  return `<article class="pull-attachment-card"><a href="${esc(row.url||'#')}" target="_blank" rel="noopener" aria-label="Abrir foto do ciclo em tamanho maior"><img src="${esc(row.url||'')}" alt="Foto anexada ao ciclo" loading="lazy"></a><div><small>${fmtDateTime(row.created_at)}</small>${row.observation?`<p>${esc(row.observation)}</p>`:''}</div></article>`;
+  return `<article class="pull-attachment-card${row._offline?' offline-pending-row':''}">${row._cached?'<div class="pull-attachment-cached">Foto já anexada<br>Disponível ao reconectar</div>':`<a href="${esc(row.url||'#')}" target="_blank" rel="noopener" aria-label="Abrir foto do ciclo em tamanho maior"><img src="${esc(row.url||'')}" alt="Foto anexada ao ciclo" loading="lazy"></a>`}<div><small>${fmtDateTime(row.created_at)}</small>${row._offline?'<p>Aguardando sincronização</p>':row.observation?`<p>${esc(row.observation)}</p>`:''}</div></article>`;
 }
 async function fetchPullTripAttachments(tripId){
   const {data,error}=await sb.from('pull_trip_attachments').select('*').eq('trip_id',tripId).order('created_at');
@@ -3290,9 +3320,17 @@ async function takePullAttachmentPhoto(){
 }
 async function loadPullTripAttachments(tripId,boxId='pullAttachmentList',driverView=false){
   const box=$(boxId);if(!box)return;
-  if(!navigator.onLine){box.className='pull-attachment-grid empty-state';box.textContent='Conecte-se à internet para consultar as fotos do ciclo.';return;}
   try{
-    const rows=await fetchPullTripAttachments(tripId);
+    const pending=(await offlineQueueRows()).filter(row=>row.type==='PULL_ATTACHMENT'&&row.payload?.trip_id===tripId);
+    let remote=await offlineStateGet(`pull_attachments:${tripId}`)||[],fromCache=true;
+    if(navigator.onLine){
+      try{remote=await fetchPullTripAttachments(tripId);fromCache=false;await offlineStateSet(`pull_attachments:${tripId}`,remote);}
+      catch(error){if(!offlineIsNetworkError(error))throw error;}
+    }
+    for(const url of pullAttachmentOfflineUrls.get(boxId)||[])URL.revokeObjectURL(url);
+    const urls=[];
+    const rows=[...remote.map(row=>({...row,_cached:fromCache})),...pending.map(row=>{const url=URL.createObjectURL(row.payload.blob);urls.push(url);return {id:row.id,created_at:row.created_at,url,_offline:true};})];
+    pullAttachmentOfflineUrls.set(boxId,urls);
     if(driverView&&pullActiveTrip?.id!==tripId)return;
     if(driverView)pullTripAttachments=rows;
     box.className=rows.length?'pull-attachment-grid':'pull-attachment-grid empty-state';
@@ -3302,33 +3340,30 @@ async function loadPullTripAttachments(tripId,boxId='pullAttachmentList',driverV
       $('formPullAttachment').classList.toggle('hidden',rows.length>=10);
       updatePullAttachmentCaptureUi();
     }
-  }catch(error){box.className='pull-attachment-grid empty-state';box.textContent='Não foi possível carregar as fotos. Confira se o SQL 45 foi aplicado.';console.warn('Fotos do ciclo',error);}
+  }catch(error){box.className='pull-attachment-grid empty-state';box.textContent='Não foi possível carregar as fotos do ciclo.';console.warn('Fotos do ciclo',error);}
 }
 async function submitPullAttachment(event){
   event.preventDefault();
   if(pullAttachmentUploading)return;
   const trip=pullActiveTrip,file=pullAttachmentNativeFile||$('pullAttachmentFile')?.files?.[0];
   if(!trip||!file)return;
-  if(!navigator.onLine)return toast('Conecte-se à internet para anexar uma foto.','error');
   if(!file.type.startsWith('image/'))return toast('Selecione uma imagem.','error');
   if(pullTripAttachments.length>=10)return toast('Este ciclo já possui 10 fotos.','error');
-  const button=$('pullAttachmentSave');pullAttachmentUploading=true;updatePullAttachmentCaptureUi();button.textContent='Enviando foto…';
-  let path='',uploaded=false;
+  const button=$('pullAttachmentSave');pullAttachmentUploading=true;updatePullAttachmentCaptureUi();button.textContent='Salvando foto…';
   try{
     const blob=await compressImage(file,1600,.8);
-    path=`${trip.id}/${authUser.id}/${uuid()}.jpg`;
-    const up=await sb.storage.from('puxada-anexos').upload(path,blob,{contentType:'image/jpeg',upsert:false});
-    if(up.error)throw up.error;
-    uploaded=true;
-    const saved=await sb.rpc('register_pull_trip_attachment',{p_trip_id:trip.id,p_photo_path:path,p_observation:''});
-    if(saved.error)throw saved.error;
+    await offlineQueueAdd('PULL_ATTACHMENT',{trip_id:trip.id,blob});
     pullAttachmentNativeFile=null;
     $('formPullAttachment').reset();
     updatePullAttachmentCaptureUi();
-    toast('Foto anexada ao ciclo.','success');
     await loadPullTripAttachments(trip.id,'pullAttachmentList',true);
+    if(navigator.onLine){
+      await syncOfflineQueue({silent:true});
+      const remaining=(await offlineQueueRows()).find(row=>row.type==='PULL_ATTACHMENT'&&row.payload?.trip_id===trip.id);
+      if(remaining?.status==='ERROR')toast('Foto salva no aparelho, mas ainda não sincronizada. Toque no status de conexão para tentar novamente.','error');
+      else toast(remaining?'Foto salva no aparelho e aguardando sincronização.':'Foto anexada ao ciclo.','success');
+    }else toast('Foto salva no aparelho. Será sincronizada quando houver internet.','success');
   }catch(error){
-    if(uploaded)await sb.storage.from('puxada-anexos').remove([path]).catch(()=>{});
     toast(humanPullPlanError(error),'error');
   }finally{pullAttachmentUploading=false;updatePullAttachmentCaptureUi();button.textContent='Anexar foto';}
 }
@@ -4104,9 +4139,9 @@ addNriDraftItem = function(){
   const idx=nriDraftItems.findIndex(x=>x.id===item.id);if(idx>=0)nriDraftItems[idx]=item;else nriDraftItems.push(item);renderNriDraftItems();clearNriItemEditor();
 };
 renderNriDraftItems = function(){
-  const total=nriDraftItems.reduce((s,x)=>s+x.pallets,0);$('nriItemCounter').textContent=`${nriDraftItems.length} item(ns) • ${total} NRI(s)`;$('btnCadastrarCarreta').textContent=total?`Cadastrar carreta (${total} NRIs)`:'Cadastrar carreta';const el=$('nriItemList');if(!nriDraftItems.length){el.className='item-list empty-state';el.textContent='Nenhum produto adicionado.';return;}el.className='item-list';el.innerHTML=nriDraftItems.map(x=>`<div class="item-row" data-id="${x.id}"><div class="info"><small>Produto</small><strong>${esc(x.product_code)} • ${esc(x.product_name)}</strong></div><div class="info"><small>Validade</small><strong>${x.validity_date?formatShortDate(x.validity_date):'Sem Validade'}</strong></div><div class="info"><small>Lote(s)</small><strong>${esc(x.lot)}</strong></div><div class="info"><small>Quantidade</small><strong>${fmtNum(x.quantity)}</strong></div><div class="info"><small>Paletes / NRIs</small><strong>${x.pallets}</strong></div><div class="info"><small>Palete avariado</small><strong>${x.pallet_damaged?`Sim • ${x.damaged_pallets} • NF ${esc(x.invoice_number||'—')} • ${esc(x.damage_reason)} • ${(x.damagePhotos||[]).length} foto(s)`:'Não'}</strong></div><div class="mini-actions"><button class="mini-btn" data-act="edit">Editar</button><button class="mini-btn danger" data-act="del">Excluir</button></div></div>`).join('');
+  const total=nriDraftItems.reduce((s,x)=>s+x.pallets,0);$('nriItemCounter').textContent=`${nriDraftItems.length} item(ns) • ${total} NRI(s)`;$('btnCadastrarCarreta').textContent=total?`Cadastrar carreta (${total} NRIs)`:'Cadastrar carreta';const el=$('nriItemList');if(!nriDraftItems.length){el.className='item-list empty-state';el.textContent='Nenhum produto adicionado.';return;}el.className='item-list';el.innerHTML=nriDraftItems.map(x=>`<div class="item-row" data-id="${x.id}"><div class="info"><small>Produto</small><strong>${esc(x.product_code)} • ${esc(x.product_name)}</strong></div><div class="info"><small>Validade</small><strong>${x.validity_date?formatShortDate(x.validity_date):'Sem Validade'}</strong></div><div class="info"><small>Lote(s)</small><strong>${esc(x.lot)}</strong></div><div class="info"><small>Quantidade</small><strong>${fmtNum(x.quantity)}</strong></div><div class="info"><small>Paletes / NRIs</small><strong>${x.pallets}</strong></div><div class="info"><small>Palete avariado</small><strong>${x.pallet_damaged?`Sim • ${x.damaged_pallets} • NF ${esc(x.invoice_number||'—')} • ${esc(x.damage_reason)} • ${(x.damagePhotos||[]).length} foto(s)`:'Não'}</strong></div><div class="mini-actions"><button type="button" class="mini-btn" data-act="edit">Editar</button><button type="button" class="mini-btn danger" data-act="del">Excluir</button></div></div>`).join('');
 };
-onNriDraftListClick = function(e){const b=e.target.closest('button[data-act]');if(!b)return;const row=b.closest('[data-id]'),item=nriDraftItems.find(x=>x.id===row.dataset.id);if(!item)return;if(b.dataset.act==='del'){nriDraftItems=nriDraftItems.filter(x=>x.id!==item.id);renderNriDraftItems();if(nriEditingId===item.id)clearNriItemEditor();return;}nriEditingId=item.id;$('nriCodigo').value=item.product_code;$('nriSemValidade').checked=!item.validity_date;$('nriValidade').value=formatShortDate(item.validity_date);$('nriLote').value=sanitizeLot(item.lot);$('nriQuantidade').value=item.quantity;$('nriPaletes').value=item.pallets;$('nriBloqueio').value=item.block_date?formatShortDate(item.block_date):'--';nriDamagePhotos=[...(item.damagePhotos||[])];$('nriDamagePallets').value=item.damaged_pallets||1;$('nriDamageReason').value=item.damage_reason||'';$('nriDamageInvoice').value=item.invoice_number||'';setNriDamageMode(!!item.pallet_damaged);updateNriValidityMode();onProductCode();$('btnAdicionarNriItem').textContent='Salvar alteração';$('btnCancelarNriItem').classList.remove('hidden');};
+onNriDraftListClick = function(e){const b=e.target.closest('button[data-act]');if(!b)return;e.preventDefault();const row=b.closest('[data-id]'),item=nriDraftItems.find(x=>x.id===row.dataset.id);if(!item)return;if(b.dataset.act==='del'){nriDraftItems=nriDraftItems.filter(x=>x.id!==item.id);renderNriDraftItems();if(nriEditingId===item.id)clearNriItemEditor();return;}nriEditingId=item.id;$('nriCodigo').value=item.product_code;$('nriSemValidade').checked=!item.validity_date;$('nriValidade').value=formatShortDate(item.validity_date);$('nriLote').value=sanitizeLot(item.lot);$('nriQuantidade').value=item.quantity;$('nriPaletes').value=item.pallets;$('nriBloqueio').value=item.block_date?formatShortDate(item.block_date):'--';nriDamagePhotos=[...(item.damagePhotos||[])];$('nriDamagePallets').value=item.damaged_pallets||1;$('nriDamageReason').value=item.damage_reason||'';$('nriDamageInvoice').value=item.invoice_number||'';setNriDamageMode(!!item.pallet_damaged);updateNriValidityMode();onProductCode();$('btnAdicionarNriItem').textContent='Salvar alteração';$('btnCancelarNriItem').classList.remove('hidden');};
 clearNriItemEditor = function(){nriEditingId=null;['nriCodigo','nriValidade','nriLote','nriBloqueio'].forEach(id=>$(id).value='');$('nriSemValidade').checked=false;updateNriValidityMode();$('nriQuantidade').value=1;$('nriPaletes').value=1;$('produtoPlaceholder').classList.remove('hidden');$('produtoImagem').classList.add('hidden');$('produtoInfo').classList.add('hidden');$('btnAdicionarNriItem').textContent='+ Adicionar à carreta';$('btnCancelarNriItem').classList.add('hidden');resetNriDamageEditor();};
 function clearNriSourceContext(){
   nriPullLocked=false;nriMarketplaceLocked=false;if($('nriPullTripId'))$('nriPullTripId').value='';if($('nriMarketplaceReceiptId'))$('nriMarketplaceReceiptId').value='';$('nriPullBanner')?.classList.add('hidden');if($('nriPullBanner'))$('nriPullBanner').innerHTML='';
@@ -4758,7 +4793,7 @@ function showDamageDecisionPanel({status,count,label,onConfirm,onError}){
   panel.querySelector('textarea')?.focus({preventScroll:true});
 }
 function openModal(title,subtitle,body,actions=[]){cleanupDamageGeoMap();$('modalTitle').textContent=title;$('modalSubtitle').textContent=subtitle||'';$('modalBody').classList.remove('damage-review-workspace');$('modalBody').innerHTML=body||'';const a=$('modalActions');a.hidden=false;a.innerHTML='';actions.forEach(x=>{const b=document.createElement('button');b.className=`btn ${x.class||'secondary'}`;b.textContent=x.label;b.addEventListener('click',x.onClick);a.appendChild(b);});$('modal').classList.add('open');}
-function closeModal(){closeDamagePhotoViewer();cleanupPullMaps();cleanupDamageGeoMap();$('modal').classList.remove('open');$('modalBody').onchange=null;$('modalBody').onclick=null;$('modalBody').classList.remove('damage-review-workspace');$('modalBody').innerHTML='';$('modalActions').hidden=false;$('modalActions').innerHTML='';}
+function closeModal(){if(printOperation&&$('modalTitle')?.textContent==='Confirmar impressão'){void finishPrint('CANCELADO');return;}closeDamagePhotoViewer();cleanupPullMaps();cleanupDamageGeoMap();$('modal').classList.remove('open');$('modalBody').onchange=null;$('modalBody').onclick=null;$('modalBody').classList.remove('damage-review-workspace');$('modalBody').innerHTML='';$('modalActions').hidden=false;$('modalActions').innerHTML='';}
 function damageReviewProductIdentity(item,index){
   const raw=String(item?.product_text||'').trim();
   const parts=raw.match(/^([A-Za-z0-9]+)\s*[-–—•]\s*(.+)$/);
@@ -5112,7 +5147,7 @@ addNriDraftItem = function(){
   const item={id:nriEditingId||uuid(),product_code:p.code,product_name:p.name,validity_date:validity,lot,lots,quantity:qty,pallets,block_date:validity?addDaysIso(validity,-30):null,pallet_damaged:nriDamageMode,damaged_pallets:damagedPallets,damage_reason:reason,invoice_number:invoiceNumber,damagePhotos:[...nriDamagePhotos]};
   const idx=nriDraftItems.findIndex(x=>x.id===item.id);if(idx>=0)nriDraftItems[idx]=item;else nriDraftItems.push(item);renderNriDraftItems();clearNriItemEditor();
 };
-onNriDraftListClick = function(e){const b=e.target.closest('button[data-act]');if(!b)return;const row=b.closest('[data-id]'),item=nriDraftItems.find(x=>x.id===row.dataset.id);if(!item)return;if(b.dataset.act==='del'){nriDraftItems=nriDraftItems.filter(x=>x.id!==item.id);renderNriDraftItems();if(nriEditingId===item.id)clearNriItemEditor();return;}nriEditingId=item.id;selectOperationalProductByCode('nri',item.product_code);$('nriSemValidade').checked=!item.validity_date;$('nriValidade').value=formatShortDate(item.validity_date);setMultiLots('nri',item.lot);$('nriQuantidade').value=item.quantity;$('nriPaletes').value=item.pallets;$('nriBloqueio').value=item.block_date?formatShortDate(item.block_date):'--';nriDamagePhotos=[...(item.damagePhotos||[])];$('nriDamagePallets').value=item.damaged_pallets||1;$('nriDamageReason').value=item.damage_reason||'';$('nriDamageInvoice').value=item.invoice_number||'';setNriDamageMode(!!item.pallet_damaged);updateNriValidityMode();$('btnAdicionarNriItem').textContent='Salvar alteração';$('btnCancelarNriItem').classList.remove('hidden');};
+onNriDraftListClick = function(e){const b=e.target.closest('button[data-act]');if(!b)return;e.preventDefault();const row=b.closest('[data-id]'),item=nriDraftItems.find(x=>x.id===row.dataset.id);if(!item)return;if(b.dataset.act==='del'){nriDraftItems=nriDraftItems.filter(x=>x.id!==item.id);renderNriDraftItems();if(nriEditingId===item.id)clearNriItemEditor();return;}nriEditingId=item.id;selectOperationalProductByCode('nri',item.product_code);$('nriSemValidade').checked=!item.validity_date;$('nriValidade').value=formatShortDate(item.validity_date);setMultiLots('nri',item.lot);$('nriQuantidade').value=item.quantity;$('nriPaletes').value=item.pallets;$('nriBloqueio').value=item.block_date?formatShortDate(item.block_date):'--';nriDamagePhotos=[...(item.damagePhotos||[])];$('nriDamagePallets').value=item.damaged_pallets||1;$('nriDamageReason').value=item.damage_reason||'';$('nriDamageInvoice').value=item.invoice_number||'';setNriDamageMode(!!item.pallet_damaged);updateNriValidityMode();$('btnAdicionarNriItem').textContent='Salvar alteração';$('btnCancelarNriItem').classList.remove('hidden');};
 clearNriItemEditor = function(){nriEditingId=null;clearOperationalProductSelection('nri',false);if($('nriValidade'))$('nriValidade').value='';if($('nriBloqueio'))$('nriBloqueio').value='';clearMultiLots('nri');$('nriSemValidade').checked=false;updateNriValidityMode();$('nriQuantidade').value=1;$('nriPaletes').value=1;$('btnAdicionarNriItem').textContent='+ Adicionar à carreta';$('btnCancelarNriItem').classList.add('hidden');resetNriDamageEditor();};
 
 fefoItemSort = function(a,b){return String(a.validity_date||'9999-12-31').localeCompare(String(b.validity_date||'9999-12-31'))||String(a.product_code||'').localeCompare(String(b.product_code||''),'pt-BR',{numeric:true})||String(a.lot||'').localeCompare(String(b.lot||''),'pt-BR')||new Date(a.created_at||0)-new Date(b.created_at||0);};
@@ -11867,6 +11902,17 @@ async function pullCachedVehicleKm(){
   return operation?.status==='ERROR'?null:local;
 }
 
+const processOfflineRecordBeforePullAttachment=processOfflineRecord;
+processOfflineRecord=async function(row){
+  if(row.type!=='PULL_ATTACHMENT')return processOfflineRecordBeforePullAttachment(row);
+  const tripId=row.payload.trip_id,path=`${tripId}/${row.user_id}/${row.id}.jpg`;
+  const uploaded=await sb.storage.from('puxada-anexos').upload(path,row.payload.blob,{contentType:'image/jpeg',upsert:false});
+  if(uploaded.error&&String(uploaded.error.statusCode||uploaded.error.status)!=='409'&&!/already exists|duplicate|resource already exists/i.test(String(uploaded.error.message||'')))throw uploaded.error;
+  const saved=await sb.rpc('register_pull_trip_attachment',{p_trip_id:tripId,p_photo_path:path,p_observation:''});
+  if(saved.error)throw saved.error;
+  return saved.data;
+};
+
 const pullPlanCardHtmlBeforeChecklist=pullPlanCardHtml;
 pullPlanCardHtml=function(plan,analyst=false){const html=pullPlanCardHtmlBeforeChecklist(plan,analyst);const label=pullWeekLabels[plan.week_trip_type]||'Regra semanal anterior';return html.replace('<div class="pull-plan-meta">',`<div class="pull-plan-meta"><span><b>${esc(label)}</b></span>`);};
 
@@ -11919,7 +11965,7 @@ async function pullLoadChecklistState(){
 const loadPullActiveTripBeforeChecklist=loadPullActiveTrip;
 loadPullActiveTrip=async function(silent=false){
   const result=await loadPullActiveTripBeforeChecklist(silent);
-  if(pullActiveTrip){try{await pullLoadChecklistState();}catch(error){if(!silent)toast(`Checklist: ${humanError(error)}`,'error');}}
+  if(pullActiveTrip){try{await pullLoadChecklistState();}catch(error){if(!silent)toast(`Checklist: ${humanError(error)}`,'error');}if(!navigator.onLine)await loadPullTripAttachments(pullActiveTrip.id,'pullAttachmentList',true);}
   else{pullChecklistQuestions=[];pullChecklistRequirements=[];pullChecklistRuns=[];pullChecklistLastKm=null;pullChecklistStateReady=false;}
   return result;
 };
@@ -12058,11 +12104,14 @@ processOfflineRecord=async function(row){
 };
 const syncOfflineQueueBeforeChecklist=syncOfflineQueue;
 syncOfflineQueue=async function(...args){
-  const hadChecklist=!!pullActiveTrip?.week_trip_type&&(await offlineQueueRows()).some(row=>row.type==='PULL_CHECKLIST'&&row.payload?.p_trip_id===pullActiveTrip.id);
+  const pendingBefore=await offlineQueueRows();
+  const hadChecklist=!!pullActiveTrip?.week_trip_type&&pendingBefore.some(row=>row.type==='PULL_CHECKLIST'&&row.payload?.p_trip_id===pullActiveTrip.id);
+  const hadAttachment=!!pullActiveTrip&&pendingBefore.some(row=>row.type==='PULL_ATTACHMENT'&&row.payload?.trip_id===pullActiveTrip.id);
   const result=await syncOfflineQueueBeforeChecklist(...args);
   if(hadChecklist&&pullActiveTrip?.week_trip_type&&navigator.onLine){
     try{await pullLoadChecklistState();}catch(error){console.warn('Checklist após sincronização',error);}
   }
+  if(hadAttachment&&pullActiveTrip&&navigator.onLine)await loadPullTripAttachments(pullActiveTrip.id,'pullAttachmentList',true);
   return result;
 };
 

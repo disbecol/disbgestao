@@ -1231,6 +1231,7 @@ button[data-sales-delivered]:hover{
 .pull-detail-extras{margin-top:18px}.pull-detail-extras>.section-title{margin-top:20px}
 .pull-attachment-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(195px,1fr));gap:11px;margin-top:14px}.pull-attachment-grid.empty-state{display:block}
 .pull-attachment-card{overflow:hidden;border:1px solid #d7e4ed;border-radius:12px;background:#fff}.pull-attachment-card>a{display:block;height:160px;background:#eaf1f5}.pull-attachment-card img{display:block;width:100%;height:100%;object-fit:cover}.pull-attachment-card>div{padding:10px}.pull-attachment-card small{color:#778da0;font-size:9px}.pull-attachment-card p{margin:5px 0 0;color:#2b4257;font-size:11px;line-height:1.4;overflow-wrap:anywhere}
+.pull-attachment-card>.pull-attachment-cached{height:160px;display:flex;align-items:center;justify-content:center;text-align:center;background:#eaf1f5;color:#506779;font-size:12px;line-height:1.5}
 @media(max-width:800px){.pull-appointment-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:500px){.pull-plan-list{grid-template-columns:1fr}.pull-plan-card-top{flex-wrap:wrap}.pull-appointment-summary{grid-template-columns:1fr 1fr;padding:9px;gap:7px}.pull-appointment-summary strong{font-size:11px}}
 

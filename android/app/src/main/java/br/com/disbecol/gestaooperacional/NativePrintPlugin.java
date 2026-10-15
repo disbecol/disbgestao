@@ -15,6 +15,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
+import com.getcapacitor.JSObject;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.PluginMethod;
 import java.util.ArrayList;
@@ -22,8 +23,53 @@ import java.util.List;
 
 @CapacitorPlugin(name = "NativePrint")
 public class NativePrintPlugin extends Plugin {
+    private static final String NRI_JOB_NAME = "Etiquetas NRI";
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final List<WebView> printViews = new ArrayList<>();
+
+    private boolean isPendingNriJob(PrintJob job) {
+        String label = job.getInfo() == null ? null : job.getInfo().getLabel();
+        return label != null && label.startsWith(NRI_JOB_NAME)
+            && (job.isQueued() || job.isStarted() || job.isBlocked() || job.isFailed());
+    }
+
+    @PluginMethod
+    public void getPendingJobs(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            try {
+                PrintManager manager = (PrintManager) getActivity().getSystemService(Context.PRINT_SERVICE);
+                if (manager == null) throw new IllegalStateException("Serviço de impressão do Android indisponível.");
+                int count = 0;
+                for (PrintJob job : manager.getPrintJobs()) if (isPendingNriJob(job)) count++;
+                JSObject result = new JSObject();
+                result.put("count", count);
+                call.resolve(result);
+            } catch (Exception error) {
+                call.reject(error.getMessage() == null ? "Falha ao consultar a fila de impressão." : error.getMessage());
+            }
+        });
+    }
+
+    @PluginMethod
+    public void cancelPendingJobs(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            try {
+                PrintManager manager = (PrintManager) getActivity().getSystemService(Context.PRINT_SERVICE);
+                if (manager == null) throw new IllegalStateException("Serviço de impressão do Android indisponível.");
+                int count = 0;
+                for (PrintJob job : manager.getPrintJobs()) {
+                    if (!isPendingNriJob(job)) continue;
+                    job.cancel();
+                    count++;
+                }
+                JSObject result = new JSObject();
+                result.put("count", count);
+                call.resolve(result);
+            } catch (Exception error) {
+                call.reject(error.getMessage() == null ? "Falha ao cancelar a fila de impressão." : error.getMessage());
+            }
+        });
+    }
 
     @PluginMethod
     public void printHtml(PluginCall call) {
@@ -81,7 +127,7 @@ public class NativePrintPlugin extends Plugin {
             if (manager == null) {
                 throw new IllegalStateException("Serviço de impressão do Android indisponível.");
             }
-            String jobName = "Etiquetas NRI";
+            String jobName = NRI_JOB_NAME;
             PrintDocumentAdapter adapter = view.createPrintDocumentAdapter(jobName);
             PrintAttributes attributes = new PrintAttributes.Builder()
                 .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
@@ -101,7 +147,8 @@ public class NativePrintPlugin extends Plugin {
 
     private void releaseWhenFinished(WebView view, PrintJob job) {
         handler.postDelayed(() -> {
-            if (job.isCompleted() || job.isCancelled() || job.isFailed()) {
+            // Depois que entra na fila, o Android já guardou o documento no spooler.
+            if (job.isQueued() || job.isCompleted() || job.isCancelled() || job.isFailed()) {
                 releaseView(view);
             } else if (printViews.contains(view)) {
                 releaseWhenFinished(view, job);
