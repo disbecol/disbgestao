@@ -3,6 +3,7 @@ import path from 'node:path';
 
 const root = process.cwd();
 const manifest = path.join(root, 'android', 'app', 'src', 'main', 'AndroidManifest.xml');
+const appVersion = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 
 if (!fs.existsSync(manifest)) {
   console.log('Projeto Android ainda nao existe; rode npm run android:add primeiro.');
@@ -50,16 +51,14 @@ const gradleGroovy = path.join(root, 'android', 'app', 'build.gradle');
 const gradleKts = path.join(root, 'android', 'app', 'build.gradle.kts');
 if (fs.existsSync(gradleGroovy)) {
   let g = fs.readFileSync(gradleGroovy, 'utf8');
-  g = g.replace(/versionCode\s+\d+/, 'versionCode 201');
-  g = g.replace(/versionName\s+["'][^"']+["']/, 'versionName "1.7.34"');
+  g = g.replace(/versionName\s+["'][^"']+["']/, `versionName "${appVersion}"`);
   fs.writeFileSync(gradleGroovy, g, 'utf8');
-  console.log('Versao Android OK: versionCode 201 / versionName 1.7.34.');
+  console.log(`Versao Android OK: versionName ${appVersion}.`);
 } else if (fs.existsSync(gradleKts)) {
   let g = fs.readFileSync(gradleKts, 'utf8');
-  g = g.replace(/versionCode\s*=\s*\d+/, 'versionCode = 201');
-  g = g.replace(/versionName\s*=\s*["'][^"']+["']/, 'versionName = "1.7.34"');
+  g = g.replace(/versionName\s*=\s*["'][^"']+["']/, `versionName = "${appVersion}"`);
   fs.writeFileSync(gradleKts, g, 'utf8');
-  console.log('Versao Android OK: versionCode 201 / versionName 1.7.34.');
+  console.log(`Versao Android OK: versionName ${appVersion}.`);
 }
 
 /* DISB_FCM_BUILD_FLAG_V170

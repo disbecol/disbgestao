@@ -7,10 +7,11 @@
   <title>Disb Gestão</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="vendor/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=1.7.40-nri-offline-print">
+  <link rel="stylesheet" href="styles.css?v=1.7.41-stock-validity">
   <link rel="stylesheet" href="visual-refresh.css?v=1.7.1-visual">
   <link rel="stylesheet" href="pull-dashboard.css?v=1.7.1-pull-dashboard">
   <link rel="stylesheet" href="damage-geofence.css?v=2">
+  <link rel="stylesheet" href="stock-validity.css?v=1.7.41">
   <link rel="stylesheet" href="refugo.css?v=1.7.16">
 </head>
 <body>
@@ -20,7 +21,7 @@
         <div class="login-logo"><img src="assets/icon-192.png" alt="Disb Gestão"></div>
         <span class="eyebrow light">ARMAZÉM • ENTREGA • CONFERÊNCIA</span>
         <h1>Disb Gestão</h1>
-        <p>NRI, Ativo de Giro, Refugo, avarias, vendas, conferência, FEFO e Puxada em um único aplicativo.</p><div class="login-version">v1.7.40</div>
+        <p>NRI, Ativo de Giro, Refugo, avarias, vendas, conferência, FEFO e Puxada em um único aplicativo.</p><div class="login-version">v1.7.41</div>
         <div class="feature-list">
           <span>✓ Cadastro por carreta e impressão de NRIs</span>
           <span>✓ Avarias de entrega e vendas com evidências</span>
@@ -47,7 +48,7 @@
 
   <div id="appShell" class="app-shell hidden">
     <aside id="sidebar" class="sidebar">
-      <div class="brand-row"><div class="brand-box"><img src="assets/icon-192.png" alt="Disb Gestão"></div><div><strong>Disb Gestão</strong><span>Supabase • tempo real</span></div></div><div class="app-version-badge">v1.7.40</div>
+      <div class="brand-row"><div class="brand-box"><img src="assets/icon-192.png" alt="Disb Gestão"></div><div><strong>Disb Gestão</strong><span>Supabase • tempo real</span></div></div><div class="app-version-badge">v1.7.41</div>
       <button class="nav-item home-nav-item" data-view="home"><span aria-hidden="true">⌂</span>Home</button>
       <div class="nav-area open" data-area="armazem" data-permission-any="NRI_PENDING_VIEW,MARKETPLACE_RECEIVE,NRI_CREATE,NRI_PRINT,NRI_HISTORY,NRI_DAMAGE_HISTORY,CONF_CREATE,CONF_OWN_HISTORY,CONF_HISTORY,CONF_DASHBOARD,FEFO_CREATE,FEFO_ACTIVE,FEFO_REPORT,ROTATING_ASSET_CREATE,ROTATING_ASSET_HISTORY,MATERIAL_INVENTORY,MATERIAL_STOCK_VIEW,MATERIAL_CATALOG,MATERIAL_MOVEMENT,REFUGO_AFERIR,REFUGO_HISTORICO,REFUGO_CONFIG">
         <button type="button" class="nav-area-toggle" aria-expanded="true"><span class="area-icon">▦</span><span class="area-name">Armazém</span><span class="area-chevron">⌄</span></button>
@@ -122,7 +123,7 @@
         </div>
       </div>
 
-      <div class="nav-area" data-area="vendas" data-permission-any="SALES_DAMAGE_CREATE,SALES_DAMAGE_VIEW_OWN,SALES_DAMAGE_VIEW_ALL,SALES_DAMAGE_REVIEW,SALES_DAMAGE_OVERRIDE,SALES_DAMAGE_POST">
+      <div class="nav-area" data-area="vendas" data-permission-any="SALES_DAMAGE_CREATE,SALES_DAMAGE_VIEW_OWN,SALES_DAMAGE_VIEW_ALL,SALES_DAMAGE_REVIEW,SALES_DAMAGE_OVERRIDE,SALES_DAMAGE_POST,SALES_STOCK_VALIDITY_VIEW,SALES_STOCK_VALIDITY_IMPORT">
         <button type="button" class="nav-area-toggle" aria-expanded="false"><span class="area-icon">$</span><span class="area-name">Vendas</span><span class="area-chevron">⌄</span></button>
         <div class="nav-area-items">
           <div class="nav-module role-sales-damage" data-module="avarias-vendas" data-permission-any="SALES_DAMAGE_CREATE,SALES_DAMAGE_VIEW_OWN,SALES_DAMAGE_VIEW_ALL,SALES_DAMAGE_REVIEW,SALES_DAMAGE_OVERRIDE,SALES_DAMAGE_POST">
@@ -131,6 +132,12 @@
               <button class="nav-item role-sales-damage" data-view="sales-avaria-cadastro" data-permission="SALES_DAMAGE_CREATE"><span>＋</span>Nova solicitação</button>
               <button class="nav-item role-sales-damage" data-view="sales-avaria-minhas" data-permission="SALES_DAMAGE_VIEW_OWN"><span>↺</span>Minhas solicitações</button>
               <button class="nav-item role-sales-damage" data-view="sales-avaria-gestao" data-permission-any="SALES_DAMAGE_VIEW_ALL,SALES_DAMAGE_REVIEW,SALES_DAMAGE_OVERRIDE,SALES_DAMAGE_POST"><span>☑</span>Gestão de solicitações <b id="badgeSalesDamage" class="badge">0</b></button>
+            </div>
+          </div>
+          <div class="nav-module" data-module="validade-estoque" data-permission-any="SALES_STOCK_VALIDITY_VIEW,SALES_STOCK_VALIDITY_IMPORT">
+            <button type="button" class="nav-module-toggle" aria-expanded="false"><span class="module-icon">◷</span><span class="module-name">Validade do Estoque</span><span class="module-chevron">⌄</span></button>
+            <div class="nav-module-items">
+              <button class="nav-item" data-view="sales-stock-validity" data-permission="SALES_STOCK_VALIDITY_VIEW"><span>⌕</span>Consultar validades</button>
             </div>
           </div>
         </div>
@@ -396,6 +403,23 @@
       <section id="view-sales-avaria-gestao" class="view role-sales-damage" data-permission-any="SALES_DAMAGE_VIEW_ALL,SALES_DAMAGE_REVIEW,SALES_DAMAGE_OVERRIDE,SALES_DAMAGE_POST">
         <div class="page-head"><div><div class="breadcrumb">Gerência de Vendas / Avarias</div><h1>Gestão de solicitações</h1><p>Fluxo: decisão do Gerente de Vendas, decisão final, lançamento no sistema e confirmação de entrega.</p></div><span class="page-chip sales manager">GERÊNCIA</span></div>
         <div class="card"><div class="grid grid-4"><div class="field span-2"><label>Pesquisar</label><input id="salesDamageManageSearch" placeholder="Solicitação, vendedor, PDV, produto, motivo..."></div><div class="field"><label>Status</label><select id="salesDamageManageStatus"><option value="">Todos</option><option value="PENDENTE">Pendente</option><option value="EM_ANALISE">Em análise</option><option value="PARCIAL">Parcial</option><option value="APROVADO">Aprovado</option><option value="REPROVADO">Reprovado</option><option value="LANCADO">Lançado no Sistema</option><option value="ENTREGUE">Entregue</option></select></div><div class="actions end"><button id="btnSalesDamageCsv" type="button" class="btn secondary">Baixar CSV</button><button id="btnSalesDamageRefresh" type="button" class="btn secondary">Atualizar</button></div></div><div class="table-wrap"><table><thead><tr><th>Solicitação</th><th>Vendedor</th><th>PDV</th><th>Produtos</th><th>Status</th><th>Ação</th></tr></thead><tbody id="tbodySalesDamageManage"></tbody></table></div></div>
+      </section>
+
+      <section id="view-sales-stock-validity" class="view" data-permission="SALES_STOCK_VALIDITY_VIEW">
+        <div class="page-head"><div><div class="breadcrumb">Vendas / Validade do Estoque</div><h1>Consulta de validades</h1><p>Pesquise por código ou nome e veja o vencimento mais próximo do produto na unidade atual.</p></div><span class="page-chip sales">VENDAS</span></div>
+        <div class="card stock-validity-search-card">
+          <div class="stock-validity-context"><div><small>UNIDADE CONSULTADA</small><strong id="stockValidityUnit">—</strong></div><div><small>BASE ATUALIZADA EM</small><strong id="stockValidityUpdated">—</strong></div></div>
+          <div class="field"><label for="stockValiditySearch">Código ou nome do produto</label><input id="stockValiditySearch" type="search" autocomplete="off" placeholder="Digite o código ou nome do produto"></div>
+          <div class="stock-validity-search-actions"><span id="stockValidityCount" role="status" aria-live="polite"></span><button id="btnStockValidityRefresh" type="button" class="btn secondary">Atualizar consulta</button></div>
+        </div>
+        <div id="stockValidityResults" class="stock-validity-results" aria-live="polite"><div class="empty-state">Digite um código ou nome para pesquisar.</div></div>
+        <div class="card stock-validity-import" data-permission="SALES_STOCK_VALIDITY_IMPORT">
+          <div class="section-heading"><div><strong>Atualizar base de validades</strong><span>Somente administradores. Cada arquivo substitui a base da unidade selecionada.</span></div></div>
+          <div class="grid grid-2"><div class="field"><label for="stockValidityImportUnit">Unidade do arquivo *</label><select id="stockValidityImportUnit"></select></div><div class="field"><label for="stockValidityFile">Arquivo CSV ou XLSX *</label><input id="stockValidityFile" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"><small>Use a primeira aba do XLSX. Colunas: PRODUTO, DESCRIÇÃO, VENCIMENTO; LOCAL, RUA e QUANTIDADE são opcionais.</small></div></div>
+          <div class="actions right"><button id="btnStockValidityPreview" type="button" class="btn secondary">Conferir arquivo</button></div>
+          <div id="stockValidityPreview" class="stock-validity-preview hidden" aria-live="polite"></div>
+          <div class="actions right"><button id="btnStockValidityImport" type="button" class="btn primary" disabled>Atualizar base da unidade</button></div>
+        </div>
       </section>
 
       <!-- HISTORICO DE PALETES AVARIADOS -->
@@ -881,6 +905,7 @@
   <script src="share-reports.js?v=1.7.22"></script>
   <script src="invoice-note.js?v=1.7.31-keg-liters"></script>
   <script src="pull-camera.js?v=1.7.32-pull-camera"></script>
-  <script src="app.js?v=1.7.40-nri-offline-print"></script>
+  <script src="stock-validity.js?v=1.7.41"></script>
+  <script src="app.js?v=1.7.41-stock-validity"></script>
 </body>
 </html>

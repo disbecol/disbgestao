@@ -23,6 +23,7 @@ const PERMISSION_CATALOG = [
   ['Contagem FEFO','FEFO_CREATE','Nova contagem'],['Contagem FEFO','FEFO_ACTIVE','Contagens em andamento'],['Contagem FEFO','FEFO_REPORT','Relatórios'],
   ['Materiais','MATERIAL_INVENTORY','Contagem'],['Materiais','MATERIAL_STOCK_VIEW','Estoque'],['Materiais','MATERIAL_CATALOG','Cadastro de Materiais'],['Materiais','MATERIAL_MOVEMENT','Movimentação do estoque'],
   ['Refugo','REFUGO_AFERIR','Aferir mapa'],['Refugo','REFUGO_HISTORICO','Histórico / CSV'],['Refugo','REFUGO_CONFIG','Cadastros'],
+  ['Validade do Estoque','SALES_STOCK_VALIDITY_VIEW','Consultar validades'],['Validade do Estoque','SALES_STOCK_VALIDITY_IMPORT','Importar arquivo'],
   ['Puxada','PULL_PLAN','Cadastrar viagens'],['Puxada','PULL_TRIP','Viagem'],['Puxada','PULL_FAROL','Farol de andamento'],['Puxada','PULL_HISTORY','Histórico'],['Puxada','PULL_DASHBOARD','Dashboards'],['Puxada','PULL_GOALS','Metas'],['Puxada','PULL_CONFIG','Configurações'],['Puxada','PULL_TMA_ADJUST','Ajustar TMA'],
   ['Administração','ADMIN_USERS','Usuários e permissões'],['Administração','ADMIN_BASES','Bases / importação']
 ].map(([module,code,name],sort)=>({module,code,name,sort}));
@@ -36,6 +37,7 @@ const MODULE_CATALOG = [
   {name:'Refugo',icon:'♻',description:'Aferição por mapa, tempo de vasilhame, motivos e histórico.'},
   {name:'Avarias de Entrega',icon:'!',description:'Registro, acompanhamento e gestão das avarias de entrega.'},
   {name:'Avarias de Vendas',icon:'!',description:'Solicitações, acompanhamento e gestão das avarias de vendas.'},
+  {name:'Validade do Estoque',icon:'◷',description:'Consulta e importação das validades por unidade.'},
   {name:'Puxada',icon:'↗',description:'Viagens, farol, histórico, dashboards e configuração.'}
 ];
 
@@ -45,8 +47,8 @@ const ROLE_PERMISSION_DEFAULTS = {
   CONFERENTE:['NRI_PENDING_VIEW','MARKETPLACE_RECEIVE','NRI_CREATE','NRI_PRINT','CONF_CREATE','CONF_OWN_HISTORY','FEFO_CREATE','FEFO_ACTIVE','FEFO_REPORT','MATERIAL_INVENTORY','MATERIAL_STOCK_VIEW','MATERIAL_CATALOG','MATERIAL_MOVEMENT','REFUGO_AFERIR','REFUGO_HISTORICO'],
   COLABORADOR_ENTREGA:['DELIVERY_DAMAGE_CREATE'],
   MOTORISTA_PUXADOR:['PULL_TRIP'],
-  VENDEDOR:['SALES_DAMAGE_CREATE','SALES_DAMAGE_VIEW_OWN'],
-  GERENTE_VENDAS:['SALES_DAMAGE_CREATE','SALES_DAMAGE_VIEW_OWN','SALES_DAMAGE_VIEW_ALL','SALES_DAMAGE_REVIEW']
+  VENDEDOR:['SALES_DAMAGE_CREATE','SALES_DAMAGE_VIEW_OWN','SALES_STOCK_VALIDITY_VIEW'],
+  GERENTE_VENDAS:['SALES_DAMAGE_CREATE','SALES_DAMAGE_VIEW_OWN','SALES_DAMAGE_VIEW_ALL','SALES_DAMAGE_REVIEW','SALES_STOCK_VALIDITY_VIEW']
 };
 const VALUE_TYPES = [
   {key:'g300',label:'Garrafeiras 300ml',value:69.5},
@@ -88,6 +90,11 @@ let pendingNris = [];
 let selectedNris = new Set();
 let printOperation = null;
 let printStarting = false;
+let stockValidityRows = [];
+let stockValidityLoadedUnit = '';
+let stockValidityPreview = null;
+let stockValidityLoadId = 0;
+let stockValidityXlsxPromise = null;
 let historyNris = [];
 let avariaItems = [];
 let avariaEditingId = null;
@@ -164,6 +171,7 @@ const viewMeta = {
   'sales-avaria-cadastro':['Avarias de Vendas','Nova solicitação com foto por produto'],
   'sales-avaria-minhas':['Minhas avarias de vendas','Acompanhe suas solicitações'],
   'sales-avaria-gestao':['Gestão de avarias de vendas','Aprovação, reprovação e auditoria'],
+  'sales-stock-validity':['Consulta de validades','Vencimento dos produtos da unidade'],
   'nri-historico':['Histórico NRI','Rastreabilidade completa'],
   'nri-avarias-historico':['Paletes avariados','Nota Fiscal, fotos e rastreabilidade'],
   'conf-historico':['Histórico de conferências','Todos os registros'],
@@ -207,7 +215,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.40-nri-offline-print',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.41-stock-validity',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -645,6 +653,12 @@ function bindBaseEvents(){
   $('btnSalesDamageRefresh')?.addEventListener('click',loadSalesDamageManage);
   $('btnSalesDamageCsv')?.addEventListener('click',exportSalesDamageCsv);
   $('tbodySalesDamageManage')?.addEventListener('click',onSalesDamageRequestClick);
+  $('stockValiditySearch')?.addEventListener('input',renderStockValidityResults);
+  $('btnStockValidityRefresh')?.addEventListener('click',()=>loadStockValidity(true));
+  $('stockValidityFile')?.addEventListener('change',clearStockValidityPreview);
+  $('stockValidityImportUnit')?.addEventListener('change',clearStockValidityPreview);
+  $('btnStockValidityPreview')?.addEventListener('click',previewStockValidityFile);
+  $('btnStockValidityImport')?.addEventListener('click',importStockValidityFile);
 
   // Conferencia
   $('formConferencia').addEventListener('submit',submitConference);
@@ -923,6 +937,7 @@ function moduleNameForPermission(code){
   if(code.startsWith('REFUGO_'))return 'Refugo';
   if(code.startsWith('DELIVERY_DAMAGE_'))return 'Avarias de Entrega';
   if(code.startsWith('SALES_DAMAGE_'))return 'Avarias de Vendas';
+  if(code.startsWith('SALES_STOCK_VALIDITY_'))return 'Validade do Estoque';
   if(code.startsWith('PULL_'))return 'Puxada';
   return '';
 }
@@ -1263,6 +1278,7 @@ function openView(name,force=false){
   if(name==='sales-avaria-cadastro')prepareSalesDamageForm();
   if(name==='sales-avaria-minhas')loadSalesDamageMy();
   if(name==='sales-avaria-gestao')loadSalesDamageManage();
+  if(name==='sales-stock-validity')loadStockValidity();
   if(name==='conf-minhas')loadMyConferences();
   if(name==='conf-historico')loadConferenceHistory();
   if(name==='conf-dashboard')loadDashboard();
@@ -7924,6 +7940,7 @@ async function loadUnitAccess(){
 
 function resetUnitScopedState(){
   pendingNris=[];historyNris=[];selectedNris.clear();adminAvarias=[];deliveryDamageMyRequests=[];salesDamageMyRequests=[];salesDamageManageRequests=[];
+  stockValidityRows=[];stockValidityLoadedUnit='';stockValidityPreview=null;stockValidityLoadId++;
   fefoActiveCount=null;fefoItems=[];fefoEditingItemId=null;fefoActiveCounts=[];fefoReports=[];fefoItemsByCount.clear();
   rotatingAssetActiveCount=null;rotatingAssetEntries=[];rotatingAssetHistory=[];rotatingAssetEntriesByCount.clear();
   refugoCurrentSession=null;refugoItems=[];refugoSessions=[];refugoHistory=[];clearInterval(refugoTimer);
@@ -7940,6 +7957,7 @@ async function changeActiveUnit(next){
   if(hasAnyPerm('DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST'))await loadAdminAvarias(true);
   if(activeView==='avaria-minhas'&&hasPerm('DELIVERY_DAMAGE_CREATE'))await loadDeliveryDamageMy(true);
   if(hasPerm('SALES_DAMAGE_VIEW_OWN'))await loadSalesDamageMy(true);
+  if(activeView==='sales-stock-validity'&&hasPerm('SALES_STOCK_VALIDITY_VIEW'))await loadStockValidity(true);
   if(hasAnyPerm('SALES_DAMAGE_VIEW_ALL,SALES_DAMAGE_REVIEW,SALES_DAMAGE_OVERRIDE,SALES_DAMAGE_POST'))await loadSalesDamageManage(true);
   if(canPull())await initPullModule();
   if(activeView)openView(activeView,true);
@@ -12182,5 +12200,119 @@ document.addEventListener('DOMContentLoaded',()=>{
   $('pullChecklistQuestionList')?.addEventListener('click',pullQuestionAction);
 });
 // PULL_CHECKLIST_END
+
+// VENDAS / VALIDADE DO ESTOQUE ----------------------------------------------
+function stockValidityImportUnits(){
+  const select=$('stockValidityImportUnit');if(!select)return;
+  const selected=stockValidityPreview?.unit||activeUnit;
+  select.innerHTML=myUnits.map(unit=>`<option value="${esc(unit)}">${esc(unit)}</option>`).join('');
+  select.value=myUnits.includes(selected)?selected:myUnits[0]||'';
+}
+
+function clearStockValidityPreview(){
+  stockValidityPreview=null;
+  $('stockValidityPreview')?.classList.add('hidden');
+  if($('stockValidityPreview'))$('stockValidityPreview').innerHTML='';
+  if($('btnStockValidityImport'))$('btnStockValidityImport').disabled=true;
+}
+
+async function loadStockValidity(force=false){
+  if(!hasPerm('SALES_STOCK_VALIDITY_VIEW')||!activeUnit)return;
+  const unit=activeUnit,requestId=++stockValidityLoadId;
+  stockValidityImportUnits();
+  $('stockValidityUnit').textContent=unit;
+  if(!force&&stockValidityLoadedUnit===unit){renderStockValidityResults();return;}
+  $('stockValidityUpdated').textContent='Carregando…';
+  $('stockValidityResults').innerHTML='<div class="empty-state">Carregando produtos…</div>';
+  try{
+    const [info,rows]=await Promise.all([
+      sb.from('stock_validity_imports').select('file_name,imported_at,row_count,product_count').eq('unit',unit).maybeSingle(),
+      fetchReferencePages(()=>sb.from('stock_validity_rows').select('product_code,product_name,expiry_date,quantity,location,street').eq('unit',unit).order('row_no'),20000)
+    ]);
+    if(info.error)throw info.error;
+    if(requestId!==stockValidityLoadId||activeUnit!==unit)return;
+    stockValidityRows=rows;
+    stockValidityLoadedUnit=unit;
+    $('stockValidityUpdated').textContent=info.data?.imported_at?fmtDateTime(info.data.imported_at):'Nenhum arquivo importado';
+    $('stockValidityUpdated').title=info.data?.file_name||'';
+    renderStockValidityResults();
+  }catch(error){
+    if(requestId!==stockValidityLoadId)return;
+    $('stockValidityUpdated').textContent='Não foi possível atualizar';
+    $('stockValidityResults').innerHTML='<div class="empty-state">Não foi possível consultar a base de validades. Tente atualizar.</div>';
+    console.warn('Validade do estoque',error);
+    toast(/stock_validity|replace_stock_validity|42P01|PGRST205/i.test(String(error?.message||''))?'A estrutura de validades ainda não está disponível no Supabase.':humanError(error),'error');
+  }
+}
+
+function renderStockValidityResults(){
+  const box=$('stockValidityResults');if(!box)return;
+  const query=norm($('stockValiditySearch')?.value||'').replace(/\s+/g,' ').trim();
+  const all=window.DISB_STOCK_VALIDITY?.products(stockValidityRows)||[];
+  if(!stockValidityRows.length){
+    box.innerHTML='<div class="empty-state">Ainda não há uma base de validades importada para esta unidade.</div>';
+    $('stockValidityCount').textContent='';return;
+  }
+  if(!query){
+    box.innerHTML='<div class="empty-state">Digite um código ou nome para pesquisar.</div>';
+    $('stockValidityCount').textContent=`${all.length} produto${all.length===1?'':'s'} na base desta unidade`;
+    return;
+  }
+  const words=query.split(' ');
+  const matched=all.filter(item=>norm(item.code).includes(query)||words.every(word=>norm(item.name).includes(word)));
+  $('stockValidityCount').textContent=`${matched.length} produto${matched.length===1?'':'s'} encontrado${matched.length===1?'':'s'}`;
+  if(!matched.length){box.innerHTML='<div class="empty-state">Nenhum produto encontrado nesta unidade.</div>';return;}
+  box.innerHTML=matched.slice(0,100).map(item=>{
+    const cls=item.days<=30?'critical':item.days<=60?'attention':'healthy';
+    const message=item.days>120?'Validade acima de 120 dias':item.days<0?`Vencido há ${Math.abs(item.days)} dia${item.days===-1?'':'s'}`:item.days===0?'Vence hoje':`Validade mais próxima: ${fmtDate(item.expiry)}`;
+    const days=item.days>120?'':item.days>0?`${item.days} dia${item.days===1?'':'s'} para vencer`:'';
+    return `<article class="stock-validity-card ${cls}"><div class="stock-validity-card-photo"><span>${esc(item.code)}</span><img data-stock-product="${esc(item.code)}" alt="" loading="lazy"></div><div class="stock-validity-card-main"><small>Código ${esc(item.code)}</small><h3>${esc(item.name)}</h3><div class="stock-validity-date">${esc(message)}</div>${days?`<span class="stock-validity-days">${esc(days)}</span>`:''}</div></article>`;
+  }).join('');
+  box.querySelectorAll('img[data-stock-product]').forEach(img=>setProductImage(img,img.dataset.stockProduct));
+  if(matched.length>100)box.insertAdjacentHTML('beforeend','<div class="empty-state">Exibindo os primeiros 100 produtos. Refine a pesquisa para encontrar os demais.</div>');
+}
+
+async function ensureStockValidityXlsxReader(){
+  if(typeof window.readXlsxFile==='function')return window.readXlsxFile;
+  if(!stockValidityXlsxPromise)stockValidityXlsxPromise=loadPullPdfScript('vendor/read-excel-file.min.js').catch(error=>{stockValidityXlsxPromise=null;throw error;});
+  await stockValidityXlsxPromise;
+  if(typeof window.readXlsxFile!=='function')throw new Error('Não foi possível abrir o leitor XLSX.');
+  return window.readXlsxFile;
+}
+
+async function previewStockValidityFile(){
+  if(!isAdmin()||!hasPerm('SALES_STOCK_VALIDITY_IMPORT'))return;
+  clearStockValidityPreview();
+  const file=$('stockValidityFile')?.files?.[0],unit=$('stockValidityImportUnit')?.value;
+  if(!myUnits.includes(unit))return toast('Selecione a unidade do arquivo.','error');
+  if(!file)return toast('Selecione um arquivo CSV ou XLSX.','error');
+  const button=$('btnStockValidityPreview');button.disabled=true;button.textContent='Conferindo…';
+  try{
+    const reader=file.name.toLowerCase().endsWith('.xlsx')?await ensureStockValidityXlsxReader():null;
+    const parsed=await window.DISB_STOCK_VALIDITY.readFile(file,reader);
+    stockValidityPreview={unit,fileName:file.name,rows:parsed.rows,productCount:parsed.productCount};
+    const sample=parsed.rows.slice(0,5);
+    $('stockValidityPreview').innerHTML=`<strong>${parsed.rows.length} linhas de ${parsed.productCount} produtos para ${esc(unit)}</strong><span>Confira a unidade e os primeiros registros. Ao atualizar, a base anterior desta unidade será substituída.</span><div class="table-wrap"><table><thead><tr><th>Código</th><th>Produto</th><th>Vencimento</th><th>Quantidade</th></tr></thead><tbody>${sample.map(row=>`<tr><td>${esc(row.product_code)}</td><td>${esc(row.product_name)}</td><td>${fmtDate(row.expiry_date)}</td><td>${row.quantity==null?'—':fmtNum(row.quantity)}</td></tr>`).join('')}</tbody></table></div>`;
+    $('stockValidityPreview').classList.remove('hidden');
+    $('btnStockValidityImport').disabled=false;
+  }catch(error){toast(humanError(error),'error');}
+  finally{button.disabled=false;button.textContent='Conferir arquivo';}
+}
+
+async function importStockValidityFile(){
+  if(!isAdmin()||!hasPerm('SALES_STOCK_VALIDITY_IMPORT'))return;
+  const preview=stockValidityPreview,file=$('stockValidityFile')?.files?.[0];
+  if(!preview||!file||file.name!==preview.fileName||$('stockValidityImportUnit')?.value!==preview.unit||!myUnits.includes(preview.unit))return toast('Confira novamente o arquivo e a unidade.','error');
+  if(!window.confirm(`Substituir a base de validades de ${preview.unit} por ${preview.rows.length} linhas de ${preview.fileName}?`))return;
+  const button=$('btnStockValidityImport');button.disabled=true;button.textContent='Atualizando…';
+  try{
+    const {data,error}=await sb.rpc('replace_stock_validity',{p_unit:preview.unit,p_file_name:preview.fileName,p_rows:preview.rows});
+    if(error)throw error;
+    clearStockValidityPreview();$('stockValidityFile').value='';
+    toast(`${data?.product_count||preview.productCount} produtos atualizados em ${preview.unit}.`,'success');
+    if(activeUnit===preview.unit)await loadStockValidity(true);
+  }catch(error){toast(humanError(error),'error');button.disabled=false;}
+  finally{button.textContent='Atualizar base da unidade';}
+}
 
 })();

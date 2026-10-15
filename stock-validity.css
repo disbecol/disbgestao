@@ -1,0 +1,31 @@
+.stock-validity-search-card{display:grid;gap:18px}
+.stock-validity-context{display:flex;flex-wrap:wrap;gap:12px}
+.stock-validity-context>div{min-width:190px;flex:1;padding:12px 16px;border:1px solid #dbe6f0;border-radius:12px;background:#f5f9fc}
+.stock-validity-context small{display:block;color:#687f94;font-size:11px;font-weight:800;letter-spacing:.06em}
+.stock-validity-context strong{display:block;margin-top:5px;color:#173454;font-size:15px}
+.stock-validity-search-card .field{margin:0}
+.stock-validity-search-card input{font-size:17px}
+.stock-validity-search-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;color:#526c82;font-size:13px}
+.stock-validity-results{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin:16px 0 20px}
+.stock-validity-results>.empty-state{grid-column:1/-1}
+.stock-validity-card{display:flex;align-items:flex-start;gap:14px;min-width:0;padding:16px;border:1px solid #dce6ef;border-left:4px solid #2f9d63;border-radius:16px;background:white;box-shadow:0 6px 20px rgba(27,53,83,.05)}
+.stock-validity-card.attention{border-left-color:#e0a526}
+.stock-validity-card.critical{border-left-color:#d34b4b}
+.stock-validity-card-photo{position:relative;display:grid;place-items:center;flex:none;width:72px;height:72px;overflow:hidden;border-radius:12px;background:#f1f5f9;color:#61809d;font-size:12px;font-weight:800}
+.stock-validity-card-photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:white}
+.stock-validity-card-main{min-width:0;flex:1}
+.stock-validity-card-main small{display:block;color:#668097;font-size:11px;font-weight:800;text-transform:uppercase}
+.stock-validity-card-main h3{margin:4px 0 10px;color:#173454;font-size:15px;line-height:1.25;overflow-wrap:anywhere}
+.stock-validity-date{font-size:14px;font-weight:800;color:#227f4e}
+.stock-validity-card.attention .stock-validity-date{color:#ab7413}
+.stock-validity-card.critical .stock-validity-date{color:#b53636}
+.stock-validity-days{display:block;margin-top:5px;color:#526c82;font-size:12px}
+.stock-validity-import{display:grid;gap:14px}
+.stock-validity-import .section-heading{margin:0}
+.stock-validity-import .actions{margin:0}
+.stock-validity-preview{padding:14px;border:1px solid #cbdff0;border-radius:12px;background:#f6faff;color:#264761}
+.stock-validity-preview strong{display:block;margin-bottom:5px}
+.stock-validity-preview table{width:100%;margin-top:10px;border-collapse:collapse;font-size:12px}
+.stock-validity-preview th,.stock-validity-preview td{padding:7px;border-bottom:1px solid #dce8f2;text-align:left}
+.stock-validity-preview .table-wrap{max-width:100%;overflow:auto}
+@media(max-width:560px){.stock-validity-results{grid-template-columns:1fr}.stock-validity-card{padding:13px}.stock-validity-card-photo{width:62px;height:62px}}

@@ -1,6 +1,6 @@
 {
   "name": "disb-gestao",
-  "version": "1.7.40",
+  "version": "1.7.41",
   "private": true,
   "scripts": {
     "prepare:web": "node scripts/copy-web.mjs",
@@ -26,6 +26,7 @@
     "pdf-lib": "1.17.1"
   },
   "devDependencies": {
-    "@capacitor/cli": "latest"
+    "@capacitor/cli": "latest",
+    "read-excel-file": "^9.3.12"
   }
 }
