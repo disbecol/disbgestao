@@ -1196,6 +1196,7 @@ button[data-sales-delivered]:hover{
 .pull-checklist-km{padding:14px;border:1px solid #bed6f4;border-radius:12px;background:#eef6ff}.pull-checklist-km label{font-weight:850;color:#153c67}.pull-checklist-km input{margin-top:7px}
 .pull-checklist-km-feedback{margin:8px 0 0;color:#315979;font-size:13px;line-height:1.45}.pull-checklist-km-feedback.warning{color:#8b4c06;font-weight:750}
 .pull-checklist-km-history-alert{color:#8b4c06;font-weight:750}
+.pull-timeline-item.checklist .dot{background:#25845a;border-color:#d9f4e3}
 @media(max-width:620px){.pull-week-buttons{grid-template-columns:1fr}.pull-checklist-form{max-height:60vh}}
 .pull-plan-list-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}.pull-plan-list-head .section-title{margin:0}.pull-plan-list-head .muted-text{margin:4px 0 0}
 .pull-plan-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}.pull-plan-list.empty-state{display:block}

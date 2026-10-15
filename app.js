@@ -215,7 +215,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.41-stock-validity',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.42-pull-checklist',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -3269,7 +3269,7 @@ async function onPullAssignedPlanClick(event){
     const target=await refreshPullGpsTarget();
     const gps=await captureGps({maxAccuracy:target,maxWaitMs:15000,onProgress:s=>{status.textContent=`GPS atual ±${Math.round(s.accuracy)} m • limite ≤ ${target} m…`;}});
     button.textContent='Iniciando…';
-    const {error}=await sb.rpc('start_planned_pull_trip',{p_plan_id:plan.id,p_latitude:gps.latitude,p_longitude:gps.longitude,p_accuracy:gps.accuracy,p_device_at:gps.capturedAt});
+    const {error}=await sb.rpc('start_planned_pull_trip_v2',{p_plan_id:plan.id,p_latitude:gps.latitude,p_longitude:gps.longitude,p_accuracy:gps.accuracy,p_device_at:gps.capturedAt});
     if(error)throw error;
     status.className='gps-status ok';status.textContent='Viagem iniciada com GPS validado.';
     toast('Viagem iniciada. Os dois motoristas já podem acompanhar o ciclo.','success');
@@ -3407,7 +3407,7 @@ function setupPullRealtime(){
   teardownPullRealtime();
   if(!sb||(!canPull()&&!canNri()))return;
   pullRealtimeChannel=sb.channel(`pull-${authUser.id}-${Date.now()}`);
-  ['pull_trips','pull_events','pull_occurrences','pull_track_points','pull_settings','marketplace_receipts'].forEach(table=>{
+  ['pull_trips','pull_events','pull_occurrences','pull_checklist_runs','pull_track_points','pull_settings','marketplace_receipts'].forEach(table=>{
     pullRealtimeChannel.on('postgres_changes',{event:'*',schema:'public',table},()=>schedulePullReload());
   });
   pullRealtimeChannel.subscribe();
@@ -3492,9 +3492,9 @@ function renderPullDriver(){
   if(openOcc){occBox.classList.remove('hidden');occBox.innerHTML=`<div><small>OCORRÊNCIA EM ANDAMENTO</small><strong>${esc(openOcc.occurrence_name)}</strong><span>Iniciada ${fmtDateTime(openOcc.started_at)} por ${esc(openOcc.started_by_name)}</span></div><button class="btn primary" data-end-occ="${openOcc.id}" ${pullIsActiveDriver()?'':'disabled'}>Encerrar ocorrência</button>`;}
   else{occBox.classList.add('hidden');occBox.innerHTML='';}
   $('pullOccurrenceButtons').innerHTML=pullOccurrenceTypes.map(x=>`<button class="btn secondary" data-occ="${x.id}" ${(!pullIsActiveDriver()||!!openOcc)?'disabled':''}>+ ${esc(x.name)}</button>`).join('');
-  const timeline=[...pullDriverEvents.map(x=>({kind:'STEP',at:x.recorded_at,name:pullNumberedStepName(x),user:x.user_name,gps:`${Number(x.latitude).toFixed(5)}, ${Number(x.longitude).toFixed(5)}`,extra:`precisão ±${Math.round(Number(x.gps_accuracy)||0)} m${x.geofence_status==='INSIDE'?` • dentro do raio • ${Math.round(x.distance_factory_m||0)} m`:x.geofence_status==='OUTSIDE'?` • fora do raio • ${Math.round(x.distance_factory_m||0)} m • permitido`:''}`})),...pullDriverOccurrences.map(x=>({kind:'OCC',at:x.started_at,name:x.occurrence_name,user:x.started_by_name,gps:`${Number(x.start_latitude).toFixed(5)}, ${Number(x.start_longitude).toFixed(5)}`,extra:x.status==='OPEN'?'Em andamento':`Encerrada ${fmtDateTime(x.ended_at)}`}))].sort((a,b)=>new Date(a.at)-new Date(b.at));
+  const timeline=[...pullDriverEvents.map(x=>({kind:'STEP',at:x.recorded_at,name:pullNumberedStepName(x),user:x.user_name,gps:`${Number(x.latitude).toFixed(5)}, ${Number(x.longitude).toFixed(5)}`,extra:`precisão ±${Math.round(Number(x.gps_accuracy)||0)} m${x.geofence_status==='INSIDE'?` • dentro do raio • ${Math.round(x.distance_factory_m||0)} m`:x.geofence_status==='OUTSIDE'?` • fora do raio • ${Math.round(x.distance_factory_m||0)} m • permitido`:''}`})),...pullChecklistRuns.filter(x=>x.trip_id===pullActiveTrip.id&&!x._sync_error).map(x=>({kind:'CHECKLIST',at:x.device_at||x.recorded_at,name:`Checklist • ${pullCheckpointLabels[x.checkpoint_code]||x.checkpoint_code}`,user:x.driver_name||'Motorista',gps:x.latitude!=null&&x.longitude!=null?`${Number(x.latitude).toFixed(5)}, ${Number(x.longitude).toFixed(5)}`:'GPS indisponível',extra:x.odometer_km!=null?`${Number(x.odometer_km).toLocaleString('pt-BR')} km`:''})),...pullDriverOccurrences.map(x=>({kind:'OCC',at:x.started_at,name:x.occurrence_name,user:x.started_by_name,gps:`${Number(x.start_latitude).toFixed(5)}, ${Number(x.start_longitude).toFixed(5)}`,extra:x.status==='OPEN'?'Em andamento':`Encerrada ${fmtDateTime(x.ended_at)}`}))].sort((a,b)=>new Date(a.at)-new Date(b.at));
   const tl=$('pullDriverTimeline');
-  if(!timeline.length){tl.className='pull-timeline empty-state';tl.textContent='Nenhuma etapa.';}else{tl.className='pull-timeline';tl.innerHTML=timeline.map((x,i)=>`<div class="pull-timeline-item ${x.kind==='OCC'?'occurrence':''}"><span class="dot"></span><div><small>${fmtDateTime(x.at)}</small><strong>${esc(x.name)}</strong><span>${esc(x.user)} • ${esc(x.gps)}${x.extra?` • ${esc(x.extra)}`:''}</span>${pullTimelineDurationHtml(x,timeline[i+1])}</div></div>`).join('');}
+  if(!timeline.length){tl.className='pull-timeline empty-state';tl.textContent='Nenhuma etapa.';}else{tl.className='pull-timeline';tl.innerHTML=timeline.map((x,i)=>`<div class="pull-timeline-item ${x.kind==='OCC'?'occurrence':x.kind==='CHECKLIST'?'checklist':''}${x.kind==='CHECKLIST'&&pullChecklistRuns.some(run=>run.trip_id===pullActiveTrip.id&&run._offline&&(run.device_at||run.recorded_at)===x.at)?' offline-pending-row':''}"><span class="dot"></span><div><small>${fmtDateTime(x.at)}</small><strong>${esc(x.name)}</strong><span>${esc(x.user)} • ${esc(x.gps)}${x.extra?` • ${esc(x.extra)}`:''}</span>${pullTimelineDurationHtml(x,timeline[i+1])}</div></div>`).join('');}
   startPullClock();
 }
 function startPullClock(){stopPullClock();const tick=()=>{if(!$('pullActiveElapsed')||!pullActiveTrip)return;const sec=Math.max(0,Math.floor((Date.now()-new Date(pullActiveTrip.started_at).getTime())/1000));$('pullActiveElapsed').textContent=fmtDurationSeconds(sec);};tick();pullClockTimer=setInterval(tick,1000);}
@@ -7217,7 +7217,7 @@ recordPullNextStep = async function(){
   }
 };
 const renderPullDriverV151=renderPullDriver;
-renderPullDriver = function(){renderPullDriverV151();const tl=$('pullDriverTimeline');if(tl){tl.querySelectorAll('.pull-timeline-item').forEach((el,i)=>{const ordered=[...pullDriverEvents.map(x=>({kind:'STEP',raw:x})),...pullDriverOccurrences.map(x=>({kind:'OCC',raw:x}))].sort((a,b)=>new Date(a.raw.recorded_at||a.raw.started_at)-new Date(b.raw.recorded_at||b.raw.started_at));if(ordered[i]?.raw?._offline)el.classList.add('offline-pending-row');});}};
+renderPullDriver = function(){renderPullDriverV151();const tl=$('pullDriverTimeline');if(tl){tl.querySelectorAll('.pull-timeline-item:not(.checklist)').forEach((el,i)=>{const ordered=[...pullDriverEvents.map(x=>({kind:'STEP',raw:x})),...pullDriverOccurrences.map(x=>({kind:'OCC',raw:x}))].sort((a,b)=>new Date(a.raw.recorded_at||a.raw.started_at)-new Date(b.raw.recorded_at||b.raw.started_at));if(ordered[i]?.raw?._offline)el.classList.add('offline-pending-row');});}};
 const renderPullDriverBeforePlans=renderPullDriver;
 renderPullDriver=function(){
   renderPullDriverBeforePlans();renderPullActiveSchedule();
@@ -11931,7 +11931,13 @@ processOfflineRecord=async function(row){
 };
 
 const pullPlanCardHtmlBeforeChecklist=pullPlanCardHtml;
-pullPlanCardHtml=function(plan,analyst=false){const html=pullPlanCardHtmlBeforeChecklist(plan,analyst);const label=pullWeekLabels[plan.week_trip_type]||'Regra semanal anterior';return html.replace('<div class="pull-plan-meta">',`<div class="pull-plan-meta"><span><b>${esc(label)}</b></span>`);};
+pullPlanCardHtml=function(plan,analyst=false){
+  const html=pullPlanCardHtmlBeforeChecklist(plan,analyst);
+  const label=pullWeekLabels[plan.week_trip_type]||'Regra semanal anterior';
+  const withWeek=html.replace('<div class="pull-plan-meta">',`<div class="pull-plan-meta"><span><b>${esc(label)}</b></span>`);
+  return !analyst&&plan.cycle_type==='PULL'&&plan.week_trip_type==='FIRST'
+    ?withWeek.replace('>Iniciar viagem</button>','>Preencher checklist e iniciar</button>'):withWeek;
+};
 
 async function pullLoadChecklistState(){
   if(!pullActiveTrip?.week_trip_type){pullChecklistQuestions=[];pullChecklistRequirements=[];pullChecklistRuns=[];pullChecklistLastKm=null;pullChecklistStateReady=true;renderPullDriver();return;}
@@ -11945,7 +11951,7 @@ async function pullLoadChecklistState(){
         sb.rpc('pull_checklist_last_km',{p_trip_id:pullActiveTrip.id})
       ]);
       const error=questions.error||requirements.error||runs.error||lastKm.error;if(error)throw error;
-      pullChecklistQuestions=questions.data||[];pullChecklistRequirements=requirements.data||[];
+      pullChecklistQuestions=questions.data||[];pullChecklistRequirements=(requirements.data||[]).sort((a,b)=>a.sort_order-b.sort_order);
       pullChecklistRuns=runs.data||[];
       pullChecklistLastKm=lastKm.data?.[0]||null;
       const localKm=await pullCachedVehicleKm();
@@ -11964,14 +11970,14 @@ async function pullLoadChecklistState(){
     }catch(error){
       const cached=await offlineStateGet(key);
       if(!cached)throw error;
-      pullChecklistQuestions=cached.questions||[];pullChecklistRequirements=cached.requirements||[];
+      pullChecklistQuestions=cached.questions||[];pullChecklistRequirements=(cached.requirements||[]).sort((a,b)=>a.sort_order-b.sort_order);
       pullChecklistRuns=cached.runs||[];pullChecklistLastKm=cached.lastKm||null;
       pullChecklistStateReady=true;
       console.warn('Checklist: usando cópia local',error);
     }
   }else{
     const cached=await offlineStateGet(key);
-    pullChecklistQuestions=cached?.questions||[];pullChecklistRequirements=cached?.requirements||[];
+    pullChecklistQuestions=cached?.questions||[];pullChecklistRequirements=(cached?.requirements||[]).sort((a,b)=>a.sort_order-b.sort_order);
     pullChecklistRuns=cached?.runs||[];pullChecklistLastKm=cached?.lastKm||null;
     const localKm=await pullCachedVehicleKm();
     if(localKm&&(!pullChecklistLastKm||Date.parse(localKm.recorded_at)>Date.parse(pullChecklistLastKm.recorded_at)))pullChecklistLastKm=localKm;
@@ -11995,18 +12001,28 @@ function pullChecklistGatePending(){const next=pullNextStep();return next?pullCh
 const renderPullDriverBeforeChecklist=renderPullDriver;
 renderPullDriver=function(){
   renderPullDriverBeforeChecklist();
-  const card=$('pullChecklistCard');if(!card)return;
-  const pending=pullChecklistPending(),next=pending[0];
-  if(!pullActiveTrip?.week_trip_type){card.classList.add('hidden');card.innerHTML='';return;}
-  const done=pullChecklistRuns.filter(run=>!run._sync_error).length,total=pullChecklistRequirements.length;
-  card.classList.remove('hidden');
-  card.innerHTML=`<div class="pull-checklist-heading"><div><small>VERIFICAÇÃO DA CARRETA</small><h2>${next?esc(pullCheckpointLabels[next.checkpoint_code]||'Checklist pendente'):'Checklists da viagem'}</h2><p>${!pullChecklistStateReady?'Conecte-se para carregar as regras do checklist.':next?`Motorista ${next.driver_no} • ${next.checklist_type==='DEPARTURE'?'saída':'retorno'} • responda antes de continuar.${['D1_UNIT_LAST','SOLO_UNIT_LAST','TRANSFER_END'].includes(next.checkpoint_code)?' Preencha somente ao chegar ao destino.':''}`:'Nenhum checklist pendente nesta etapa.'}</p></div><span class="status ${next?'pending':'approved'}">${done} / ${total}</span></div>${next?`<button type="button" class="btn primary wide" data-pull-checklist="${esc(next.checkpoint_code)}" ${((next.driver_no===1?pullActiveTrip.driver1_id:pullActiveTrip.driver2_id)!==authUser?.id||!pullChecklistQuestions.length)?'disabled':''}>${pullChecklistQuestions.length?'Preencher checklist': 'Perguntas indisponíveis neste aparelho'}</button>`:''}`;
-  const blocked=pullChecklistGatePending();
-  if(blocked){const button=$('btnPullNextStep');button.disabled=true;button.textContent='Preencha o checklist para continuar';}
-  if(!pullChecklistStateReady){const button=$('btnPullNextStep');button.disabled=true;button.textContent='Carregue o checklist para continuar';}
+  if(!pullActiveTrip?.week_trip_type)return;
+  const next=pullChecklistPending()[0],button=$('btnPullNextStep');
+  if(!pullChecklistStateReady){
+    $('pullNextStepName').textContent='Carregar checklist da viagem';
+    $('pullNextStepHint').textContent='Conecte-se para carregar as regras antes de continuar.';
+    button.disabled=true;button.textContent='Checklist indisponível neste aparelho';
+    return;
+  }
+  if(!next)return;
+  const done=pullChecklistRuns.filter(run=>run.trip_id===pullActiveTrip.id&&!run._sync_error).length,total=pullChecklistRequirements.length;
+  $('pullNextStepName').textContent=`Checklist • ${pullCheckpointLabels[next.checkpoint_code]||'Verificação da carreta'}`;
+  $('pullNextStepHint').textContent=`Checklist ${Math.min(done+1,total)}/${total} • Motorista ${next.driver_no} • ${next.checklist_type==='DEPARTURE'?'saída':'retorno'}.${['D1_UNIT_LAST','SOLO_UNIT_LAST','TRANSFER_END'].includes(next.checkpoint_code)?' Preencha ao chegar ao destino, antes de encerrar a viagem.':''}`;
+  button.disabled=(next.driver_no===1?pullActiveTrip.driver1_id:pullActiveTrip.driver2_id)!==authUser?.id||!pullChecklistQuestions.length;
+  button.textContent=pullChecklistQuestions.length?'Preencher checklist':'Perguntas indisponíveis neste aparelho';
 };
 const recordPullNextStepBeforeChecklist=recordPullNextStep;
-recordPullNextStep=async function(){if(pullActiveTrip?.week_trip_type&&!pullChecklistStateReady)return toast('Conecte-se para carregar o checklist desta viagem.','error');const pending=pullChecklistGatePending();if(pending)return toast('Preencha o checklist antes da próxima etapa.','error');return recordPullNextStepBeforeChecklist();};
+recordPullNextStep=async function(){
+  if(pullActiveTrip?.week_trip_type&&!pullChecklistStateReady)return toast('Conecte-se para carregar o checklist desta viagem.','error');
+  const pending=pullChecklistPending()[0];
+  if(pending)return pullOpenChecklist(pending.checkpoint_code);
+  return recordPullNextStepBeforeChecklist();
+};
 
 function pullChecklistFormHtml(req){
   return `<div class="notice compact">${esc(pullCheckpointLabels[req.checkpoint_code]||req.checkpoint_code)} • Motorista ${req.driver_no}. Informe o KM atual e responda todos os itens. Para NOK, descreva o problema.</div><form id="pullChecklistAnswerForm" class="pull-checklist-form"><div class="field pull-checklist-km"><label for="pullChecklistOdometer">Quilometragem atual do veículo (km) *</label><input id="pullChecklistOdometer" type="number" inputmode="numeric" min="0" max="9999999" step="1" required placeholder="Ex.: 125430" autocomplete="off"><p id="pullChecklistKmFeedback" class="pull-checklist-km-feedback" aria-live="polite"></p></div>${pullChecklistQuestions.map((q,index)=>`<div class="pull-checklist-question" data-question-id="${q.id}"><div class="pull-checklist-question-title"><span>${index+1}. ${esc(q.question)}</span>${q.critical?'<b>Crítico</b>':''}</div><div class="pull-checklist-answer-options"><label><input type="radio" name="answer-${q.id}" value="OK"><span class="ok">OK</span></label><label><input type="radio" name="answer-${q.id}" value="NOK"><span class="nok">NOK</span></label></div><div class="field pull-checklist-note hidden"><label>Observação do problema *</label><textarea maxlength="1000" rows="2" placeholder="Descreva o problema encontrado"></textarea></div></div>`).join('')}</form>`;
@@ -12098,6 +12114,9 @@ function pullOpenChecklist(code){
     {label:'Salvar checklist',class:'primary',onClick:event=>pullSubmitChecklist(req,event)},
     {label:'Voltar',class:'secondary',onClick:closeModal}
   ]);
+  bindPullChecklistAnswerForm();
+}
+function bindPullChecklistAnswerForm(){
   $('pullChecklistAnswerForm').addEventListener('change',event=>{
     const question=event.target.closest('.pull-checklist-question');if(!question)return;
     const isNok=question.querySelector('input[type="radio"]:checked')?.value==='NOK';
@@ -12106,6 +12125,61 @@ function pullOpenChecklist(code){
   $('pullChecklistOdometer').addEventListener('input',pullUpdateKmFeedback);
   pullUpdateKmFeedback();
 }
+const onPullAssignedPlanClickBeforePrestartChecklist=onPullAssignedPlanClick;
+onPullAssignedPlanClick=async function(event){
+  const button=event.target.closest('[data-pull-plan-start]');
+  if(!button||button.disabled)return;
+  const plan=pullAssignedPlans.find(row=>row.id===button.dataset.pullPlanStart);
+  if(!plan||plan.cycle_type!=='PULL'||plan.week_trip_type!=='FIRST')
+    return onPullAssignedPlanClickBeforePrestartChecklist(event);
+  if(plan.driver1_id!==authUser?.id)return toast('Apenas o Motorista 1 pode iniciar esta viagem.','error');
+  if(pullActiveTrip)return toast('Conclua a viagem em andamento antes de iniciar outra.','error');
+  if(!navigator.onLine)return toast('Conecte-se à internet para iniciar a viagem.','error');
+  button.disabled=true;button.textContent='Carregando checklist…';
+  try{
+    const [questions,lastKm]=await Promise.all([
+      sb.from('pull_checklist_questions').select('*').eq('active',true).order('sort_order'),
+      sb.rpc('pull_plan_checklist_last_km',{p_plan_id:plan.id})
+    ]);
+    if(questions.error||lastKm.error)throw questions.error||lastKm.error;
+    pullChecklistQuestions=questions.data||[];
+    if(!pullChecklistQuestions.length)throw new Error('Nenhuma pergunta ativa no checklist.');
+    pullChecklistRuns=[];pullChecklistLastKm=lastKm.data?.[0]||null;
+    const checkpoint=plan.solo_trip?'SOLO_START':'D1_START';
+    const req={checkpoint_code:checkpoint,driver_no:1};
+    openModal('Checklist antes da viagem',pullCheckpointLabels[checkpoint],pullChecklistFormHtml(req),[
+      {label:'Salvar checklist e iniciar viagem',class:'primary',onClick:async event=>{
+        const save=event.currentTarget;let answers,odometerKm;
+        try{odometerKm=pullReadOdometer();answers=pullCollectAnswers();}
+        catch(error){return toast(error.message,'error');}
+        save.disabled=true;save.textContent='Capturando GPS…';
+        const status=$('pullAssignedGps');
+        try{
+          const target=await refreshPullGpsTarget();
+          const gps=await captureGps({maxAccuracy:target,maxWaitMs:15000,
+            onProgress:s=>{if(status)status.textContent=`GPS atual ±${Math.round(s.accuracy)} m • limite ≤ ${target} m…`;}});
+          save.textContent='Salvando checklist e iniciando…';
+          const {error}=await sb.rpc('start_planned_pull_trip_checked',{
+            p_plan_id:plan.id,p_latitude:gps.latitude,p_longitude:gps.longitude,
+            p_accuracy:gps.accuracy,p_device_at:gps.capturedAt,
+            p_answers:answers,p_odometer_km:odometerKm
+          });
+          if(error)throw error;
+          closeModal();
+          if(status){status.className='gps-status ok';status.textContent='Checklist salvo e viagem iniciada.';}
+          toast('Checklist salvo. Viagem iniciada.','success');
+          await loadPullActiveTrip();
+        }catch(error){
+          if(status){status.className='gps-status error';status.textContent=humanPullPlanError(error);}
+          toast(humanPullPlanError(error),'error');save.disabled=false;save.textContent='Salvar checklist e iniciar viagem';
+        }
+      }},
+      {label:'Voltar',class:'secondary',onClick:closeModal}
+    ]);
+    bindPullChecklistAnswerForm();
+  }catch(error){toast(humanPullPlanError(error),'error');}
+  finally{button.disabled=false;button.textContent='Preencher checklist e iniciar';}
+};
 const processOfflineRecordBeforeChecklist=processOfflineRecord;
 processOfflineRecord=async function(row){
   if(row.type!=='PULL_CHECKLIST')return processOfflineRecordBeforeChecklist(row);
@@ -12194,7 +12268,6 @@ renderPullTripDetailExtras=async function(trip){
 };
 
 document.addEventListener('DOMContentLoaded',()=>{
-  $('pullChecklistCard')?.addEventListener('click',event=>{const button=event.target.closest('[data-pull-checklist]');if(button)pullOpenChecklist(button.dataset.pullChecklist);});
   $('formPullChecklistQuestion')?.addEventListener('submit',pullSaveQuestion);
   $('pullChecklistQuestionClear')?.addEventListener('click',pullClearQuestion);
   $('pullChecklistQuestionList')?.addEventListener('click',pullQuestionAction);

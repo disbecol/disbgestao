@@ -14,7 +14,7 @@ function checklistContext(){
   const source=app.split('// PULL_CHECKLIST_BEGIN')[1]?.split('// PULL_CHECKLIST_END')[0];
   assert.ok(source,'O checklist precisa estar incorporado ao código principal.');
   const stubs=['clearPullPlanForm','pullPlanCardHtml','onPullPlansClick','savePullPlan',
-    'loadPullActiveTrip','renderPullDriver','recordPullNextStep','processOfflineRecord',
+    'onPullAssignedPlanClick','loadPullActiveTrip','renderPullDriver','recordPullNextStep','processOfflineRecord',
     'syncOfflineQueue','humanPullError','humanPullPlanError','loadPullConfig',
     'renderPullTripDetailExtras'];
   const context={document:{addEventListener(){},querySelector(){return null;}},navigator:{onLine:false},
@@ -36,6 +36,37 @@ test('bloqueia a etapa até todos os checklists do mesmo ponto estarem preenchid
   assert.equal(vm.runInContext('pullChecklistGatePending().checkpoint_code',ctx),'D1_UNIT_LAST');
   vm.runInContext(`pullChecklistRuns.push({checkpoint_code:'D1_UNIT_LAST'})`,ctx);
   assert.equal(vm.runInContext('pullChecklistGatePending()',ctx),undefined);
+});
+
+test('checklists de retorno e saída aparecem em sequência dentro da próxima etapa',()=>{
+  const ctx=checklistContext();
+  const elements=new Map([
+    ['pullNextStepName',{textContent:''}],['pullNextStepHint',{textContent:''}],
+    ['btnPullNextStep',{disabled:false,textContent:''}]
+  ]);
+  ctx.$=id=>elements.get(id)||null;
+  ctx.authUser={id:'driver-1'};
+  vm.runInContext(`pullActiveTrip={id:'trip-1',week_trip_type:'ROUTINE',driver1_id:'driver-1',driver2_id:'driver-2'};
+    pullDriverEvents=[{action_code:'ARRIVE_SUPPORT_OUT'}];
+    pullChecklistStateReady=true;
+    pullChecklistQuestions=[{id:'q1'}];
+    pullChecklistRequirements=[
+      {checkpoint_code:'D1_SUPPORT_OUT',after_action:'ARRIVE_SUPPORT_OUT',gate_action:'DRIVER_SWAP_OUT',driver_no:1,checklist_type:'RETURN'},
+      {checkpoint_code:'D2_SUPPORT_OUT',after_action:'ARRIVE_SUPPORT_OUT',gate_action:'DRIVER_SWAP_OUT',driver_no:2,checklist_type:'DEPARTURE'},
+      {checkpoint_code:'D2_SUPPORT_RETURN',after_action:'ARRIVE_SUPPORT_RETURN',gate_action:'DRIVER_SWAP_RETURN',driver_no:2,checklist_type:'RETURN'},
+      {checkpoint_code:'D1_SUPPORT_RETURN',after_action:'ARRIVE_SUPPORT_RETURN',gate_action:'DRIVER_SWAP_RETURN',driver_no:1,checklist_type:'DEPARTURE'}
+    ];`,ctx);
+  vm.runInContext('renderPullDriver()',ctx);
+  assert.match(elements.get('pullNextStepName').textContent,/Retorno do Motorista 1/);
+  assert.equal(elements.get('btnPullNextStep').textContent,'Preencher checklist');
+  assert.match(elements.get('pullNextStepHint').textContent,/Checklist 1\/4/);
+  vm.runInContext(`pullChecklistRuns=[{trip_id:'trip-1',checkpoint_code:'D1_SUPPORT_OUT'}]`,ctx);
+  vm.runInContext('renderPullDriver()',ctx);
+  assert.match(elements.get('pullNextStepName').textContent,/Saída do Motorista 2/);
+  assert.equal(elements.get('btnPullNextStep').disabled,true);
+  assert.match(elements.get('pullNextStepHint').textContent,/Checklist 2\/4/);
+  const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
+  assert.doesNotMatch(html,/id="pullChecklistCard"/);
 });
 
 test('resposta NOK exige observação antes de salvar',()=>{
