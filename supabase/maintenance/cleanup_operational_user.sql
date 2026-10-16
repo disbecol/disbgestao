@@ -3,32 +3,33 @@
 -- Por padrao, v_execute=false: o script mostra contagens e nao apaga nada.
 -- Para executar, troque v_execute para true nesta copia revisada.
 --
--- Preserva perfil, permissoes, unidades, cadastros compartilhados, estoque,
+-- Preserva perfil, permissoes, unidades, estoque,
 -- movimentos de materiais, tokens/dispositivos push, recibos de sincronizacao
 -- offline e revisoes feitas pelo usuario em avarias de outras pessoas.
--- Fotos do Storage nao sao apagadas; exporte-as antes de uma limpeza definitiva.
+-- Fotos de avarias/NRI no Storage nao sao apagadas por SQL. Arquivos de Puxada
+-- entram na fila do botao "Limpar arquivos pendentes" do Historico.
+-- Requer 69_pull_cycle_delete.sql.
 
 begin;
 
 do $$
 declare
   v_account text := 'marcelo';
+  v_target_id uuid := 'cd9f647a-7a6e-48cb-b8de-098590f2ec9d';
   v_execute boolean := false;
   v_uid uuid;
   v_matches integer;
 begin
   select count(*) into v_matches
   from public.profiles
-  where lower(btrim(coalesce(name,'')))=lower(v_account)
-     or lower(btrim(coalesce(username,'')))=lower(v_account);
+  where id=v_target_id and lower(btrim(coalesce(username,'')))=v_account;
 
   if v_matches<>1 then
     raise exception 'Esperado exatamente 1 perfil para "%"; encontrados %.', v_account, v_matches;
   end if;
 
   select id into v_uid from public.profiles
-  where lower(btrim(coalesce(name,'')))=lower(v_account)
-     or lower(btrim(coalesce(username,'')))=lower(v_account)
+  where id=v_target_id and lower(btrim(coalesce(username,'')))=v_account
   limit 1;
 
   -- Um registro de outro autor impede a exclusao em cascata do seu pai.
@@ -45,12 +46,10 @@ begin
     );
 
   create temp table _cleanup_damage_requests on commit drop as
-  select r.id from public.damage_requests r
-  where r.created_by=v_uid and r.delivery_user_id=v_uid;
+  select r.id from public.damage_requests r where r.created_by=v_uid;
 
   create temp table _cleanup_sales_damage_requests on commit drop as
-  select r.id from public.sales_damage_requests r
-  where r.created_by=v_uid and r.seller_id=v_uid;
+  select r.id from public.sales_damage_requests r where r.created_by=v_uid;
 
   create temp table _cleanup_fefo_counts on commit drop as
   select c.id from public.fefo_counts c
@@ -82,16 +81,16 @@ begin
         and n.id not in (select id from _cleanup_nri_requests)
     );
 
-  -- Viagens com outro motorista sao compartilhadas e permanecem.
-  -- Na viagem solo, driver2_id aponta para o proprio driver1_id.
+  -- Inclui Puxadas e Transferencias compartilhadas com outro motorista.
+  -- As NRIs de outros autores sao preservadas e desvinculadas.
   create temp table _cleanup_pull_trips on commit drop as
   select t.id from public.pull_trips t
-  where t.driver1_id=v_uid and t.solo_trip=true and t.driver2_id=v_uid
-    and not exists (
-      select 1 from public.nri_requests n
-      where n.pull_trip_id=t.id
-        and n.id not in (select id from _cleanup_nri_requests)
-    );
+  where t.driver1_id=v_uid or t.driver2_id=v_uid;
+
+  create temp table _cleanup_pull_plans on commit drop as
+  select p.id from public.pull_trip_plans p
+  where p.trip_id is null
+    and (p.created_by=v_uid or p.driver1_id=v_uid or p.driver2_id=v_uid);
 
   -- O inventario pode ter gerado ajustes no estoque. Esses casos ficam
   -- preservados para nao perder a origem contabil dos movimentos.
@@ -112,15 +111,23 @@ begin
   raise notice 'Contagens Ativo de Giro: %', (select count(*) from _cleanup_rotating_counts);
   raise notice 'Entradas Ativo de Giro: %', (select count(*) from _cleanup_rotating_entries);
   raise notice 'Recebimentos Marketplace: %', (select count(*) from _cleanup_marketplace_receipts);
-  raise notice 'Viagens solo Puxada/Transferencia: %', (select count(*) from _cleanup_pull_trips);
+  raise notice 'Ciclos Puxada/Transferencia, inclusive compartilhados: %',
+    (select count(*) from _cleanup_pull_trips);
+  raise notice 'Viagens planejadas pelo usuario ou com ele como motorista, sem ciclo iniciado: %',
+    (select count(*) from _cleanup_pull_plans);
+  raise notice 'NRIs de outros autores vinculados a esses ciclos e preservados: %',
+    (select count(*) from public.nri_requests n
+     where n.pull_trip_id in (select id from _cleanup_pull_trips)
+       and n.id not in (select id from _cleanup_nri_requests));
   raise notice 'Conferencias de vasilhames: %', (select count(*) from public.container_conferences where checker_id=v_uid);
   raise notice 'Inventarios de Materiais sem ajuste de estoque: %', (select count(*) from _cleanup_material_counts);
   raise notice 'Inventarios de Materiais preservados por ajuste: %',
     (select count(*) from public.material_inventory_counts c
      where c.counter_id=v_uid and c.id not in (select id from _cleanup_material_counts));
-  raise notice 'Viagens compartilhadas preservadas: %',
-    (select count(*) from public.pull_trips t
-     where t.driver1_id=v_uid and t.id not in (select id from _cleanup_pull_trips));
+  raise notice 'Viagens de outros motoristas apenas planejadas por Marcelo e preservadas: %',
+    (select count(*) from public.pull_trip_plans p
+     where p.created_by=v_uid and p.trip_id is not null
+       and p.trip_id not in (select id from _cleanup_pull_trips));
 
   if not v_execute then
     raise notice 'MODO PREVIA: nenhuma linha foi apagada. Para executar, altere v_execute para true.';
@@ -157,9 +164,18 @@ begin
 
   delete from public.marketplace_receipts
   where id in (select id from _cleanup_marketplace_receipts);
-  -- Eventos, ocorrencias, trilha GPS e tokens da viagem usam CASCADE.
-  delete from public.pull_trips
-  where id in (select id from _cleanup_pull_trips);
+  -- Remove também checklists, planos, trajeto, eventos e notas de cada ciclo.
+  -- Os PDFs/fotos entram na fila do Storage para limpeza pelo Admin.
+  perform public.purge_pull_cycle_data(id) from _cleanup_pull_trips;
+
+  insert into public.pull_deleted_storage_files(subject_id,subject_code,bucket_id,object_name)
+  select p.id,p.plate,o.bucket_id,o.name
+  from public.pull_trip_plans p join storage.objects o
+    on o.bucket_id='puxada-notas' and split_part(o.name,'/',1)=p.id::text
+  where p.id in (select id from _cleanup_pull_plans)
+  on conflict (bucket_id,object_name) do nothing;
+  delete from public.pull_trip_invoices where plan_id in (select id from _cleanup_pull_plans);
+  delete from public.pull_trip_plans where id in (select id from _cleanup_pull_plans);
 
   -- Itens e identificadores do inventario usam CASCADE. Saldo, cadastro e
   -- historico de movimentos dos materiais permanecem intactos.

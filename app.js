@@ -2963,7 +2963,7 @@ function bindPullEvents(){
   $('pullPlanDriver1')?.addEventListener('change',updatePullPlanFields);
   $('pullPlanClear')?.addEventListener('click',clearPullPlanForm);
   $('pullPlansRefresh')?.addEventListener('click',()=>loadPullPlans());
-  $('pullPlansList')?.addEventListener('click',onPullPlansClick);
+  $('pullPlansList')?.addEventListener('click',event=>onPullPlansClick(event));
   $('pullAssignedPlans')?.addEventListener('click',onPullAssignedPlanClick);
   $('pullAssignedRefresh')?.addEventListener('click',()=>loadAssignedPullPlans());
   $('formPullAttachment')?.addEventListener('submit',submitPullAttachment);
@@ -2991,7 +2991,7 @@ function bindPullEvents(){
   $('btnPullHistCsv')?.addEventListener('click',exportPullHistoryCsv);
   ['pullHistDe','pullHistAte','pullHistFactory','pullHistType'].forEach(id=>$(id)?.addEventListener('change',renderPullHistory));
   $('pullHistBusca')?.addEventListener('input',renderPullHistory);
-  $('tbodyPullHistory')?.addEventListener('click',onPullHistoryClick);
+  $('tbodyPullHistory')?.addEventListener('click',event=>onPullHistoryClick(event));
   $('pullMetricTabs')?.addEventListener('click',e=>{const b=e.target.closest('button[data-metric]');if(!b)return;if($('pullDashType')?.value==='TRANSFER'&&b.dataset.metric!=='CYCLE')return toast('Para Transferência, o indicador de tempo aplicável é o Ciclo Matriz → Filial → Matriz.','');pullMetric=b.dataset.metric;[...$('pullMetricTabs').querySelectorAll('button')].forEach(x=>x.classList.toggle('active',x===b));renderPullDashboard();});
   $('view-puxada-dashboard')?.addEventListener('click',e=>{const panel=e.target.closest('[data-pull-panel-tab]');if(panel){setPullDashboardPanel(panel.dataset.pullPanelTab);return;}const arrival=e.target.closest('[data-pull-arrival-tab]');if(arrival)setPullArrivalPanel(arrival.dataset.pullArrivalTab);});
   $('btnPullDashAtualizar')?.addEventListener('click',()=>loadPullDashboard());
@@ -12387,5 +12387,135 @@ async function importStockValidityFile(){
   }catch(error){toast(humanError(error),'error');button.disabled=false;}
   finally{button.textContent='Atualizar base da unidade';}
 }
+
+// PULL_CYCLE_DELETE_BEGIN
+// Exclusão administrativa: o banco remove o ciclo em uma transação e registra
+// os arquivos para remoção pela API do Storage, com nova tentativa se falhar.
+const renderPullHistoryBeforeDelete=renderPullHistory;
+renderPullHistory=function(){
+  renderPullHistoryBeforeDelete();
+  if(!isAdmin())return;
+  $('tbodyPullHistory')?.querySelectorAll('[data-hist-detail]').forEach(detail=>{
+    const trip=pullHistory.find(row=>row.id===detail.dataset.histDetail);
+    if(trip?.cycle_type!=='PULL')return;
+    const button=document.createElement('button');
+    button.type='button';button.className='mini-btn pull-delete-action';
+    button.dataset.pullDeleteCycle=trip.id;button.textContent='Excluir ciclo';
+    detail.parentElement?.appendChild(button);
+  });
+};
+const pullPlanCardHtmlBeforeDelete=pullPlanCardHtml;
+pullPlanCardHtml=function(plan,analyst=false){
+  const html=pullPlanCardHtmlBeforeDelete(plan,analyst);
+  if(!analyst||!isAdmin()||plan.cycle_type!=='PULL')return html;
+  const action=plan.trip_id
+    ?`<button type="button" class="mini-btn pull-delete-action" data-pull-delete-cycle="${esc(plan.trip_id)}">Excluir ciclo</button>`
+    :`<button type="button" class="mini-btn pull-delete-action" data-pull-delete-plan="${esc(plan.id)}">Excluir viagem</button>`;
+  return html.replace('</div></article>',`${action}</div></article>`);
+};
+const onPullHistoryClickBeforeDelete=onPullHistoryClick;
+onPullHistoryClick=function(event){
+  const button=event.target.closest('[data-pull-delete-cycle]');
+  if(button)return void openPullDeleteCycle(button.dataset.pullDeleteCycle);
+  return onPullHistoryClickBeforeDelete(event);
+};
+const onPullPlansClickBeforeDelete=onPullPlansClick;
+onPullPlansClick=function(event){
+  const cycle=event.target.closest('[data-pull-delete-cycle]');
+  if(cycle)return void openPullDeleteCycle(cycle.dataset.pullDeleteCycle);
+  const plan=event.target.closest('[data-pull-delete-plan]');
+  if(plan)return void openPullDeletePlan(plan.dataset.pullDeletePlan);
+  return onPullPlansClickBeforeDelete(event);
+};
+const loadPullHistoryBeforeDelete=loadPullHistory;
+loadPullHistory=async function(silent=false){
+  const result=await loadPullHistoryBeforeDelete(silent);
+  if(isAdmin())void refreshPullDeletedFilesButton();
+  return result;
+};
+
+async function refreshPullDeletedFilesButton(){
+  const button=$('btnPullDeletedFiles');if(!button||!isAdmin())return;
+  const {data,error}=await sb.from('pull_deleted_storage_files').select('id').limit(1000);
+  if(error){button.classList.add('hidden');console.warn('Arquivos pendentes da Puxada',error);return;}
+  const total=(data||[]).length;
+  button.classList.toggle('hidden',total===0);
+  button.textContent=`Limpar ${total}${total===1000?'+':''} arquivo${total===1?'':'s'} pendente${total===1?'':'s'}`;
+}
+async function removePullDeletedFiles(files){
+  let failed=0;
+  for(const file of files){
+    if(!['puxada-anexos','puxada-notas'].includes(file.bucket)||!file.path){failed++;continue;}
+    try{
+      const removed=await sb.storage.from(file.bucket).remove([file.path]);
+      const acknowledged=await sb.rpc('ack_pull_deleted_file',{p_bucket:file.bucket,p_path:file.path});
+      if(acknowledged.error)throw removed.error||acknowledged.error;
+    }catch(error){failed++;console.warn('Arquivo privado pendente de remoção',file,error);}
+  }
+  await refreshPullDeletedFilesButton();
+  return failed;
+}
+async function retryPullDeletedFiles(){
+  if(!isAdmin()||!navigator.onLine)return toast('Conecte-se para limpar os arquivos pendentes.','error');
+  const button=$('btnPullDeletedFiles');button.disabled=true;button.textContent='Limpando arquivos…';
+  try{
+    const {data,error}=await sb.from('pull_deleted_storage_files').select('bucket_id,object_name').order('queued_at').limit(1000);
+    if(error)throw error;
+    const files=(data||[]).map(row=>({bucket:row.bucket_id,path:row.object_name}));
+    const failed=await removePullDeletedFiles(files);
+    toast(failed?`${failed} arquivo(s) ainda pendentes. Tente novamente.`:`${files.length} arquivo(s) removidos.`,failed?'error':'success');
+  }catch(error){toast(humanError(error),'error');}
+  finally{button.disabled=false;await refreshPullDeletedFilesButton();}
+}
+async function openPullDeleteCycle(tripId){
+  if(!isAdmin()||!navigator.onLine)return toast('A exclusão do ciclo exige acesso de administrador e internet.','error');
+  try{
+    const {data:preview,error}=await sb.rpc('preview_pull_cycle_deletion',{p_trip_id:tripId});
+    if(error)throw error;
+    if(!preview)throw new Error('Ciclo não encontrado.');
+    const code=String(preview.trip_code||'');
+    const body=`<div class="notice"><strong>${esc(code)} • ${esc(preview.plate)}</strong><br>${esc(preview.origin_unit)} • ${esc(preview.status)}<br>${esc(preview.driver1_name)} / ${esc(preview.driver2_name||'—')}</div><p>Serão removidos ${Number(preview.events)||0} etapas, ${Number(preview.checklists)||0} checklists, o trajeto, ocorrências, notas e ${Number(preview.files)||0} arquivo(s) privado(s) deste ciclo. <strong>${Number(preview.nris_preserved)||0} solicitação(ões) de NRI permanecerão no histórico, desvinculadas da Puxada.</strong></p><div class="field"><label for="pullDeleteConfirmCode">Digite ${esc(code)} para confirmar *</label><input id="pullDeleteConfirmCode" autocomplete="off" placeholder="${esc(code)}"></div>`;
+    openModal('Excluir ciclo de Puxada',`${code} • exclusão permanente`,body,[
+      {label:'Voltar',class:'secondary',onClick:closeModal},
+      {label:'Excluir ciclo',class:'danger',onClick:async event=>{
+        if($('pullDeleteConfirmCode')?.value.trim().toUpperCase()!==code.toUpperCase())return toast('Digite o código exato da Puxada.','error');
+        const button=event.currentTarget;button.disabled=true;button.textContent='Excluindo ciclo…';
+        try{
+          const {data,error}=await sb.rpc('delete_pull_cycle',{p_trip_id:tripId,p_trip_code:code});
+          if(error)throw error;
+          closeModal();
+          const failed=await removePullDeletedFiles(data?.files||[]);
+          await Promise.all([loadPullHistory(true),loadPullPlans(true),loadPullFarol(true)]);
+          toast(failed?`Ciclo ${code} excluído. ${failed} arquivo(s) aguardam nova tentativa.`:`Ciclo ${code} e arquivos excluídos.`,failed?'error':'success');
+        }catch(error){button.disabled=false;button.textContent='Excluir ciclo';toast(humanError(error),'error');}
+      }}
+    ]);
+  }catch(error){toast(humanError(error),'error');}
+}
+async function openPullDeletePlan(planId){
+  if(!isAdmin()||!navigator.onLine)return toast('A exclusão da viagem exige acesso de administrador e internet.','error');
+  const plan=pullPlans.find(row=>row.id===planId);
+  if(!plan||plan.trip_id||plan.cycle_type!=='PULL')return toast('Esta viagem já iniciou. Exclua o ciclo no histórico.','error');
+  const body=`<div class="notice"><strong>${esc(plan.plate)} → ${esc(plan.factory)}</strong><br>${esc(plan.origin_unit)} • ${esc(plan.driver1_name)} / ${esc(plan.driver2_name||'—')}</div><p>A viagem planejada e as notas anexadas serão excluídas permanentemente.</p><div class="field"><label for="pullDeleteConfirmPlate">Digite a placa ${esc(plan.plate)} para confirmar *</label><input id="pullDeleteConfirmPlate" autocomplete="off" placeholder="${esc(plan.plate)}"></div>`;
+  openModal('Excluir viagem planejada',plan.plate,body,[
+    {label:'Voltar',class:'secondary',onClick:closeModal},
+    {label:'Excluir viagem',class:'danger',onClick:async event=>{
+      if($('pullDeleteConfirmPlate')?.value.trim().toUpperCase()!==plan.plate.toUpperCase())return toast('Digite a placa exata da viagem.','error');
+      const button=event.currentTarget;button.disabled=true;button.textContent='Excluindo viagem…';
+      try{
+        const {data,error}=await sb.rpc('delete_pull_plan',{p_plan_id:plan.id,p_plate:plan.plate});
+        if(error)throw error;
+        closeModal();
+        const failed=await removePullDeletedFiles(data?.files||[]);
+        await loadPullPlans(true);
+        toast(failed?`Viagem excluída. ${failed} arquivo(s) aguardam nova tentativa.`:'Viagem planejada e arquivos excluídos.',failed?'error':'success');
+      }catch(error){button.disabled=false;button.textContent='Excluir viagem';toast(humanError(error),'error');}
+    }}
+  ]);
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  $('btnPullDeletedFiles')?.addEventListener('click',retryPullDeletedFiles);
+});
+// PULL_CYCLE_DELETE_END
 
 })();

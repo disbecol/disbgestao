@@ -7,7 +7,7 @@
   <title>Disb Gestão</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="vendor/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=1.7.42-pull-checklist">
+  <link rel="stylesheet" href="styles.css?v=1.7.43-pull-cycle-delete">
   <link rel="stylesheet" href="visual-refresh.css?v=1.7.1-visual">
   <link rel="stylesheet" href="pull-dashboard.css?v=1.7.1-pull-dashboard">
   <link rel="stylesheet" href="damage-geofence.css?v=2">
@@ -21,7 +21,7 @@
         <div class="login-logo"><img src="assets/icon-192.png" alt="Disb Gestão"></div>
         <span class="eyebrow light">ARMAZÉM • ENTREGA • CONFERÊNCIA</span>
         <h1>Disb Gestão</h1>
-        <p>NRI, Ativo de Giro, Refugo, avarias, vendas, conferência, FEFO e Puxada em um único aplicativo.</p><div class="login-version">v1.7.42</div>
+        <p>NRI, Ativo de Giro, Refugo, avarias, vendas, conferência, FEFO e Puxada em um único aplicativo.</p><div class="login-version">v1.7.43</div>
         <div class="feature-list">
           <span>✓ Cadastro por carreta e impressão de NRIs</span>
           <span>✓ Avarias de entrega e vendas com evidências</span>
@@ -48,7 +48,7 @@
 
   <div id="appShell" class="app-shell hidden">
     <aside id="sidebar" class="sidebar">
-      <div class="brand-row"><div class="brand-box"><img src="assets/icon-192.png" alt="Disb Gestão"></div><div><strong>Disb Gestão</strong><span>Supabase • tempo real</span></div></div><div class="app-version-badge">v1.7.42</div>
+      <div class="brand-row"><div class="brand-box"><img src="assets/icon-192.png" alt="Disb Gestão"></div><div><strong>Disb Gestão</strong><span>Supabase • tempo real</span></div></div><div class="app-version-badge">v1.7.43</div>
       <button class="nav-item home-nav-item" data-view="home"><span aria-hidden="true">⌂</span>Home</button>
       <div class="nav-area open" data-area="armazem" data-permission-any="NRI_PENDING_VIEW,MARKETPLACE_RECEIVE,NRI_CREATE,NRI_PRINT,NRI_HISTORY,NRI_DAMAGE_HISTORY,CONF_CREATE,CONF_OWN_HISTORY,CONF_HISTORY,CONF_DASHBOARD,FEFO_CREATE,FEFO_ACTIVE,FEFO_REPORT,ROTATING_ASSET_CREATE,ROTATING_ASSET_HISTORY,MATERIAL_INVENTORY,MATERIAL_STOCK_VIEW,MATERIAL_CATALOG,MATERIAL_MOVEMENT,REFUGO_AFERIR,REFUGO_HISTORICO,REFUGO_CONFIG">
         <button type="button" class="nav-area-toggle" aria-expanded="true"><span class="area-icon">▦</span><span class="area-name">Armazém</span><span class="area-chevron">⌄</span></button>
@@ -604,7 +604,7 @@
       <!-- PUXADA - HISTORICO -->
       <section id="view-puxada-historico" class="view admin-only role-puxada" data-permission-any="PULL_HISTORY,PULL_TMA_ADJUST">
         <div class="page-head"><div><div class="breadcrumb">Puxada / Admin</div><h1>Relatório / Histórico</h1><p>Viagens, tempos, percurso, ocorrências, ajustes de TMA e vínculo com NRI.</p></div><span class="page-chip admin">HISTÓRICO</span></div>
-        <div class="card"><div class="grid grid-4"><div class="field"><label>De</label><input id="pullHistDe" type="date"></div><div class="field"><label>Até</label><input id="pullHistAte" type="date"></div><div class="field"><label>Tipo</label><select id="pullHistType"><option value="">Todos</option><option value="PULL">Puxada</option><option value="TRANSFER">Transferência</option></select></div><div class="field"><label>Placa / motorista</label><input id="pullHistBusca"></div><div class="field"><label>Fábrica / destino</label><select id="pullHistFactory"><option value="">Todas</option></select></div></div><div class="actions right"><button id="btnPullHistAtualizar" class="btn secondary">Atualizar</button><button id="btnPullHistCsv" class="btn primary" type="button">Baixar CSV</button></div>
+        <div class="card"><div class="grid grid-4"><div class="field"><label>De</label><input id="pullHistDe" type="date"></div><div class="field"><label>Até</label><input id="pullHistAte" type="date"></div><div class="field"><label>Tipo</label><select id="pullHistType"><option value="">Todos</option><option value="PULL">Puxada</option><option value="TRANSFER">Transferência</option></select></div><div class="field"><label>Placa / motorista</label><input id="pullHistBusca"></div><div class="field"><label>Fábrica / destino</label><select id="pullHistFactory"><option value="">Todas</option></select></div></div><div class="actions right"><button id="btnPullDeletedFiles" class="btn secondary hidden" type="button">Limpar arquivos pendentes</button><button id="btnPullHistAtualizar" class="btn secondary">Atualizar</button><button id="btnPullHistCsv" class="btn primary" type="button">Baixar CSV</button></div>
           <div class="table-wrap pull-history-wrap"><table class="pull-history-table"><thead><tr id="pullHistoryHead"></tr></thead><tbody id="tbodyPullHistory"></tbody></table></div>
         </div>
       </section>
@@ -905,6 +905,6 @@
   <script src="invoice-note.js?v=1.7.31-keg-liters"></script>
   <script src="pull-camera.js?v=1.7.32-pull-camera"></script>
   <script src="stock-validity.js?v=1.7.41"></script>
-  <script src="app.js?v=1.7.42-pull-checklist"></script>
+  <script src="app.js?v=1.7.43-pull-cycle-delete"></script>
 </body>
 </html>
