@@ -215,7 +215,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.42-pull-checklist',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.43-checklist-report',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -3672,7 +3672,7 @@ function exportPullHistoryCsv(){
   downloadCsv(`historico_puxada_${localIsoDate(new Date())}.csv`,[headers,...matrix]);
 }
 function pullTripStatusLabel(t){return t.status==='IN_PROGRESS'?'Em andamento':t.kpi_status==='WAITING_NEXT_START'?'Viagem finalizada • aguardando próxima saída':t.kpi_status==='CLOSED'?'Ciclo KPI fechado':'Cancelado';}
-function onPullHistoryClick(e){const pdf=e.target.closest('[data-pull-summary]');if(pdf)return downloadPullTripSummary(pdf.dataset.pullSummary,pdf);const d=e.target.closest('[data-hist-detail]');if(d)return openPullTripDetail(d.dataset.histDetail,false);const a=e.target.closest('[data-tma-adjust]');if(a)return openPullTmaAdjust(a.dataset.tmaAdjust);}
+function onPullHistoryClick(e){const checklist=e.target.closest('[data-pull-checklist]');if(checklist)return downloadPullTripChecklist(checklist.dataset.pullChecklist,checklist);const pdf=e.target.closest('[data-pull-summary]');if(pdf)return downloadPullTripSummary(pdf.dataset.pullSummary,pdf);const d=e.target.closest('[data-hist-detail]');if(d)return openPullTripDetail(d.dataset.histDetail,false);const a=e.target.closest('[data-tma-adjust]');if(a)return openPullTmaAdjust(a.dataset.tmaAdjust);}
 
 let pullPdfLibraryPromise=null;
 const pullPdfBusy=new Set();
@@ -3681,7 +3681,7 @@ async function ensurePullPdfLibrary(){
   if(window.PDFLib&&window.DISB_PULL_REPORT)return;
   if(!pullPdfLibraryPromise)pullPdfLibraryPromise=(async()=>{
     if(!window.PDFLib)await loadPullPdfScript('vendor/pdf-lib.min.js');
-    if(!window.DISB_PULL_REPORT)await loadPullPdfScript('pull-report.js?v=2');
+    if(!window.DISB_PULL_REPORT)await loadPullPdfScript('pull-report.js?v=3');
   })().catch(error=>{pullPdfLibraryPromise=null;throw error;});
   await pullPdfLibraryPromise;
 }
@@ -3715,6 +3715,20 @@ async function fetchPullReportNris(requests){
   }
   return rows;
 }
+async function fetchPullReportChecklists(tripId){
+  const checklistRuns=await fetchPullReportRows('pull_checklist_runs',tripId,'recorded_at');
+  const checklistAnswers=[];
+  for(let i=0;i<checklistRuns.length;i+=75){
+    const ids=checklistRuns.slice(i,i+75).map(row=>row.id);
+    for(let from=0;;from+=1000){
+      const {data,error}=await sb.from('pull_checklist_answers').select('*').in('run_id',ids).order('sort_order').range(from,from+999);
+      if(error)throw error;
+      checklistAnswers.push(...(data||[]));
+      if((data||[]).length<1000)break;
+    }
+  }
+  return {checklistRuns:checklistRuns.map(row=>({...row,checkpoint_label:pullCheckpointLabels[row.checkpoint_code]||row.checkpoint_code})),checklistAnswers};
+}
 async function savePdfDocument(name,bytes,{title,dialogTitle,successMessage,webShare=false}){
   const blob=new Blob([bytes],{type:'application/pdf'});
   if(isNativeCapacitor()){
@@ -3744,6 +3758,24 @@ async function savePdfDocument(name,bytes,{title,dialogTitle,successMessage,webS
 async function savePullReportPdf(name,bytes){
   return savePdfDocument(name,bytes,{title:`Resumo do ciclo ${name}`,dialogTitle:'Salvar ou compartilhar PDF',successMessage:'Resumo em PDF baixado com as fotos incorporadas.'});
 }
+async function downloadPullTripChecklist(tripId,button){
+  if(!hasPerm('PULL_HISTORY'))return toast('Seu usuário não possui permissão para baixar o checklist.','error');
+  if(!navigator.onLine)return toast('Conecte-se à internet para baixar os checklists.','error');
+  if(pullPdfBusy.has(tripId))return;
+  pullPdfBusy.add(tripId);
+  const oldText=button?.textContent;
+  if(button){button.disabled=true;button.textContent='Gerando PDF…';}
+  try{
+    await ensurePullPdfLibrary();
+    const {data:trip,error}=await sb.from('pull_trips').select('*').eq('id',tripId).eq('origin_unit',activeUnit).single();
+    if(error)throw error;
+    const checklists=await fetchPullReportChecklists(tripId);
+    const bytes=await window.DISB_PULL_REPORT.buildPdf({trip,...checklists,checklistOnly:true,generatedAt:new Date().toISOString()},window.PDFLib);
+    const name=`checklists-${String(trip.trip_code||trip.id).replace(/[^A-Za-z0-9_-]/g,'_')}.pdf`;
+    await savePdfDocument(name,bytes,{title:`Checklists do ciclo ${trip.trip_code}`,dialogTitle:'Salvar ou compartilhar checklist',successMessage:'Relatório dos checklists baixado em PDF.'});
+  }catch(error){console.warn('PDF dos checklists',error);toast(error?.message||'Não foi possível gerar o relatório dos checklists.','error');}
+  finally{pullPdfBusy.delete(tripId);if(button){button.disabled=false;button.textContent=oldText;}}
+}
 async function downloadPullTripSummary(tripId,button){
   if(!hasPerm('PULL_HISTORY'))return toast('Seu usuário não possui permissão para baixar o resumo.','error');
   if(!navigator.onLine)return toast('Conecte-se à internet para gerar o resumo completo.','error');
@@ -3755,16 +3787,17 @@ async function downloadPullTripSummary(tripId,button){
     await ensurePullPdfLibrary();
     const {data:trip,error:tripError}=await sb.from('pull_trips').select('*').eq('id',tripId).eq('origin_unit',activeUnit).single();
     if(tripError)throw tripError;
-    const [events,occurrences,tmaAudit,nriRequests,appointmentChanges,attachments]=await Promise.all([
+    const [events,occurrences,tmaAudit,nriRequests,appointmentChanges,attachments,checklists]=await Promise.all([
       fetchPullReportRows('pull_events',tripId,'recorded_at'),
       fetchPullReportRows('pull_occurrences',tripId,'started_at'),
       fetchPullReportRows('pull_tma_adjust_audit',tripId,'changed_at'),
       fetchPullReportRows('nri_requests',tripId,'created_at','pull_trip_id'),
       fetchPullReportRows('pull_appointment_changes',tripId,'changed_at'),
-      fetchPullReportAttachments(tripId)
+      fetchPullReportAttachments(tripId),
+      fetchPullReportChecklists(tripId)
     ]);
     const nris=await fetchPullReportNris(nriRequests);
-    const report={trip,statusLabel:pullTripStatusLabel(trip),solo:pullTripSolo(trip),metrics:pullTripMetrics(trip),appointmentMetrics:pullAppointmentMetrics(trip),events:events.map(row=>({...row,report_name:pullNumberedStepName(row,trip)})),occurrences,tmaAudit,nriRequests,nris,appointmentChanges,attachments,generatedAt:new Date().toISOString()};
+    const report={trip,statusLabel:pullTripStatusLabel(trip),solo:pullTripSolo(trip),metrics:pullTripMetrics(trip),appointmentMetrics:pullAppointmentMetrics(trip),events:events.map(row=>({...row,report_name:pullNumberedStepName(row,trip)})),occurrences,tmaAudit,nriRequests,nris,appointmentChanges,attachments,...checklists,generatedAt:new Date().toISOString()};
     const bytes=await window.DISB_PULL_REPORT.buildPdf(report,window.PDFLib);
     const name=`resumo-${String(trip.trip_code||trip.id).replace(/[^A-Za-z0-9_-]/g,'_')}.pdf`;
     await savePullReportPdf(name,bytes);
@@ -3851,7 +3884,10 @@ async function openPullTripDetail(id,live=false){
     ].sort((a,b)=>new Date(a.at)-new Date(b.at));
     const body=`<div class="detail-grid"><div class="detail-card"><small>Origem</small><strong>${esc(t.origin_unit||'—')}</strong></div><div class="detail-card"><small>${transfer?'Placa / rota':'Placa / fábrica'}</small><strong>${esc(t.plate)} • ${esc(transfer?'Matriz → Filial → Matriz':t.factory)}</strong></div><div class="detail-card"><small>${transfer?'Tipo':'Parceiro'}</small><strong>${esc(transfer?'Transferência':t.carrier||'Ambev')}</strong></div><div class="detail-card"><small>${transfer||pullTripSolo(t)?'Motorista':'Motoristas'}</small><strong>${esc(t.driver1_name)}${transfer||pullTripSolo(t)?'':` / ${esc(t.driver2_name)}`}${pullTripSolo(t)?' • viagem sozinho':''}</strong></div><div class="detail-card"><small>Início</small><strong>${fmtDateTime(t.started_at)}</strong></div><div class="detail-card"><small>Fim da viagem</small><strong>${fmtDateTime(t.ended_at)}</strong></div></div>${transfer?`<div class="pull-metric-strip"><span>Tipo <b>Transferência</b></span><span>Ciclo Matriz → Filial → Matriz <b>${m.CYCLE==null?'Aguardando':fmtMinutes(m.CYCLE)}</b></span></div>`:`<div class="pull-metric-strip"><span>TMV Ida <b>${fmtMinutes(m.TMV_OUT)}</b></span><span>TMA Fábrica <b>${fmtMinutes(m.FACTORY)}</b></span><span>TMV Volta <b>${fmtMinutes(m.TMV_RETURN)}</b></span><span>TMA Revenda <b>${m.UNIT==null?'Aguardando':fmtMinutes(m.UNIT)}</b></span><span>Ciclo <b>${m.CYCLE==null?'Aguardando':fmtMinutes(m.CYCLE)}</b></span></div>`}${t.tma_adjust_minutes>0?`<div class="notice"><strong>TMA ajustado:</strong> bruto ${fmtMinutes(m.UNIT_RAW)} − ${fmtMinutes(t.tma_adjust_minutes)} = <b>${fmtMinutes(m.UNIT)}</b><br>${esc(t.tma_adjust_reason)} • por ${esc(t.tma_adjusted_by_name||'Admin')} em ${fmtDateTime(t.tma_adjusted_at)}</div>`:''}<div id="${mapId}" class="pull-map"></div><div class="section-title">Linha do tempo</div><div class="pull-timeline">${timeline.map((x,i)=>`<div class="pull-timeline-item ${x.kind==='OCC'?'occurrence':''}"><span class="dot"></span><div><small>${fmtDateTime(x.at)}</small><strong>${esc(x.title)}</strong><span>${esc(x.detail)}</span><div class="pull-timeline-map-actions">${x.mapKey?`<button type="button" class="pull-map-jump ${x.kind==='OCC'?'occurrence':''}" data-pull-map-jump="${esc(x.mapKey)}" data-pull-map-id="${esc(mapId)}">${x.kind==='OCC'?'Início no mapa':'Ver no mapa'}</button>`:''}${x.mapEndKey?`<button type="button" class="pull-map-jump occurrence" data-pull-map-jump="${esc(x.mapEndKey)}" data-pull-map-id="${esc(mapId)}">Fim no mapa</button>`:''}</div>${pullTimelineDurationHtml(x,timeline[i+1])}</div></div>`).join('')}</div>${transfer?'':`<div class="notice"><strong>NRIs vinculados:</strong> ${(nri.data||[]).length}</div>`}${(aud.data||[]).length?`<details><summary>Auditoria de ajustes TMA (${aud.data.length})</summary>${aud.data.map(a=>`<div class="audit-row">${fmtDateTime(a.changed_at)} • ${esc(a.changed_by_name)} • ${fmtMinutes(a.old_minutes)} → ${fmtMinutes(a.new_minutes)} • ${esc(a.new_reason||'sem ajuste')}</div>`).join('')}</details>`:''}`;
     const actions=[];
-    if(!live&&hasPerm('PULL_HISTORY'))actions.push({label:'Baixar resumo',class:'primary',onClick:event=>downloadPullTripSummary(t.id,event.currentTarget)});
+    if(!live&&hasPerm('PULL_HISTORY')){
+      actions.push({label:'Baixar checklist',class:'secondary',onClick:event=>downloadPullTripChecklist(t.id,event.currentTarget)});
+      actions.push({label:'Baixar resumo',class:'primary',onClick:event=>downloadPullTripSummary(t.id,event.currentTarget)});
+    }
     if(hasPerm('PULL_TMA_ADJUST')&&!transfer&&!live&&t.next_started_at)actions.push({label:'Ajustar TMA Revenda',class:'secondary',onClick:()=>{closeModal();openPullTmaAdjust(t.id);}});
     openModal(`${transfer?'TRANSFERÊNCIA':'PUXADA'} • ${t.trip_code} • ${t.plate}`,pullTripStatusLabel(t),body,actions);
     void renderPullTripDetailExtras(t);
@@ -4352,7 +4388,7 @@ renderPullHistory = function(){
       const ev=pullHistoryStageEvent(lookup,t.id,step);
       return `<td class="pull-history-stage-cell">${ev?`<strong>${fmtDateTime(ev.recorded_at)}</strong><small>${esc(ev.user_name||'—')} • GPS ±${Math.round(Number(ev.gps_accuracy)||0)} m</small>`:pullTripSolo(t)&&step.skip_when_solo?'<span class="status approved">Dispensada</span>':'—'}</td>`;
     }).join('');
-    return `<tr><td><strong>${esc(t.trip_code)}</strong><small>${transfer?'Transferência':pullTripSolo(t)?'Puxada • sozinho':'Puxada'} • ${pullTripStatusLabel(t)}</small></td><td>${esc(t.origin_unit||'—')}</td><td>${esc(t.plate)}<small>${esc(t.factory)}</small></td><td>${esc(t.driver1_name)}${transfer?'':pullTripSolo(t)?'<small>Viagem sozinho</small>':`<small>${esc(t.driver2_name)}</small>`}</td>${stageCells}<td>${fmtMinutes(m.TMV_OUT)}</td><td>${fmtMinutes(m.FACTORY)}</td><td>${fmtMinutes(m.TMV_RETURN)}</td><td>${m.UNIT==null?'—':fmtMinutes(m.UNIT)}</td><td>${m.CYCLE==null?'Aguardando':fmtMinutes(m.CYCLE)}</td><td>${transfer?'—':nriPendingHistoryBadge(t.nri_status)}</td><td><div class="mini-actions"><button class="mini-btn" data-hist-detail="${t.id}">Detalhar</button>${hasPerm('PULL_HISTORY')?`<button class="mini-btn pull-summary-btn" data-pull-summary="${t.id}">Baixar resumo</button>`:''}${hasPerm('PULL_TMA_ADJUST')&&!transfer&&t.next_started_at?`<button class="mini-btn" data-tma-adjust="${t.id}">Ajustar TMA</button>`:''}</div></td></tr>`;
+    return `<tr><td><strong>${esc(t.trip_code)}</strong><small>${transfer?'Transferência':pullTripSolo(t)?'Puxada • sozinho':'Puxada'} • ${pullTripStatusLabel(t)}</small></td><td>${esc(t.origin_unit||'—')}</td><td>${esc(t.plate)}<small>${esc(t.factory)}</small></td><td>${esc(t.driver1_name)}${transfer?'':pullTripSolo(t)?'<small>Viagem sozinho</small>':`<small>${esc(t.driver2_name)}</small>`}</td>${stageCells}<td>${fmtMinutes(m.TMV_OUT)}</td><td>${fmtMinutes(m.FACTORY)}</td><td>${fmtMinutes(m.TMV_RETURN)}</td><td>${m.UNIT==null?'—':fmtMinutes(m.UNIT)}</td><td>${m.CYCLE==null?'Aguardando':fmtMinutes(m.CYCLE)}</td><td>${transfer?'—':nriPendingHistoryBadge(t.nri_status)}</td><td><div class="mini-actions"><button class="mini-btn" data-hist-detail="${t.id}">Detalhar</button>${hasPerm('PULL_HISTORY')?`<button class="mini-btn" data-pull-checklist="${t.id}">Baixar checklist</button><button class="mini-btn pull-summary-btn" data-pull-summary="${t.id}">Baixar resumo</button>`:''}${hasPerm('PULL_TMA_ADJUST')&&!transfer&&t.next_started_at?`<button class="mini-btn" data-tma-adjust="${t.id}">Ajustar TMA</button>`:''}</div></td></tr>`;
   }).join(''):`<tr><td colspan="${totalCols}">Nenhum ciclo.</td></tr>`;
 };
 exportPullHistoryCsv = function(){const rows=filteredPullHistoryRows();if(!rows.length)return toast('Não há ciclos para exportar com os filtros atuais.','error');const lookup=pullHistoryEventLookup(),stages=pullHistoryStages(),headers=['Viagem','Tipo','Status','Origem','Placa','Fábrica/Destino','Parceiro','Motorista 1','Motorista 2',...stages.map(s=>`${s.flow_type==='TRANSFER'?'Transferência':'Puxada'} - ${s.name}`),'TMV Ida','TMA Fábrica','TMV Volta','TMA Revenda bruto','Horas a diminuir','TMA Revenda ajustado','Ciclo','NRI'],matrix=rows.map(t=>{const m=pullTripMetrics(t),stageValues=stages.map(step=>{if((step.flow_type||'PULL')!==(t.cycle_type||'PULL'))return '';const ev=pullHistoryStageEvent(lookup,t.id,step);return ev?`${fmtDateTime(ev.recorded_at)} | ${ev.user_name||''} | GPS ${Number(ev.latitude).toFixed(6)}, ${Number(ev.longitude).toFixed(6)} | ±${Math.round(Number(ev.gps_accuracy)||0)} m`:pullTripSolo(t)&&step.skip_when_solo?'Dispensada':'';});return [t.trip_code,t.cycle_type==='TRANSFER'?'Transferência':pullTripSolo(t)?'Puxada • sozinho':'Puxada',pullTripStatusLabel(t),t.origin_unit,t.plate,t.factory,t.carrier||'Ambev',t.driver1_name,t.cycle_type==='TRANSFER'?'':pullTripSolo(t)?'Viagem sozinho':t.driver2_name,...stageValues,fmtMinutes(m.TMV_OUT),fmtMinutes(m.FACTORY),fmtMinutes(m.TMV_RETURN),fmtMinutes(m.UNIT_RAW),fmtMinutes(Number(t.tma_adjust_minutes||0)),fmtMinutes(m.UNIT),fmtMinutes(m.CYCLE),t.cycle_type==='TRANSFER'?'':t.nri_status||''];});downloadCsv(`historico_ciclos_${localIsoDate(new Date())}.csv`,[headers,...matrix]);};

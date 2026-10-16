@@ -16,7 +16,7 @@
     if(!lib?.PDFDocument)throw new Error('Biblioteca de PDF indisponível. Recarregue a página e tente novamente.');
     const doc=await lib.PDFDocument.create(),normal=await doc.embedFont(lib.StandardFonts.Helvetica),bold=await doc.embedFont(lib.StandardFonts.HelveticaBold);
     const color={navy:rgbFrom(lib,NAVY),blue:rgbFrom(lib,BLUE),muted:rgbFrom(lib,MUTED),pale:rgbFrom(lib,PALE),line:rgbFrom(lib,LINE),white:lib.rgb(1,1,1)};
-    const trip=report.trip||{},metrics=report.metrics||{},events=report.events||[],occurrences=report.occurrences||[],changes=report.appointmentChanges||[],adjustments=report.tmaAudit||[],requests=report.nriRequests||[],nris=report.nris||[],photos=report.attachments||[];
+    const trip=report.trip||{},metrics=report.metrics||{},events=report.events||[],occurrences=report.occurrences||[],changes=report.appointmentChanges||[],adjustments=report.tmaAudit||[],requests=report.nriRequests||[],nris=report.nris||[],photos=report.attachments||[],checklistRuns=report.checklistRuns||[],checklistAnswers=report.checklistAnswers||[];
     const pages=[];let page,y;
     const line=(value,x,at,size=10,heavy=false,tint=color.navy)=>page.drawText(safe(value),{x,y:at,size,font:heavy?bold:normal,color:tint});
     const newPage=()=>{
@@ -68,7 +68,53 @@
       details.forEach(value=>paragraph(value,{size:9,indent:11,leading:13}));
       y-=10;
     };
+    const checklistSection=()=>{
+      section(`Checklists de verificação (${checklistRuns.length})`);
+      if(!checklistRuns.length){paragraph('Nenhum checklist registrado neste ciclo.');return;}
+      checklistRuns.forEach((run,index)=>{
+        const km=run.odometer_km==null?'Não registrado':`${Number(run.odometer_km).toLocaleString('pt-BR')} km`;
+        const previous=run.odometer_previous_km==null?'—':`${Number(run.odometer_previous_km).toLocaleString('pt-BR')} km`;
+        const delta=run.odometer_delta_km==null?'—':`${Number(run.odometer_delta_km).toLocaleString('pt-BR')} km`;
+        const answers=checklistAnswers.filter(answer=>answer.run_id===run.id).sort((a,b)=>Number(a.sort_order)-Number(b.sort_order));
+        const heading=`${index+1}. ${run.checkpoint_label||run.checkpoint_code||'Checklist'} | ${run.checklist_type==='RETURN'?'Retorno':'Saída'}`;
+        const driver=`Motorista: ${run.driver_name||'—'} | registrado: ${date(run.device_at||run.recorded_at)} | enviado: ${date(run.recorded_at)}`;
+        const mileage=`KM atual: ${km} | anterior: ${previous} | diferença: ${delta}${run.odometer_alert?' | alerta: conferir':''}`;
+        const gps=run.latitude!=null&&run.longitude!=null?`GPS: ${Number(run.latitude).toFixed(6)}, ${Number(run.longitude).toFixed(6)}${run.gps_accuracy!=null?` | precisão: ${Math.round(Number(run.gps_accuracy))} m`:''}`:'GPS não disponível';
+        const answerLines=answers.map((answer,answerIndex)=>`${answerIndex+1}. ${answer.question_snapshot||'Pergunta'}${answer.critical_snapshot?' (crítico)':''} — ${answer.answer||'—'}`);
+        const height=15*([
+          wrap(heading,bold,11,WIDTH-MARGIN*2).length,
+          ...[driver,mileage,gps].map(value=>wrap(value,normal,9,WIDTH-MARGIN*2).length),
+          ...answerLines.map(value=>wrap(value,normal,9,WIDTH-MARGIN*2-9).length),
+          ...answers.filter(answer=>answer.observation).map(answer=>wrap(`Observação: ${answer.observation}`,normal,9,WIDTH-MARGIN*2-20).length)
+        ].reduce((sum,count)=>sum+count,0)+(answers.length?0:1))+9;
+        if(height<HEIGHT-70-BOTTOM)ensure(height);
+        paragraph(heading,{size:11,heavy:true,tint:color.blue});
+        paragraph(driver,{size:9});
+        paragraph(mileage,{size:9});
+        paragraph(gps,{size:9});
+        if(!answers.length)paragraph('Respostas não disponíveis.',{size:9,tint:color.muted});
+        answers.forEach((answer,answerIndex)=>{
+          paragraph(answerLines[answerIndex],{size:9,indent:9});
+          if(answer.observation)paragraph(`Observação: ${answer.observation}`,{size:9,indent:20,tint:color.muted});
+        });
+        y-=9;
+      });
+    };
     newPage();
+    if(report.checklistOnly){
+      line('RELATÓRIO DOS CHECKLISTS',MARGIN,y,18,true,color.navy);y-=27;
+      paragraph(`${trip.cycle_type==='TRANSFER'?'Transferência':'Puxada'} | ${trip.trip_code||'Sem código'} | ${trip.plate||'Sem placa'}`,{size:11,heavy:true,tint:color.blue});
+      paragraph(`Unidade: ${trip.origin_unit||'—'} | emitido em ${date(report.generatedAt||new Date())}`,{size:9,tint:color.muted});
+      checklistSection();
+      pages.forEach((sheet,index)=>{
+        sheet.drawLine({start:{x:MARGIN,y:34},end:{x:WIDTH-MARGIN,y:34},thickness:.5,color:color.line});
+        sheet.drawText(safe(`Disb Gestão | ${trip.trip_code||'Ciclo'} | ${index+1}/${pages.length}`),{x:MARGIN,y:22,size:8,font:normal,color:color.muted});
+      });
+      doc.setTitle(`Checklists do ciclo ${trip.trip_code||''}`);
+      doc.setAuthor('Disb Gestão');
+      doc.setSubject('Respostas do checklist de verificação da puxada');
+      return await doc.save({useObjectStreams:false});
+    }
     line('RESUMO DO CICLO',MARGIN,y,18,true,color.navy);y-=24;
     paragraph(`${trip.cycle_type==='TRANSFER'?'Transferência':'Puxada'} | ${trip.trip_code||'Sem código'} | ${trip.plate||'Sem placa'}`,{size:11,heavy:true,tint:color.blue});
     paragraph(`Emitido em ${date(report.generatedAt||new Date())} | ${report.statusLabel||trip.kpi_status||trip.status||'—'}`,{size:9,tint:color.muted});
@@ -144,6 +190,7 @@
       `Lote: ${row.lot||'—'} | validade: ${row.validity_date||'—'} | bloqueio: ${row.block_date||'—'}`,
       `Criado: ${date(row.created_at)} | impresso: ${date(row.printed_at)} | removido: ${date(row.removed_at)}`
     ]));
+    checklistSection();
     section(`Anexos (${photos.length})`);
     paragraph('As fotos originais estão incorporadas neste PDF. Toque no clipe de cada foto para abrir ou salvar. Se o leitor não mostrar o clipe, use o painel Anexos do leitor de PDF.',{size:9,tint:color.muted});
     if(!photos.length)paragraph('Nenhuma foto anexada ao ciclo.');
