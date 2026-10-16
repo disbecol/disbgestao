@@ -215,7 +215,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.43-checklist-csv',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.44-nri-print-queue',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -1575,6 +1575,16 @@ async function removeSelectedNris(){
 }
 function showNriPreview(r){openModal(`NRI ${r.nri}`,`${r.codigoProduto} • ${r.nomeProduto}`,htmlEtiqueta(r,false),[{label:'Imprimir',class:'primary',onClick:()=>{closeModal();startPrint([r],r.status==='IMPRESSO');}}]);setTimeout(()=>{const img=$('modalBody').querySelector('img[data-product]');if(img)setProductImage(img,r.codigoProduto);},10);}
 function nriNativePrintPlugin(){const cap=window.Capacitor;return cap?.Plugins?.NativePrint||cap?.registerPlugin?.('NativePrint');}
+function nriPrintJobKey(records){
+  const ids=records.map(row=>String(row.id)).sort().join('|');
+  let first=2166136261,second=5381;
+  for(let i=0;i<ids.length;i++){
+    const code=ids.charCodeAt(i);
+    first=Math.imul(first^code,16777619);
+    second=Math.imul(second,33)^code;
+  }
+  return `${records.length}-${(first>>>0).toString(16).padStart(8,'0')}${(second>>>0).toString(16).padStart(8,'0')}`;
+}
 async function manageNriAndroidPrintQueue(){
   const printer=nriNativePrintPlugin();if(!printer?.getPendingJobs)return toast('Atualize o APK para consultar a fila de impressão do Android.','error');
   try{
@@ -1597,18 +1607,19 @@ async function startPrint(records,reprint=false,ignoreNativeQueue=false){
       const cap=window.Capacitor;
       if(!cap.isPluginAvailable?.('NativePrint'))throw new Error('Impressão indisponível neste APK. Instale a versão atualizada.');
       const nativePrint=nriNativePrintPlugin();
+      const jobKey=nriPrintJobKey(records);
       if(!ignoreNativeQueue&&nativePrint.getPendingJobs){
-        const {count=0}=await nativePrint.getPendingJobs();
-        if(count){
-          openModal('Impressões em espera no Android',`${count} trabalho${count===1?'':'s'} de NRI ainda na fila`,
-            '<p>Confira a fila do Android antes de criar outra impressão. Você pode manter os trabalhos anteriores ou cancelá-los.</p>',
-            [{label:'Voltar',class:'secondary',onClick:closeModal},{label:'Imprimir mesmo assim',class:'primary',onClick:()=>{closeModal();startPrint(records,reprint,true);}},{label:'Cancelar fila anterior',class:'danger',onClick:async()=>{
-              try{await nativePrint.cancelPendingJobs();closeModal();startPrint(records,reprint,true);}catch(error){toast(humanError(error),'error');}
+        const pending=await nativePrint.getPendingJobs({jobKey});
+        if(pending?.scoped&&Number(pending.count)>0){
+          openModal('Esta NRI já está na fila',`${pending.count} impressão${pending.count===1?'':'ões'} deste conjunto de etiquetas`,
+            '<p>Confira no Android se esta mesma NRI ainda está sendo impressa antes de criar outra cópia.</p>',
+            [{label:'Voltar',class:'secondary',onClick:closeModal},{label:'Imprimir novamente',class:'primary',onClick:()=>{closeModal();startPrint(records,reprint,true);}},{label:'Cancelar impressão anterior',class:'danger',onClick:async()=>{
+              try{await nativePrint.cancelPendingJobs({jobKey});closeModal();startPrint(records,reprint,true);}catch(error){toast(humanError(error),'error');}
             }}]);
           return;
         }
       }
-      await nativePrint.printHtml({html:printDocument(records)});
+      await nativePrint.printHtml({html:printDocument(records),jobKey,jobLabel:records[0]?.nri||'',jobCount:records.length});
     }else{
       const frame=$('printFrame'),doc=frame.contentWindow.document;
       doc.open();doc.write(printDocument(records));doc.close();

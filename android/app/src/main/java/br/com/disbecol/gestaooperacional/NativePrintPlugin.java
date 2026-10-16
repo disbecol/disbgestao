@@ -27,9 +27,17 @@ public class NativePrintPlugin extends Plugin {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final List<WebView> printViews = new ArrayList<>();
 
-    private boolean isPendingNriJob(PrintJob job) {
+    private String requestedJobKey(PluginCall call) {
+        String key = call.getString("jobKey");
+        if (key == null || key.isEmpty()) return null;
+        if (!key.matches("[0-9]+-[0-9a-f]{16}")) throw new IllegalArgumentException("Identificação da impressão inválida.");
+        return key;
+    }
+
+    private boolean isPendingNriJob(PrintJob job, String jobKey) {
         String label = job.getInfo() == null ? null : job.getInfo().getLabel();
         return label != null && label.startsWith(NRI_JOB_NAME)
+            && (jobKey == null || label.endsWith(" #" + jobKey))
             && (job.isQueued() || job.isStarted() || job.isBlocked() || job.isFailed());
     }
 
@@ -39,10 +47,12 @@ public class NativePrintPlugin extends Plugin {
             try {
                 PrintManager manager = (PrintManager) getActivity().getSystemService(Context.PRINT_SERVICE);
                 if (manager == null) throw new IllegalStateException("Serviço de impressão do Android indisponível.");
+                String jobKey = requestedJobKey(call);
                 int count = 0;
-                for (PrintJob job : manager.getPrintJobs()) if (isPendingNriJob(job)) count++;
+                for (PrintJob job : manager.getPrintJobs()) if (isPendingNriJob(job, jobKey)) count++;
                 JSObject result = new JSObject();
                 result.put("count", count);
+                result.put("scoped", jobKey != null);
                 call.resolve(result);
             } catch (Exception error) {
                 call.reject(error.getMessage() == null ? "Falha ao consultar a fila de impressão." : error.getMessage());
@@ -56,14 +66,16 @@ public class NativePrintPlugin extends Plugin {
             try {
                 PrintManager manager = (PrintManager) getActivity().getSystemService(Context.PRINT_SERVICE);
                 if (manager == null) throw new IllegalStateException("Serviço de impressão do Android indisponível.");
+                String jobKey = requestedJobKey(call);
                 int count = 0;
                 for (PrintJob job : manager.getPrintJobs()) {
-                    if (!isPendingNriJob(job)) continue;
+                    if (!isPendingNriJob(job, jobKey)) continue;
                     job.cancel();
                     count++;
                 }
                 JSObject result = new JSObject();
                 result.put("count", count);
+                result.put("scoped", jobKey != null);
                 call.resolve(result);
             } catch (Exception error) {
                 call.reject(error.getMessage() == null ? "Falha ao cancelar a fila de impressão." : error.getMessage());
@@ -127,7 +139,14 @@ public class NativePrintPlugin extends Plugin {
             if (manager == null) {
                 throw new IllegalStateException("Serviço de impressão do Android indisponível.");
             }
-            String jobName = NRI_JOB_NAME;
+            String jobKey = requestedJobKey(call);
+            String label = call.getString("jobLabel");
+            label = label == null ? "" : label.replaceAll("[^A-Za-z0-9-]", "");
+            if (label.length() > 24) label = label.substring(0, 24);
+            Integer jobCount = call.getInt("jobCount");
+            String jobName = NRI_JOB_NAME + (label.isEmpty() ? "" : " " + label)
+                + (jobCount != null && jobCount > 1 ? " +" + (jobCount - 1) : "")
+                + (jobKey == null ? "" : " #" + jobKey);
             PrintDocumentAdapter adapter = view.createPrintDocumentAdapter(jobName);
             PrintAttributes attributes = new PrintAttributes.Builder()
                 .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
