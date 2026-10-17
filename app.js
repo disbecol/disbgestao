@@ -215,7 +215,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.44-nri-print-queue',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.46-nri-print',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -1598,7 +1598,7 @@ async function manageNriAndroidPrintQueue(){
       }}]);
   }catch(error){toast(humanError(error),'error');}
 }
-async function startPrint(records,reprint=false,ignoreNativeQueue=false){
+async function startPrint(records,reprint=false){
   if(!records?.length)return toast('Selecione ao menos uma NRI.','error');
   if(printOperation||printStarting)return toast('Conclua a impressão anterior antes de iniciar outra.','error');
   printStarting=true;
@@ -1608,17 +1608,8 @@ async function startPrint(records,reprint=false,ignoreNativeQueue=false){
       if(!cap.isPluginAvailable?.('NativePrint'))throw new Error('Impressão indisponível neste APK. Instale a versão atualizada.');
       const nativePrint=nriNativePrintPlugin();
       const jobKey=nriPrintJobKey(records);
-      if(!ignoreNativeQueue&&nativePrint.getPendingJobs){
-        const pending=await nativePrint.getPendingJobs({jobKey});
-        if(pending?.scoped&&Number(pending.count)>0){
-          openModal('Esta NRI já está na fila',`${pending.count} impressão${pending.count===1?'':'ões'} deste conjunto de etiquetas`,
-            '<p>Confira no Android se esta mesma NRI ainda está sendo impressa antes de criar outra cópia.</p>',
-            [{label:'Voltar',class:'secondary',onClick:closeModal},{label:'Imprimir novamente',class:'primary',onClick:()=>{closeModal();startPrint(records,reprint,true);}},{label:'Cancelar impressão anterior',class:'danger',onClick:async()=>{
-              try{await nativePrint.cancelPendingJobs({jobKey});closeModal();startPrint(records,reprint,true);}catch(error){toast(humanError(error),'error');}
-            }}]);
-          return;
-        }
-      }
+      // A fila do Android pode manter trabalhos antigos ou falhos no aparelho.
+      // Ela fica disponível para consulta manual, sem bloquear uma nova NRI.
       await nativePrint.printHtml({html:printDocument(records),jobKey,jobLabel:records[0]?.nri||'',jobCount:records.length});
     }else{
       const frame=$('printFrame'),doc=frame.contentWindow.document;

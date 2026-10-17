@@ -34,22 +34,20 @@ test('identificação da fila é estável para o mesmo conjunto de NRIs',()=>{
   assert.match(first,/^2-[0-9a-f]{16}$/);
 });
 
-test('fila antiga ou de outra NRI não impede a impressão nova',async()=>{
+test('trabalhos antigos do Android não bloqueiam a impressão nova',async()=>{
   const {context,calls}=harness({count:3});
   await context.startPrint([{id:'new',nri:'NRI-0001'}]);
+  assert.equal(calls.filter(([name])=>name==='pending').length,0);
   assert.equal(calls.filter(([name])=>name==='print').length,1);
   assert.equal(calls.filter(([name])=>name==='modal')[0][1].title,'Confirmar impressão');
   assert.match(calls.find(([name])=>name==='print')[1].jobKey,/^1-[0-9a-f]{16}$/);
 });
 
-test('fila da mesma NRI pede confirmação e só cancela a impressão correspondente',async()=>{
+test('a mesma NRI pode ser reenviada sem depender do estado da fila do Android',async()=>{
   const {context,calls}=harness({count:1,scoped:true});
   await context.startPrint([{id:'same',nri:'NRI-0002'}]);
-  assert.equal(calls.filter(([name])=>name==='print').length,0);
-  const modal=calls.find(([name])=>name==='modal')[1];
-  assert.equal(modal.title,'Esta NRI já está na fila');
-  const key=calls.find(([name])=>name==='pending')[1].jobKey;
-  await modal.actions.find(action=>action.label==='Cancelar impressão anterior').onClick();
-  assert.equal(calls.find(([name])=>name==='cancel')[1].jobKey,key);
+  assert.equal(calls.filter(([name])=>name==='pending').length,0);
+  assert.equal(calls.filter(([name])=>name==='cancel').length,0);
   assert.equal(calls.filter(([name])=>name==='print').length,1);
+  assert.equal(calls.find(([name])=>name==='modal')[1].title,'Confirmar impressão');
 });
