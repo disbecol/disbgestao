@@ -1,7 +1,7 @@
-const CACHE='disb-gestao-v1.7.46-nri-print';
+const CACHE='disb-gestao-v1.7.47-fefo-corrections';
 const IMAGE_CACHE=`${CACHE}-images`;
 const IMAGE_CACHE_LIMIT=200;
-const STATIC=['./','index.html','styles.css?v=1.7.43-pull-cycle-delete','visual-refresh.css?v=1.7.1-visual','pull-dashboard.css?v=1.7.1-pull-dashboard','damage-geofence.css?v=2','refugo.css?v=1.7.16','share-reports.js?v=1.7.22','pull-report.js?v=2','invoice-note.js?v=1.7.31-keg-liters','pull-camera.js?v=1.7.32-pull-camera','vendor/supabase.js','vendor/leaflet.js','vendor/leaflet.css','vendor/images/layers.png','vendor/images/layers-2x.png','vendor/images/marker-icon.png','vendor/images/marker-icon-2x.png','vendor/images/marker-shadow.png','vendor/pdf-lib.min.js','vendor/pdfjs.min.js','vendor/pdfjs.worker.min.js','app.js?v=1.7.46-nri-print','config.js?v=1.7.0','manifest.webmanifest','assets/icon-192.png','assets/icon-512.png'];
+const STATIC=['./','index.html','styles.css?v=1.7.47-fefo-corrections','visual-refresh.css?v=1.7.1-visual','pull-dashboard.css?v=1.7.1-pull-dashboard','damage-geofence.css?v=2','refugo.css?v=1.7.16','share-reports.js?v=1.7.22','pull-report.js?v=2','invoice-note.js?v=1.7.31-keg-liters','pull-camera.js?v=1.7.32-pull-camera','vendor/supabase.js','vendor/leaflet.js','vendor/leaflet.css','vendor/images/layers.png','vendor/images/layers-2x.png','vendor/images/marker-icon.png','vendor/images/marker-icon-2x.png','vendor/images/marker-shadow.png','vendor/pdf-lib.min.js','vendor/pdfjs.min.js','vendor/pdfjs.worker.min.js','app.js?v=1.7.47-fefo-corrections','fefo-corrections.js?v=1.7.47','config.js?v=1.7.0','manifest.webmanifest','assets/icon-192.png','assets/icon-512.png'];
 STATIC.push('stock-validity.css?v=1.7.41','stock-validity.js?v=1.7.41','vendor/read-excel-file.min.js');
 const STATIC_URLS=new Set(STATIC.map(path=>new URL(path,self.registration.scope).href));
 const EXTERNAL_STATIC_URLS=new Set();
