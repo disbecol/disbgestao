@@ -3,7 +3,28 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const source=fs.readFileSync(new URL('../fefo-corrections.js',import.meta.url),'utf8');
+const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
+const source=app.split('// FEFO_COMPLETED_EDITS_BEGIN')[1]?.split('// FEFO_COMPLETED_EDITS_END')[0];
+assert.ok(source,'A edição FEFO deve fazer parte do app.js principal');
+assert.ok(app.indexOf('// FEFO_COMPLETED_EDITS_END')<app.lastIndexOf('})();'),
+  'A edição FEFO precisa executar dentro do escopo privado do aplicativo');
+
+test('aplicativo completo mostra Editar contagem no relatório finalizado de Admin',()=>{
+  const buttons=[];
+  const window={addEventListener(){}};
+  const document={addEventListener(){},createElement:()=>({addEventListener(){}}),getElementById:id=>id==='modalActions'?{prepend:button=>buttons.push(button)}:null};
+  const hooked=app.replace(/\}\)\(\);\s*$/,`window.fefoEditSmoke=()=>{
+    profile={role:'ADMIN'};
+    fefoReports=[{id:'count-id',status:'COMPLETED',count_code:'FEFO-000016',unit:'Matriz Caicó',counter_name:'José Alves',started_at:'2026-10-19T12:05:14Z',completed_at:'2026-10-19T12:05:29Z'}];
+    fefoItemsByCount.set('count-id',[]);
+    openModal=()=>{};
+    openFefoReport('count-id');
+  };})();`);
+  vm.runInNewContext(hooked,{window,document,navigator:{onLine:true},setInterval(){},setTimeout(){}},{timeout:3000});
+  window.fefoEditSmoke();
+  assert.equal(buttons.length,1);
+  assert.equal(buttons[0].textContent,'Editar contagem');
+});
 
 test('botão de correção aparece somente para administrador em contagem finalizada',()=>{
   let admin=false,added=0,opened=0;
