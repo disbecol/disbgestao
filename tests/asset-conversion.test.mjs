@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 import conversion from '../asset-conversion.js';
 
 const beer = { sap_code: '27983', asset_code: '30491', description: 'CERVEJA 600ML' };
@@ -32,4 +34,32 @@ test('não altera ativos fora das seis correspondências exatas', () => {
   const original = { sap_code: '', asset_code: '37108', description: 'CHAPATEX (UND)', pallet_gfa: 1, layer_gfa: 6, box_gfa: 7, units: 30, loose: 4 };
   assert.deepEqual(conversion.normalize(original), original);
   assert.deepEqual(conversion.normalize({ ...original, sap_code: '27983' }), { ...original, sap_code: '27983' });
+});
+
+test('PDF de contagem já finalizada recalcula lançamentos históricos sem alterar o banco', () => {
+  const source = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
+  const section = (start, end) => source.slice(source.indexOf(start), source.indexOf(end));
+  const captures = [];
+  const context = {
+    window: {
+      DISB_ASSET_CONVERSION: conversion,
+      DISB_REPORT_IMAGES: { asset: (_count, view, rows) => { captures.push({ view, rows }); return []; } },
+    },
+  };
+  vm.runInNewContext(`const rotatingAssetProducts = [];
+    ${section('function normalizeAssetLocation(', 'function assetLocationChoice(')}
+    ${section('function rotatingAssetHistoryViewRows(', 'function rotatingAssetHistoryViewLabel(')}
+    ${section('function assetReportImages(', 'const assetPdfBusy=')}
+    this.buildReport = assetReportImages;`, context);
+  const entries = [
+    { product_id: 'historical-988', sap_code: '27983', asset_code: '30491', product_description: 'CERVEJA 600ML', location: 'PATIO', pallet_gfa: 5, layer_gfa: 6, box_gfa: 0, units: 0 },
+    { product_id: 'historical-988', sap_code: '27983', asset_code: '30491', product_description: 'CERVEJA 600ML', location: 'PATIO', pallet_gfa: 0, layer_gfa: 0, box_gfa: 7, units: 0 },
+  ];
+  const original = structuredClone(entries);
+  context.buildReport({ status: 'COMPLETED', count_code: 'AG-antiga' }, entries);
+  for (const view of ['PATIO', 'TOTAL']) {
+    const row = captures.find(page => page.view === view).rows[0];
+    assert.deepEqual([row.pallet_gfa, row.layer_gfa, row.box_gfa], [6, 1, 0]);
+  }
+  assert.deepEqual(entries, original);
 });
