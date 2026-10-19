@@ -215,7 +215,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.48-fefo-edit',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.49-asset-conversion',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -5260,6 +5260,7 @@ function aggregateRotatingAssetEntries(entries,location=''){
     if(!t){t=blankAssetTotal({product_id:e.product_id,sap_code:e.sap_code||'',asset_code:e.asset_code||'',description:e.product_description||''});out.set(e.product_id,t);}
     t.pallet_gfa+=Number(e.pallet_gfa||0);t.layer_gfa+=Number(e.layer_gfa||0);t.box_gfa+=Number(e.box_gfa||0);t.loose+=Number(e.loose||0);t.units+=Number(e.units||0);t.entries++;
   });
+  out.forEach((total,productId)=>out.set(productId,window.DISB_ASSET_CONVERSION.normalize(total)));
   return out;
 }
 function aggregateRotatingAssetGrandTotal(entries,location){
