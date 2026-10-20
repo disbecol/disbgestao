@@ -215,7 +215,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.50-checklist-toggle',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.51-fefo-validity',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -1278,7 +1278,7 @@ function openView(name,force=false){
   if(name==='sales-avaria-cadastro')prepareSalesDamageForm();
   if(name==='sales-avaria-minhas')loadSalesDamageMy();
   if(name==='sales-avaria-gestao')loadSalesDamageManage();
-  if(name==='sales-stock-validity')loadStockValidity();
+  if(name==='sales-stock-validity')loadStockValidity(true);
   if(name==='conf-minhas')loadMyConferences();
   if(name==='conf-historico')loadConferenceHistory();
   if(name==='conf-dashboard')loadDashboard();
@@ -1331,6 +1331,7 @@ const reloadTimers={}; function debounceReload(type){clearTimeout(reloadTimers[t
   if(type==='sales_damage'){if(hasPerm('SALES_DAMAGE_VIEW_OWN'))loadSalesDamageMy(true);if(hasAnyPerm('SALES_DAMAGE_VIEW_ALL,SALES_DAMAGE_REVIEW,SALES_DAMAGE_OVERRIDE,SALES_DAMAGE_POST'))loadSalesDamageManage(true);}
   if(type==='conf'){if(activeView==='conf-minhas'&&hasPerm('CONF_OWN_HISTORY'))loadMyConferences(true);if(activeView==='conf-dashboard'&&hasPerm('CONF_DASHBOARD'))loadDashboard(true);}
   if(type==='fefo'&&canFefo()){refreshFefoBadge(true);if(activeView==='fefo-contagem'&&hasPerm('FEFO_CREATE'))loadFefoCurrent(true);if(activeView==='fefo-andamento'&&hasPerm('FEFO_ACTIVE'))loadFefoActiveCounts(true);if(activeView==='fefo-relatorios'&&hasPerm('FEFO_REPORT'))loadFefoReports(true);}
+  if(type==='stock_validity'&&hasPerm('SALES_STOCK_VALIDITY_VIEW')){stockValidityLoadedUnit='';if(activeView==='sales-stock-validity')loadStockValidity(true);}
   if(type==='rotating_asset'&&canRotatingAsset()){if(activeView==='ativo-giro-contagem'&&hasPerm('ROTATING_ASSET_CREATE'))loadRotatingAssetCurrent(true);if(activeView==='ativo-giro-historico'&&hasPerm('ROTATING_ASSET_HISTORY'))loadRotatingAssetHistory(true);}
 },220);}
 
@@ -8889,6 +8890,7 @@ setupRealtime=function(){
   if(canSalesDamage()){realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'sales_damage_requests'},()=>debounceReload('sales_damage'));realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'sales_damage_items'},()=>debounceReload('sales_damage'));}
   if(canConference())realtimeChannel.on('postgres_changes',{event:'INSERT',schema:'public',table:'container_conferences'},()=>debounceReload('conf'));
   if(canFefo()){realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'fefo_counts'},()=>debounceReload('fefo'));realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'fefo_count_items'},()=>debounceReload('fefo'));}
+  if(hasPerm('SALES_STOCK_VALIDITY_VIEW'))realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'stock_validity_imports'},payload=>{if(payload.new?.unit===activeUnit||payload.old?.unit===activeUnit)debounceReload('stock_validity');});
   if(canRotatingAsset()){realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'rotating_asset_counts'},()=>debounceReload('rotating_asset'));realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'rotating_asset_entries'},()=>debounceReload('rotating_asset'));}
   realtimeChannel.subscribe();
 };
@@ -12358,14 +12360,18 @@ async function loadStockValidity(force=false){
   $('stockValidityResults').innerHTML='<div class="empty-state">Carregando produtos…</div>';
   try{
     const [info,rows]=await Promise.all([
-      sb.from('stock_validity_imports').select('file_name,imported_at,row_count,product_count').eq('unit',unit).maybeSingle(),
+      sb.from('stock_validity_imports').select('file_name,imported_at,row_count,product_count,source_kind').eq('unit',unit).maybeSingle(),
       fetchReferencePages(()=>sb.from('stock_validity_rows').select('product_code,product_name,expiry_date,quantity,location,street').eq('unit',unit).order('row_no'),20000)
     ]);
     if(info.error)throw info.error;
     if(requestId!==stockValidityLoadId||activeUnit!==unit)return;
     stockValidityRows=rows;
     stockValidityLoadedUnit=unit;
-    $('stockValidityUpdated').textContent=info.data?.imported_at?fmtDateTime(info.data.imported_at):'Nenhum arquivo importado';
+    const fromFefo=info.data?.source_kind==='FEFO';
+    $('stockValidityUpdatedLabel').textContent=fromFefo?'CONTAGEM FEFO PUBLICADA':'BASE ATUALIZADA EM';
+    $('stockValidityUpdated').textContent=info.data?.imported_at
+      ?`${fromFefo?`${info.data.file_name.replace(/^Contagem\s+/,'')} • `:''}${fmtDateTime(info.data.imported_at)}`
+      :'Nenhuma validade publicada';
     $('stockValidityUpdated').title=info.data?.file_name||'';
     renderStockValidityResults();
   }catch(error){
@@ -12382,7 +12388,7 @@ function renderStockValidityResults(){
   const query=norm($('stockValiditySearch')?.value||'').replace(/\s+/g,' ').trim();
   const all=window.DISB_STOCK_VALIDITY?.products(stockValidityRows)||[];
   if(!stockValidityRows.length){
-    box.innerHTML='<div class="empty-state">Ainda não há uma base de validades importada para esta unidade.</div>';
+    box.innerHTML='<div class="empty-state">Ainda não há validades publicadas para esta unidade.</div>';
     $('stockValidityCount').textContent='';return;
   }
   if(!query){
