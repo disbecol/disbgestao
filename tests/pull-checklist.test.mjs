@@ -9,7 +9,7 @@ test('código principal carrega o checklist no mesmo escopo',()=>{
   assert.doesNotThrow(()=>vm.runInNewContext(source,context,{timeout:3000}));
 });
 
-function checklistContext(){
+function checklistContext(overrides={}){
   const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
   const source=app.split('// PULL_CHECKLIST_BEGIN')[1]?.split('// PULL_CHECKLIST_END')[0];
   assert.ok(source,'O checklist precisa estar incorporado ao código principal.');
@@ -17,9 +17,9 @@ function checklistContext(){
     'onPullAssignedPlanClick','loadPullActiveTrip','renderPullDriver','recordPullNextStep','processOfflineRecord',
     'syncOfflineQueue','humanPullError','humanPullPlanError','loadPullConfig',
     'renderPullTripDetailExtras'];
-  const context={document:{addEventListener(){},querySelector(){return null;}},navigator:{onLine:false},
+  const context={document:{addEventListener(){},querySelector(){return null;}},navigator:{onLine:false},pullSettings:{checklist_enabled:true},
     pullActiveTrip:{id:'trip-1',week_trip_type:'LAST'},pullDriverEvents:[],pullNextStep:()=>({action_code:'ARRIVE_UNIT'}),
-    ...Object.fromEntries(stubs.map(name=>[name,()=>{}]))};
+    ...Object.fromEntries(stubs.map(name=>[name,()=>{}])),...overrides};
   vm.createContext(context);vm.runInContext(source,context);
   return context;
 }
@@ -36,6 +36,21 @@ test('bloqueia a etapa até todos os checklists do mesmo ponto estarem preenchid
   assert.equal(vm.runInContext('pullChecklistGatePending().checkpoint_code',ctx),'D1_UNIT_LAST');
   vm.runInContext(`pullChecklistRuns.push({checkpoint_code:'D1_UNIT_LAST'})`,ctx);
   assert.equal(vm.runInContext('pullChecklistGatePending()',ctx),undefined);
+});
+
+test('desabilitar checklist libera etapas pendentes sem apagar respostas',async()=>{
+  let proceeded=false;
+  const ctx=checklistContext({recordPullNextStep:()=>{proceeded=true;}});
+  vm.runInContext(`pullDriverEvents=[{action_code:'ARRIVE_SUPPORT_OUT'}];
+    pullChecklistRequirements=[{checkpoint_code:'D1_SUPPORT_OUT',after_action:'ARRIVE_SUPPORT_OUT',gate_action:'ARRIVE_UNIT'}];
+    pullChecklistRuns=[{checkpoint_code:'D1_START'}];
+    pullSettings.checklist_enabled=false;`,ctx);
+  assert.equal(vm.runInContext('pullChecklistGatePending()',ctx),undefined);
+  await vm.runInContext('recordPullNextStep()',ctx);
+  assert.equal(proceeded,true);
+  assert.equal(vm.runInContext('pullChecklistRuns.length',ctx),1);
+  vm.runInContext('pullSettings.checklist_enabled=true',ctx);
+  assert.equal(vm.runInContext('pullChecklistGatePending().checkpoint_code',ctx),'D1_SUPPORT_OUT');
 });
 
 test('checklists de retorno e saída aparecem em sequência dentro da próxima etapa',()=>{
