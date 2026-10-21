@@ -24,6 +24,7 @@ const PERMISSION_CATALOG = [
   ['Materiais','MATERIAL_INVENTORY','Contagem'],['Materiais','MATERIAL_STOCK_VIEW','Estoque'],['Materiais','MATERIAL_CATALOG','Cadastro de Materiais'],['Materiais','MATERIAL_MOVEMENT','Movimentação do estoque'],
   ['Refugo','REFUGO_AFERIR','Aferir mapa'],['Refugo','REFUGO_HISTORICO','Histórico / CSV'],['Refugo','REFUGO_CONFIG','Cadastros'],
   ['Validade do Estoque','SALES_STOCK_VALIDITY_VIEW','Consultar validades'],['Validade do Estoque','SALES_STOCK_VALIDITY_IMPORT','Importar arquivo'],
+  ['Escalonada Digital','SALES_PRICING_VIEW','Consultar preços'],
   ['Puxada','PULL_PLAN','Cadastrar viagens'],['Puxada','PULL_TRIP','Viagem'],['Puxada','PULL_FAROL','Farol de andamento'],['Puxada','PULL_HISTORY','Histórico'],['Puxada','PULL_DASHBOARD','Dashboards'],['Puxada','PULL_GOALS','Metas'],['Puxada','PULL_CONFIG','Configurações'],['Puxada','PULL_TMA_ADJUST','Ajustar TMA'],
   ['Administração','ADMIN_USERS','Usuários e permissões'],['Administração','ADMIN_BASES','Bases / importação']
 ].map(([module,code,name],sort)=>({module,code,name,sort}));
@@ -38,6 +39,7 @@ const MODULE_CATALOG = [
   {name:'Avarias de Entrega',icon:'!',description:'Registro, acompanhamento e gestão das avarias de entrega.'},
   {name:'Avarias de Vendas',icon:'!',description:'Solicitações, acompanhamento e gestão das avarias de vendas.'},
   {name:'Validade do Estoque',icon:'◷',description:'Consulta e importação das validades por unidade.'},
+  {name:'Escalonada Digital',icon:'R$',description:'Consulta dos preços TTC e TTV por segmento na planilha.'},
   {name:'Puxada',icon:'↗',description:'Viagens, farol, histórico, dashboards e configuração.'}
 ];
 
@@ -47,8 +49,8 @@ const ROLE_PERMISSION_DEFAULTS = {
   CONFERENTE:['NRI_PENDING_VIEW','MARKETPLACE_RECEIVE','NRI_CREATE','NRI_PRINT','CONF_CREATE','CONF_OWN_HISTORY','FEFO_CREATE','FEFO_ACTIVE','FEFO_REPORT','MATERIAL_INVENTORY','MATERIAL_STOCK_VIEW','MATERIAL_CATALOG','MATERIAL_MOVEMENT','REFUGO_AFERIR','REFUGO_HISTORICO'],
   COLABORADOR_ENTREGA:['DELIVERY_DAMAGE_CREATE'],
   MOTORISTA_PUXADOR:['PULL_TRIP'],
-  VENDEDOR:['SALES_DAMAGE_CREATE','SALES_DAMAGE_VIEW_OWN','SALES_STOCK_VALIDITY_VIEW'],
-  GERENTE_VENDAS:['SALES_DAMAGE_CREATE','SALES_DAMAGE_VIEW_OWN','SALES_DAMAGE_VIEW_ALL','SALES_DAMAGE_REVIEW','SALES_STOCK_VALIDITY_VIEW']
+  VENDEDOR:['SALES_DAMAGE_CREATE','SALES_DAMAGE_VIEW_OWN','SALES_STOCK_VALIDITY_VIEW','SALES_PRICING_VIEW'],
+  GERENTE_VENDAS:['SALES_DAMAGE_CREATE','SALES_DAMAGE_VIEW_OWN','SALES_DAMAGE_VIEW_ALL','SALES_DAMAGE_REVIEW','SALES_STOCK_VALIDITY_VIEW','SALES_PRICING_VIEW']
 };
 const VALUE_TYPES = [
   {key:'g300',label:'Garrafeiras 300ml',value:69.5},
@@ -95,6 +97,10 @@ let stockValidityLoadedUnit = '';
 let stockValidityPreview = null;
 let stockValidityLoadId = 0;
 let stockValidityXlsxPromise = null;
+let salesPricingProducts = [];
+let salesPricingLoaded = false;
+let salesPricingLoading = false;
+let salesPricingError = '';
 let historyNris = [];
 let avariaItems = [];
 let avariaEditingId = null;
@@ -172,6 +178,7 @@ const viewMeta = {
   'sales-avaria-minhas':['Minhas avarias de vendas','Acompanhe suas solicitações'],
   'sales-avaria-gestao':['Gestão de avarias de vendas','Aprovação, reprovação e auditoria'],
   'sales-stock-validity':['Consulta de validades','Vencimento dos produtos da unidade'],
+  'sales-pricing':['Escalonada Digital','Preços TTC e TTV por segmento'],
   'nri-historico':['Histórico NRI','Rastreabilidade completa'],
   'nri-avarias-historico':['Paletes avariados','Nota Fiscal, fotos e rastreabilidade'],
   'conf-historico':['Histórico de conferências','Todos os registros'],
@@ -215,7 +222,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.51-fefo-validity',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.52-sales-pricing',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -659,6 +666,12 @@ function bindBaseEvents(){
   $('stockValidityImportUnit')?.addEventListener('change',clearStockValidityPreview);
   $('btnStockValidityPreview')?.addEventListener('click',previewStockValidityFile);
   $('btnStockValidityImport')?.addEventListener('click',importStockValidityFile);
+  $('salesPricingSearch')?.addEventListener('input',renderSalesPricing);
+  $('salesPricingClear')?.addEventListener('click',()=>{
+    $('salesPricingSearch').value='';renderSalesPricing();$('salesPricingSearch').focus();
+  });
+  $('btnSalesPricingRefresh')?.addEventListener('click',()=>loadSalesPricing(true));
+  $('btnSalesPricingRetry')?.addEventListener('click',()=>loadSalesPricing(true));
 
   // Conferencia
   $('formConferencia').addEventListener('submit',submitConference);
@@ -938,6 +951,7 @@ function moduleNameForPermission(code){
   if(code.startsWith('DELIVERY_DAMAGE_'))return 'Avarias de Entrega';
   if(code.startsWith('SALES_DAMAGE_'))return 'Avarias de Vendas';
   if(code.startsWith('SALES_STOCK_VALIDITY_'))return 'Validade do Estoque';
+  if(code.startsWith('SALES_PRICING_'))return 'Escalonada Digital';
   if(code.startsWith('PULL_'))return 'Puxada';
   return '';
 }
@@ -1001,6 +1015,7 @@ async function onModuleSettingsClick(event){
 async function logout(){
 
   offlineClearIdentityV171();
+  salesPricingProducts=[];salesPricingLoaded=false;salesPricingError='';
   printOperation=null;
   printStarting=false;
 
@@ -1279,6 +1294,7 @@ function openView(name,force=false){
   if(name==='sales-avaria-minhas')loadSalesDamageMy();
   if(name==='sales-avaria-gestao')loadSalesDamageManage();
   if(name==='sales-stock-validity')loadStockValidity(true);
+  if(name==='sales-pricing')loadSalesPricing(true);
   if(name==='conf-minhas')loadMyConferences();
   if(name==='conf-historico')loadConferenceHistory();
   if(name==='conf-dashboard')loadDashboard();
@@ -7997,6 +8013,7 @@ async function loadUnitAccess(){
 function resetUnitScopedState(){
   pendingNris=[];historyNris=[];selectedNris.clear();adminAvarias=[];deliveryDamageMyRequests=[];salesDamageMyRequests=[];salesDamageManageRequests=[];
   stockValidityRows=[];stockValidityLoadedUnit='';stockValidityPreview=null;stockValidityLoadId++;
+  salesPricingProducts=[];salesPricingLoaded=false;salesPricingError='';
   fefoActiveCount=null;fefoItems=[];fefoEditingItemId=null;fefoActiveCounts=[];fefoReports=[];fefoItemsByCount.clear();
   rotatingAssetActiveCount=null;rotatingAssetEntries=[];rotatingAssetHistory=[];rotatingAssetEntriesByCount.clear();
   refugoCurrentSession=null;refugoItems=[];refugoSessions=[];refugoHistory=[];clearInterval(refugoTimer);
@@ -12451,6 +12468,71 @@ async function importStockValidityFile(){
     if(activeUnit===preview.unit)await loadStockValidity(true);
   }catch(error){toast(humanError(error),'error');button.disabled=false;}
   finally{button.textContent='Atualizar base da unidade';}
+}
+
+// VENDAS / ESCALONADA DIGITAL -----------------------------------------------
+async function loadSalesPricing(){
+  if(!hasPerm('SALES_PRICING_VIEW')||salesPricingLoading)return;
+  salesPricingLoading=true;
+  salesPricingError='';
+  const button=$('btnSalesPricingRefresh');
+  if(button){button.disabled=true;button.textContent='Atualizando…';}
+  $('salesPricingStatus').textContent='Consultando a planilha…';
+  renderSalesPricing();
+  try{
+    const result=await window.DISB_SALES_PRICING.loadPrices();
+    salesPricingProducts=result.products;
+    salesPricingLoaded=true;
+    salesPricingError='';
+    $('salesPricingUpdated').textContent=result.updatedAt||'Data não informada pela planilha';
+    $('salesPricingStatus').textContent=`${result.products.length} produtos disponíveis`;
+  }catch(error){
+    const message=error?.message||'';
+    salesPricingError=/failed to fetch|networkerror|load failed/i.test(message)
+      ?'Não foi possível acessar a planilha. Confira a conexão e tente novamente.'
+      :message||'Não foi possível consultar a planilha.';
+    $('salesPricingStatus').textContent=salesPricingLoaded?'Atualização indisponível':'Falha ao carregar';
+    console.warn('Escalonada Digital',error);
+  }finally{
+    salesPricingLoading=false;
+    if(button){button.disabled=false;button.textContent='Atualizar preços';}
+    renderSalesPricing();
+  }
+}
+
+function salesPricingMetric(label,values,kind){
+  const rows=window.DISB_SALES_PRICING.SEGMENTS.map(segment=>{
+    const value=window.DISB_SALES_PRICING.formatPrice(values?.[segment]);
+    return `<div class="sales-pricing-row"><span>${esc(segment)}</span><strong class="${value==='—'?'missing':''}">${esc(value)}</strong></div>`;
+  }).join('');
+  return `<section class="sales-pricing-metric ${kind}" aria-label="Preços ${esc(label)}"><h4>${esc(label)}</h4>${rows}</section>`;
+}
+
+function renderSalesPricing(){
+  const box=$('salesPricingResults'),alert=$('salesPricingAlert'),retry=$('btnSalesPricingRetry');
+  if(!box||!alert||!retry)return;
+  const query=$('salesPricingSearch')?.value||'';
+  $('salesPricingClear')?.classList.toggle('hidden',!query);
+  alert.classList.toggle('hidden',!salesPricingError);
+  retry.classList.toggle('hidden',!salesPricingError||salesPricingLoaded);
+  if(salesPricingError)alert.textContent=salesPricingLoaded
+    ?`Não foi possível atualizar a planilha. Exibindo a última consulta carregada neste aparelho. ${salesPricingError}`
+    :salesPricingError;
+  if(!salesPricingLoaded){
+    box.innerHTML=`<div class="empty-state">${salesPricingLoading?'Carregando preços da planilha…':salesPricingError?'Use “Tentar novamente” para consultar os preços.':'Abra a consulta para carregar os preços.'}</div>`;
+    $('salesPricingCount').textContent='';return;
+  }
+  if(!query.trim()){
+    box.innerHTML='<div class="empty-state">Digite um código ou nome para pesquisar.</div>';
+    $('salesPricingCount').textContent=`${salesPricingProducts.length} produtos na planilha`;
+    return;
+  }
+  const result=window.DISB_SALES_PRICING.searchProducts(salesPricingProducts,query);
+  $('salesPricingCount').textContent=`${result.total} produto${result.total===1?'':'s'} encontrado${result.total===1?'':'s'}`;
+  if(!result.total){box.innerHTML='<div class="empty-state">Nenhum produto encontrado. Confira o código ou nome informado.</div>';return;}
+  box.innerHTML=result.rows.map(product=>`<article class="sales-pricing-card"><div class="sales-pricing-product"><div class="sales-pricing-photo"><span>${esc(product.code)}</span><img data-sales-pricing-image="${esc(product.code)}" alt="" loading="lazy"></div><div><small>CÓDIGO ${esc(product.code)}</small><h3>${esc(product.name)}</h3></div></div><div class="sales-pricing-metrics">${salesPricingMetric('TTV',product.ttv,'ttv')}${salesPricingMetric('TTC',product.ttc,'ttc')}</div></article>`).join('');
+  box.querySelectorAll('img[data-sales-pricing-image]').forEach(img=>setProductImage(img,img.dataset.salesPricingImage));
+  if(result.total>result.rows.length)box.insertAdjacentHTML('beforeend','<div class="empty-state">Exibindo os primeiros 100 produtos. Refine a pesquisa para encontrar os demais.</div>');
 }
 
 // PULL_CYCLE_DELETE_BEGIN
