@@ -29,7 +29,7 @@ test('permissão de GPS mostra instruções para o dispositivo correto',()=>{
   assert.match(errorContext(true).humanGpsError(denied),/No Android/);
 });
 
-test('cadastro usa a assinatura do banco com posição da viagem na semana',async()=>{
+async function submitPlanWithChecklist(checklistEnabled){
   const fields={pullPlanId:'',pullPlanType:'PULL',pullPlanScheduled:'2026-10-15T04:00',
     pullPlanOrigin:'Matriz Caicó',pullPlanPlate:'QGK4085',pullPlanFactory:'Itapissuma',
     pullPlanDriver1:'motorista-1',pullPlanDriver2:'motorista-2',pullPlanSolo:''};
@@ -38,13 +38,25 @@ test('cadastro usa a assinatura do banco com posição da viagem na semana',asyn
   let args;
   const messages=[];
   const context={
-    document:{querySelector:()=>({value:'ROUTINE'})},$:(id)=>controls[id],
+    document:{querySelector:()=>checklistEnabled?{value:'ROUTINE'}:null},$:(id)=>controls[id],
+    pullChecklistEnabled:()=>checklistEnabled,
     hasPerm:()=>true,sb:{rpc:async(_name,params)=>{args=params;return {error:null};}},
     toast:message=>messages.push(message),clearPullPlanForm:()=>{},loadPullPlans:async()=>{},
     humanPullPlanError:error=>error.message
   };
   vm.createContext(context);vm.runInContext(planSaveSource,context);
   await context.savePullPlan({preventDefault(){}});
+  return {args,messages};
+}
+
+test('cadastro exige posição semanal apenas quando o checklist está ativo',async()=>{
+  const {args,messages}=await submitPlanWithChecklist(true);
   assert.equal(args.p_week_trip_type,'ROUTINE');
   assert.match(messages[0],/regra semanal e checklist/);
+});
+
+test('cadastro sem checklist envia semana nula e dispensa escolha',async()=>{
+  const {args,messages}=await submitPlanWithChecklist(false);
+  assert.equal(args.p_week_trip_type,null);
+  assert.equal(messages[0],'Viagem cadastrada.');
 });

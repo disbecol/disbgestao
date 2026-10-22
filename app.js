@@ -3148,6 +3148,9 @@ function populatePullPlanInputs(){
 }
 function updatePullPlanFields(){
   const type=$('pullPlanType')?.value||'PULL',transfer=type==='TRANSFER';
+  const checklistRequired=pullChecklistEnabled();
+  $('pullPlanWeekField')?.classList.toggle('hidden',!checklistRequired);
+  document.querySelectorAll('input[name="pullPlanWeek"]').forEach(input=>{input.required=checklistRequired&&input.value==='FIRST';input.disabled=!checklistRequired;});
   const solo=$('pullPlanSolo');if(solo){if(transfer)solo.checked=true;solo.disabled=transfer;}
   const origin=$('pullPlanOrigin'),factory=$('pullPlanFactory');
   if(origin){if(transfer)origin.value='Matriz Caicó';origin.disabled=transfer;}
@@ -3249,14 +3252,15 @@ async function loadPullPlans(silent=false){
 }
 async function savePullPlan(event){
   event.preventDefault();if(!hasPerm('PULL_PLAN'))return;
-  const week=document.querySelector('input[name="pullPlanWeek"]:checked')?.value;
-  if(!week)return toast('Selecione a posição da viagem na semana.','error');
+  const checklistRequired=pullChecklistEnabled();
+  const week=checklistRequired?document.querySelector('input[name="pullPlanWeek"]:checked')?.value:null;
+  if(checklistRequired&&!week)return toast('Selecione a posição da viagem na semana.','error');
   const type=$('pullPlanType').value,scheduledRaw=$('pullPlanScheduled').value;
   const scheduledAt=scheduledRaw?new Date(scheduledRaw).toISOString():null;
   if(type==='PULL'&&!scheduledAt)return toast('Informe a data e o horário de agendamento na fábrica.','error');
   const args={p_plan_id:$('pullPlanId').value||null,p_cycle_type:type,p_origin_unit:$('pullPlanOrigin').value,p_plate:$('pullPlanPlate').value,p_factory:$('pullPlanFactory').value,p_driver1:$('pullPlanDriver1').value,p_driver2:$('pullPlanDriver2').value||null,p_solo_trip:type==='TRANSFER'||$('pullPlanSolo').checked,p_scheduled_at:scheduledAt,p_week_trip_type:week};
   const button=$('pullPlanSave');button.disabled=true;button.textContent='Salvando…';
-  try{const {error}=await sb.rpc('save_pull_trip_plan',args);if(error)throw error;toast('Viagem cadastrada com regra semanal e checklist.','success');clearPullPlanForm();await loadPullPlans(true);}catch(error){toast(humanPullPlanError(error),'error');}
+  try{const {error}=await sb.rpc('save_pull_trip_plan',args);if(error)throw error;toast(checklistRequired?'Viagem cadastrada com regra semanal e checklist.':'Viagem cadastrada.','success');clearPullPlanForm();await loadPullPlans(true);}catch(error){toast(humanPullPlanError(error),'error');}
   finally{button.disabled=false;button.textContent=$('pullPlanId').value?'Salvar alterações':'Cadastrar viagem';}
 }
 async function onPullPlansClick(event){
@@ -4143,7 +4147,7 @@ async function loadPullGoals(){if(!hasPerm('PULL_GOALS'))return;const y=Number($
 async function savePullGoals(e){e.preventDefault();const parse=id=>{const v=parseDurationInput($(id).value);if(v==null)throw new Error(`Tempo inválido em ${id}. Use HH:MM.`);return v;};try{const row={year:Number($('pullGoalYear').value),tmv_out_target_minutes:parse('goalTmvOut'),factory_target_minutes:parse('goalFactory'),tmv_return_target_minutes:parse('goalTmvReturn'),unit_target_minutes:parse('goalUnit'),cycle_target_minutes:parse('goalCycle'),tmv_out_adherence:num($('goalTmvOutAdh').value),factory_adherence:num($('goalFactoryAdh').value),tmv_return_adherence:num($('goalTmvReturnAdh').value),unit_adherence:num($('goalUnitAdh').value),cycle_adherence:num($('goalCycleAdh').value),updated_by:authUser.id,updated_at:new Date().toISOString()};const {error}=await sb.from('pull_goals').upsert(row,{onConflict:'year'});if(error)throw error;toast('Metas salvas.','success');}catch(err){toast(humanPullError(err),'error');}}
 
 async function loadPullConfig(){if(!hasPerm('PULL_CONFIG'))return;try{await loadPullReferenceData();$('pullChecklistEnabled').checked=pullChecklistEnabled();$('pullGpsAccuracy').value=Math.min(500,Math.max(5,Number(pullSettings?.gps_max_accuracy_m||200)));$('pullTrackInterval').value=pullSettings?.track_interval_seconds??60;$('pullTrackDistance').value=pullSettings?.track_min_distance_m??50;renderPullFactoryList();renderPullVehicleRows();renderPullSteps();updatePullStepExecutorUi();}catch(e){toast(humanPullError(e),'error');}}
-async function savePullSettings(e){e.preventDefault();try{const gps=Math.min(500,Math.max(5,intVal('pullGpsAccuracy')||200));$('pullGpsAccuracy').value=gps;const row={singleton:true,gps_max_accuracy_m:gps,track_interval_seconds:intVal('pullTrackInterval'),track_min_distance_m:intVal('pullTrackDistance'),checklist_enabled:$('pullChecklistEnabled').checked,updated_by:authUser.id,updated_at:new Date().toISOString()};const {error}=await sb.from('pull_settings').upsert(row,{onConflict:'singleton'});if(error)throw error;pullSettings={...(pullSettings||{}),...row};await cachePullOfflineSnapshot();renderPullDriver();toast(`Configuração salva. Checklist ${row.checklist_enabled?'habilitado':'desabilitado'}; GPS até ±${gps} m.`,'success');}catch(err){toast(humanPullError(err),'error');}}
+async function savePullSettings(e){e.preventDefault();try{const gps=Math.min(500,Math.max(5,intVal('pullGpsAccuracy')||200));$('pullGpsAccuracy').value=gps;const row={singleton:true,gps_max_accuracy_m:gps,track_interval_seconds:intVal('pullTrackInterval'),track_min_distance_m:intVal('pullTrackDistance'),checklist_enabled:$('pullChecklistEnabled').checked,updated_by:authUser.id,updated_at:new Date().toISOString()};const {error}=await sb.from('pull_settings').upsert(row,{onConflict:'singleton'});if(error)throw error;pullSettings={...(pullSettings||{}),...row};await cachePullOfflineSnapshot();updatePullPlanFields();renderPullDriver();toast(`Configuração salva. Checklist ${row.checklist_enabled?'habilitado':'desabilitado'}; GPS até ±${gps} m.`,'success');}catch(err){toast(humanPullError(err),'error');}}
 function renderPullFactoryList(){$('pullFactoryList').innerHTML=pullFactories.map(f=>`<button type="button" class="compact-row" data-factory-edit="${esc(f.name)}"><span><strong>${esc(f.name)}</strong><small>${f.latitude==null?'Localização de auditoria não configurada':`${Number(f.latitude).toFixed(5)}, ${Number(f.longitude).toFixed(5)} • raio de auditoria ${f.radius_meters||'—'} m`}</small></span><span>Editar</span></button>`).join('')||'<div class="empty-state">Nenhuma fábrica.</div>';$('pullFactoryList').onclick=e=>{const b=e.target.closest('[data-factory-edit]');if(!b)return;$('pullFactoryName').value=b.dataset.factoryEdit;fillPullFactoryForm();};}
 function fillPullFactoryForm(){const f=pullFactories.find(x=>x.name===$('pullFactoryName').value);$('pullFactoryOriginal').value=f?.name||'';$('pullFactoryLat').value=f?.latitude??'';$('pullFactoryLon').value=f?.longitude??'';$('pullFactoryRadius').value=f?.radius_meters??'';}
 async function useGpsForPullFactory(){const b=$('btnPullFactoryGps');b.disabled=true;const old=b.textContent;b.textContent='Atualizando configuração…';try{const target=await refreshPullGpsTarget();b.textContent='Capturando…';const g=await captureGps({maxAccuracy:target,maxWaitMs:15000,onProgress:s=>b.textContent=`GPS ±${Math.round(s.accuracy)} m / limite ${target} m…`});$('pullFactoryLat').value=g.latitude.toFixed(7);$('pullFactoryLon').value=g.longitude.toFixed(7);toast(`Localização capturada com precisão ±${Math.round(g.accuracy||0)} m.`,'success');}catch(e){toast(humanGpsOrPullError(e),'error');}finally{b.disabled=false;b.textContent=old;}}
@@ -7228,6 +7232,7 @@ recordPullNextStep = async function(){
     await cachePullOfflineSnapshot();
 
     renderPullDriver();
+    void syncPullTracking().catch(error=>console.warn('[PUXADA GPS] troca de motorista',error));
 
     if(navigator.onLine){
 
@@ -7235,7 +7240,8 @@ recordPullNextStep = async function(){
         'Sincronizando…';
 
       await syncOfflineQueue({
-        silent:true
+        silent:true,
+        pullOnly:true
       });
 
       // A operacao precisa realmente ter
@@ -7344,7 +7350,7 @@ syncPullTracking = function(){if(!navigator.onLine){stopPullTracking();return;}r
 
 async function syncNewPullOccurrence(op,successMessage){
   if(!navigator.onLine){toast('Sem sinal: ocorrência salva no aparelho. Será enviada quando a internet voltar.','success');return;}
-  await syncOfflineQueue({silent:true});
+  await syncOfflineQueue({silent:true,pullOnly:true});
   const pending=await offlineGet('queue',op.id);
   if(pending){toast('Ocorrência salva no aparelho e aguardando sincronização. Toque no status de conexão para tentar novamente.','success');return;}
   await loadPullActiveTrip(true);
@@ -7580,7 +7586,8 @@ async function processOfflineRecord(row){
 }
 
 async function syncOfflineQueue({
-  silent=false
+  silent=false,
+  pullOnly=false
 }={}){
 
   if(
@@ -7633,8 +7640,17 @@ async function syncOfflineQueue({
 
       try{
 
-        const rows=
-          await offlineQueueRows();
+        const pendingRows=await offlineQueueRows();
+        // Pontos GPS podem somar milhares. As operacoes da viagem precisam
+        // sincronizar primeiro, mantendo a ordem entre etapas e ocorrencias.
+        const pullActions=new Set(['PULL_STEP','PULL_OCC_START','PULL_OCC_END','PULL_CHECKLIST']);
+        const rows=pullOnly
+          ?pendingRows.filter(row=>pullActions.has(row.type))
+          :[
+            ...pendingRows.filter(row=>pullActions.has(row.type)),
+            ...pendingRows.filter(row=>!pullActions.has(row.type)&&row.type!=='PULL_TRACK_POINT'),
+            ...pendingRows.filter(row=>row.type==='PULL_TRACK_POINT').slice(0,25)
+          ];
 
         for(const row of rows){
 
@@ -9136,6 +9152,7 @@ const PULL_NATIVE_TOKEN_PREFIX_V170='disb_pull_tracking_token_v170_';
 let pullNativeTrackingTripIdV170='';
 let pullNativeTrackingStartingV170=null;
 let pullNativeLastQueuedV170=null;
+let pullNativeTrackingHasUploadV170=false;
 let pullLiveMapTimerV170=null;
 
 function getBackgroundGeolocationV170(){
@@ -9291,6 +9308,8 @@ async function startPullNativeTrackingV170(){
 
   if(!isNativeCapacitor()||!trip||trip.status!=='IN_PROGRESS')return false;
 
+  if(pullTrackWatch?.kind==='foreground-v170'&&pullTrackWatch.tripId!==String(trip.id))stopPullTracking();
+
   if(
     pullTrackWatch?.kind==='background-v170'
     &&String(pullNativeTrackingTripIdV170)===String(trip.id)
@@ -9348,7 +9367,7 @@ async function startPullNativeTrackingV170(){
       // Guarda uma copia local mesmo quando o Android informa estar online:
       // o POST nativo pode falhar antes que navigator.onLine mude de estado.
       // O servidor elimina repeticoes pela mesma chave de ingestao.
-      if(p.accuracy==null||p.accuracy<=100){
+      if(p.accuracy==null||p.accuracy<=300){
         queuePullTrackPointV170(trip.id,p)
           .catch(e=>console.warn('[PUXADA GPS OFFLINE]',e));
       }
@@ -9356,6 +9375,7 @@ async function startPullNativeTrackingV170(){
   );
 
   pullNativeTrackingTripIdV170=String(trip.id);
+  pullNativeTrackingHasUploadV170=Boolean(url);
   pullTrackWatch={
     kind:'background-v170',
     id:'native',
@@ -9371,15 +9391,44 @@ async function startPullNativeTrackingV170(){
   return true;
 }
 
+async function startPullForegroundTrackingV170(){
+  const trip=pullActiveTrip;
+  const geo=getCapacitorGeolocation();
+  if(!trip||!geo?.watchPosition)return false;
+  if(pullTrackWatch?.kind==='foreground-v170'&&pullTrackWatch.tripId===String(trip.id))return true;
+  if(pullTrackWatch)stopPullTracking();
+  const id=await geo.watchPosition(
+    {enableHighAccuracy:true,timeout:30000,maximumAge:0,minimumUpdateInterval:5000},
+    (position,error)=>{
+      if(error){console.warn('[PUXADA GPS PRIMEIRO PLANO]',error);return;}
+      if(!position)return;
+      const point=gpsSample(position);
+      rememberPullGpsSample(point);
+      if(point.accuracy<=300)void queuePullTrackPointV170(trip.id,point)
+        .catch(e=>console.warn('[PUXADA GPS PRIMEIRO PLANO]',e));
+    }
+  );
+  pullTrackWatch={kind:'foreground-v170',id,tripId:String(trip.id)};
+  return true;
+}
+
 const stopPullTrackingBeforeNativeV170=stopPullTracking;
 
 stopPullTracking=function(){
+  if(pullTrackWatch?.kind==='foreground-v170'){
+    const id=pullTrackWatch.id;
+    pullTrackWatch=null;
+    void Promise.resolve(getCapacitorGeolocation()?.clearWatch?.({id}))
+      .catch(e=>console.warn('[PUXADA GPS PRIMEIRO PLANO] stop',e));
+    return;
+  }
   if(pullTrackWatch?.kind==='background-v170'){
     const bg=getBackgroundGeolocationV170();
 
     pullTrackWatch=null;
     pullTrackLast=null;
     pullNativeTrackingTripIdV170='';
+    pullNativeTrackingHasUploadV170=false;
     pullNativeLastQueuedV170=null;
 
     if(bg?.stop){
@@ -9402,7 +9451,7 @@ syncPullTracking=async function(){
     isPullDriver()
     &&pullActiveTrip
     &&next
-    &&pullCanExecuteStep(next)
+    &&pullIsActiveDriver()
     &&pullActiveTrip.status==='IN_PROGRESS';
 
   if(!shouldTrack){
@@ -9421,6 +9470,8 @@ syncPullTracking=async function(){
     return true;
   }
 
+  if(pullTrackWatch?.kind==='foreground-v170'&&pullTrackWatch.tripId===String(pullActiveTrip.id))return true;
+
   if(pullNativeTrackingStartingV170){
     return await pullNativeTrackingStartingV170;
   }
@@ -9429,6 +9480,9 @@ syncPullTracking=async function(){
 
   try{
     return await pullNativeTrackingStartingV170;
+  }catch(error){
+    console.warn('[PUXADA GPS NATIVO] usando rastreio em primeiro plano',error);
+    return startPullForegroundTrackingV170();
   }finally{
     pullNativeTrackingStartingV170=null;
   }
@@ -9438,7 +9492,7 @@ window.addEventListener('online',()=>{
   if(!isNativeCapacitor()||!pullActiveTrip)return;
 
   // Se o servico foi iniciado offline sem URL/token, reinicia com envio nativo.
-  if(pullTrackWatch?.kind==='background-v170'){
+  if(pullTrackWatch?.kind==='background-v170'&&!pullNativeTrackingHasUploadV170){
     stopPullTracking();
   }
 
@@ -12046,6 +12100,7 @@ processOfflineRecord=async function(row){
 const pullPlanCardHtmlBeforeChecklist=pullPlanCardHtml;
 pullPlanCardHtml=function(plan,analyst=false){
   const html=pullPlanCardHtmlBeforeChecklist(plan,analyst);
+  if(!pullChecklistEnabled()||!plan.week_trip_type)return html;
   const label=pullWeekLabels[plan.week_trip_type]||'Regra semanal anterior';
   const withWeek=html.replace('<div class="pull-plan-meta">',`<div class="pull-plan-meta"><span><b>${esc(label)}</b></span>`);
   return !analyst&&pullChecklistEnabled()&&plan.cycle_type==='PULL'&&plan.week_trip_type==='FIRST'
@@ -12053,6 +12108,10 @@ pullPlanCardHtml=function(plan,analyst=false){
 };
 
 async function pullLoadChecklistState(){
+  if(!pullChecklistEnabled()){
+    pullChecklistQuestions=[];pullChecklistRequirements=[];pullChecklistRuns=[];
+    pullChecklistLastKm=null;pullChecklistStateReady=true;renderPullDriver();return;
+  }
   if(!pullActiveTrip?.week_trip_type){pullChecklistQuestions=[];pullChecklistRequirements=[];pullChecklistRuns=[];pullChecklistLastKm=null;pullChecklistStateReady=true;renderPullDriver();return;}
   const key=`pull_checklist:${pullActiveTrip.id}`;
   if(navigator.onLine){
