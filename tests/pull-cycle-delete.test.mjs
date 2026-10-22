@@ -11,11 +11,14 @@ test('excluir ciclo exige administrador e o código exato antes da RPC',async()=
   let admin=false,actions;
   const input={value:''};
   const button={disabled:false,textContent:''};
+  const farolButtons=[];
+  const farolDetail={dataset:{pullDetail:'transfer-id'},parentElement:{appendChild(button){farolButtons.push(button);}}};
   const context={
-    document:{addEventListener(){}},navigator:{onLine:true},
-    renderPullHistory(){},pullPlanCardHtml(){return ''},onPullHistoryClick(){},onPullPlansClick(){},
+    document:{addEventListener(){},createElement(){return {dataset:{}};}},navigator:{onLine:true},
+    renderPullHistory(){},renderPullFarol(){},pullPlanCardHtml(){return '<article><div class="pull-plan-actions"></div></article>';},
+    onPullHistoryClick(){},onPullPlansClick(){},onPullFarolClick(){},
     loadPullHistory(){},loadPullPlans(){},loadPullFarol(){},pullHistory:[],pullPlans:[],
-    isAdmin:()=>admin,$:id=>id==='pullDeleteConfirmCode'?input:null,
+    isAdmin:()=>admin,$:id=>id==='pullDeleteConfirmCode'?input:id==='pullFarolCards'?{querySelectorAll:()=>[farolDetail]}:null,
     esc:value=>String(value),toast(){},closeModal(){},
     openModal(_title,_subtitle,_body,items){actions=items;},
     sb:{rpc:async(name)=>{calls.push(name);return {data:name==='preview_pull_cycle_deletion'
@@ -26,6 +29,10 @@ test('excluir ciclo exige administrador e o código exato antes da RPC',async()=
   await vm.runInContext("openPullDeleteCycle('trip-id')",context);
   assert.deepEqual(calls,[]);
   admin=true;
+  context.renderPullFarol();
+  assert.equal(farolButtons[0].dataset.pullDeleteCycle,'transfer-id');
+  assert.match(context.pullPlanCardHtml({id:'planned-id',plate:'ABC1234',cycle_type:'TRANSFER'},true),/data-pull-delete-plan="planned-id"/);
+  assert.match(context.pullPlanCardHtml({id:'started-id',trip_id:'transfer-id',cycle_type:'TRANSFER'},true),/data-pull-delete-cycle="transfer-id"/);
   await vm.runInContext("openPullDeleteCycle('trip-id')",context);
   assert.deepEqual(calls,['preview_pull_cycle_deletion']);
   input.value='PUX-ERRADO';

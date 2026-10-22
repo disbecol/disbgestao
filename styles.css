@@ -1199,6 +1199,10 @@ button[data-sales-delivered]:hover{
 .pull-timeline-item.checklist .dot{background:#25845a;border-color:#d9f4e3}
 @media(max-width:620px){.pull-week-buttons{grid-template-columns:1fr}.pull-checklist-form{max-height:60vh}}
 .pull-plan-list-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}.pull-plan-list-head .section-title{margin:0}.pull-plan-list-head .muted-text{margin:4px 0 0}
+.pull-plan-date-filter{display:flex;align-items:end;flex-wrap:wrap;gap:10px;margin:0 0 4px;padding:12px;border:1px solid #d6e3f0;border-radius:12px;background:#f7faff}
+.pull-plan-date-filter .field{min-width:155px;flex:0 1 190px}.pull-plan-date-filter .field label{margin-bottom:5px}.pull-plan-date-filter input{min-height:40px}.pull-plan-date-filter .btn{min-height:40px}
+.pull-plan-filter-count{margin-left:auto;padding:9px 0;color:#315b7c;font-size:11px;font-weight:800}.pull-plan-filter-help{margin:0 0 14px;color:#647b90;font-size:10px}
+@media(max-width:500px){.pull-plan-date-filter .field{flex:1 1 130px;min-width:0}.pull-plan-filter-count{width:100%;margin-left:0;padding:0}}
 .pull-plan-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}.pull-plan-list.empty-state{display:block}
 .pull-plan-card{padding:17px;border:1px solid #ccdaed;border-left:4px solid #2b70d8;border-radius:15px;background:linear-gradient(135deg,#fff,#f5f9ff);box-shadow:0 7px 20px rgba(34,69,117,.055)}
 .pull-plan-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.pull-plan-card-top>div{min-width:0}.pull-plan-card-top small,.pull-plan-card-top strong{display:block}.pull-plan-card-top small{color:#657d96;font-size:10px;font-weight:800}.pull-plan-card-top strong{margin-top:5px;color:#183b60;font-size:15px;line-height:1.35}.pull-plan-card-top .status{flex-shrink:0}

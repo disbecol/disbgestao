@@ -2982,6 +2982,10 @@ function bindPullEvents(){
   $('pullPlanDriver1')?.addEventListener('change',updatePullPlanFields);
   $('pullPlanClear')?.addEventListener('click',clearPullPlanForm);
   $('pullPlansRefresh')?.addEventListener('click',()=>loadPullPlans());
+  const pullPlansToday=()=>{const today=localIsoDate(new Date());$('pullPlansFrom').value=today;$('pullPlansTo').value=today;};
+  pullPlansToday();
+  ['pullPlansFrom','pullPlansTo'].forEach(id=>$(id)?.addEventListener('change',()=>loadPullPlans()));
+  $('pullPlansToday')?.addEventListener('click',()=>{pullPlansToday();loadPullPlans();});
   $('pullPlansList')?.addEventListener('click',event=>onPullPlansClick(event));
   $('pullAssignedPlans')?.addEventListener('click',onPullAssignedPlanClick);
   $('pullAssignedRefresh')?.addEventListener('click',()=>loadAssignedPullPlans());
@@ -3185,29 +3189,63 @@ function humanPullPlanError(error){
 function pullPlanCardHtml(plan,analyst=false){
   const canStart=plan.status==='PLANNED'&&plan.driver1_id===authUser?.id;
   const type=plan.cycle_type==='TRANSFER'?'Transferência':'Puxada';
-  const appointment=plan.scheduled_at?`Agendamento: <b>${fmtDateTime(plan.scheduled_at)}</b>`:'Sem agendamento de fábrica';
+  const appointment=plan.scheduled_at?`Agendamento: <b>${fmtDateTime(plan.scheduled_at)}</b>`:`Cadastro: <b>${fmtDateTime(plan.created_at)}</b>`;
   const driverNames=plan.solo_trip||plan.cycle_type==='TRANSFER'?`${esc(plan.driver1_name)} • sozinho`:`${esc(plan.driver1_name)} + ${esc(plan.driver2_name||'—')}`;
   const change=analyst&&plan.trip_id?pullPlanAppointmentChanges.get(plan.trip_id):null;
   const changeHtml=change?`<div class="pull-plan-appointment-change"><strong>Última alteração do agendamento</strong><span>Antigo: ${fmtDateTime(change.old_appointment_at)} → Novo: ${fmtDateTime(change.new_appointment_at)}</span><small>${esc(change.reason)} · ${esc(change.changed_by_name)} · ${fmtDateTime(change.changed_at)}</small></div>`:'';
   return `<article class="pull-plan-card" data-plan-id="${plan.id}"><div class="pull-plan-card-top"><div><small>${esc(type)} • ${esc(plan.origin_unit)}</small><strong>${esc(plan.plate)} → ${esc(plan.factory)}</strong></div><span class="status ${plan.status==='PLANNED'?'pending':plan.status==='STARTED'?'approved':'rejected'}">${pullPlanStatusLabel(plan)}</span></div><div class="pull-plan-meta"><span>${appointment}</span><span>Motoristas: <b>${driverNames}</b></span></div>${changeHtml}<div class="pull-plan-actions">${analyst&&plan.status==='PLANNED'?`<button type="button" class="mini-btn" data-pull-plan-edit="${plan.id}">Editar</button><button type="button" class="mini-btn" data-pull-plan-cancel="${plan.id}">Cancelar viagem</button>`:analyst&&plan.status==='STARTED'&&plan.cycle_type==='PULL'&&plan.trip_id?`<button type="button" class="mini-btn" data-pull-appointment-edit="${plan.id}">Alterar agendamento</button>`:!analyst&&plan.status==='PLANNED'?canStart?`<button type="button" class="btn primary" data-pull-plan-start="${plan.id}">Iniciar viagem</button>`:'<span class="pull-plan-wait">Aguardando o Motorista 1 iniciar</span>':''}</div></article>`;
 }
+let pullPlansRequestId=0;
+function pullPlanFilterDate(plan){
+  const timestamp=plan.cycle_type==='TRANSFER'?plan.created_at:(plan.scheduled_at||plan.created_at);
+  return timestamp?localIsoDate(new Date(timestamp)):'';
+}
+function pullPlanQueryBounds(from,to){
+  // O filtro final usa America/Fortaleza; a margem cobre a diferença para UTC.
+  const start=Date.parse(`${from}T00:00:00Z`),end=Date.parse(`${to}T00:00:00Z`);
+  return {start:new Date(start-86400000).toISOString(),end:new Date(end+2*86400000).toISOString()};
+}
+async function queryPullPlansInRange(type,column,bounds){
+  const rows=[];
+  for(let offset=0;;offset+=1000){
+    const {data,error}=await sb.from('pull_trip_plans').select('*').eq('origin_unit',activeUnit).eq('cycle_type',type)
+      .gte(column,bounds.start).lt(column,bounds.end).order(column,{ascending:false}).range(offset,offset+999);
+    if(error)throw error;
+    rows.push(...(data||[]));
+    if((data||[]).length<1000)break;
+  }
+  return rows;
+}
 async function loadPullPlans(silent=false){
   if(!hasPerm('PULL_PLAN'))return;
+  const requestId=++pullPlansRequestId;
+  const from=$('pullPlansFrom')?.value||localIsoDate(new Date());
+  const to=$('pullPlansTo')?.value||from;
+  const box=$('pullPlansList');
+  if(from>to){if(box){box.className='pull-plan-list empty-state';box.textContent='A data inicial não pode ser posterior à data final.';}$('pullPlansCount').textContent='';return;}
   try{
     await loadPullReferenceData();
-    const {data,error}=await sb.from('pull_trip_plans').select('*').eq('origin_unit',activeUnit).order('created_at',{ascending:false}).limit(200);
-    if(error)throw error;
-    pullPlans=data||[];
-    pullPlanAppointmentChanges=new Map();
-    const tripIds=pullPlans.filter(plan=>plan.status==='STARTED'&&plan.trip_id).map(plan=>plan.trip_id);
+    const bounds=pullPlanQueryBounds(from,to);
+    const [puxadas,transfers]=await Promise.all([
+      queryPullPlansInRange('PULL','scheduled_at',bounds),
+      queryPullPlansInRange('TRANSFER','created_at',bounds)
+    ]);
+    if(requestId!==pullPlansRequestId)return;
+    const plans=[...puxadas,...transfers].filter(plan=>{const day=pullPlanFilterDate(plan);return day>=from&&day<=to;})
+      .sort((a,b)=>String(pullPlanFilterDate(b)).localeCompare(pullPlanFilterDate(a))||String(b.created_at).localeCompare(String(a.created_at)));
+    const appointmentChanges=new Map();
+    const tripIds=plans.filter(plan=>plan.status==='STARTED'&&plan.trip_id).map(plan=>plan.trip_id);
     for(let i=0;i<tripIds.length;i+=75){
       const {data:changes,error:changeError}=await sb.from('pull_appointment_changes').select('*').in('trip_id',tripIds.slice(i,i+75)).order('changed_at',{ascending:false});
       if(changeError){console.warn('Histórico de agendamentos indisponível',changeError);break;}
-      (changes||[]).forEach(change=>{if(!pullPlanAppointmentChanges.has(change.trip_id))pullPlanAppointmentChanges.set(change.trip_id,change);});
+      (changes||[]).forEach(change=>{if(!appointmentChanges.has(change.trip_id))appointmentChanges.set(change.trip_id,change);});
     }
-    const box=$('pullPlansList');
+    if(requestId!==pullPlansRequestId)return;
+    pullPlans=plans;
+    pullPlanAppointmentChanges=appointmentChanges;
+    $('pullPlansCount').textContent=`${pullPlans.length} ${pullPlans.length===1?'viagem':'viagens'} no intervalo`;
     if(box){box.className=pullPlans.length?'pull-plan-list':'pull-plan-list empty-state';box.innerHTML=pullPlans.length?pullPlans.map(x=>pullPlanCardHtml(x,true)).join(''):'Nenhuma viagem cadastrada para esta unidade.';}
-  }catch(error){if(!silent)toast(humanPullPlanError(error),'error');const box=$('pullPlansList');if(box)box.textContent='Não foi possível carregar as viagens. Confira se o SQL 45 foi aplicado.';}
+  }catch(error){if(requestId!==pullPlansRequestId)return;if(!silent)toast(humanPullPlanError(error),'error');if(box)box.textContent='Não foi possível carregar as viagens. Confira a conexão.';}
 }
 async function savePullPlan(event){
   event.preventDefault();if(!hasPerm('PULL_PLAN'))return;
@@ -12544,7 +12582,7 @@ renderPullHistory=function(){
   if(!isAdmin())return;
   $('tbodyPullHistory')?.querySelectorAll('[data-hist-detail]').forEach(detail=>{
     const trip=pullHistory.find(row=>row.id===detail.dataset.histDetail);
-    if(trip?.cycle_type!=='PULL')return;
+    if(!trip||!['PULL','TRANSFER'].includes(trip.cycle_type))return;
     const button=document.createElement('button');
     button.type='button';button.className='mini-btn pull-delete-action';
     button.dataset.pullDeleteCycle=trip.id;button.textContent='Excluir ciclo';
@@ -12554,11 +12592,30 @@ renderPullHistory=function(){
 const pullPlanCardHtmlBeforeDelete=pullPlanCardHtml;
 pullPlanCardHtml=function(plan,analyst=false){
   const html=pullPlanCardHtmlBeforeDelete(plan,analyst);
-  if(!analyst||!isAdmin()||plan.cycle_type!=='PULL')return html;
+  if(!analyst||!isAdmin()||!['PULL','TRANSFER'].includes(plan.cycle_type))return html;
   const action=plan.trip_id
     ?`<button type="button" class="mini-btn pull-delete-action" data-pull-delete-cycle="${esc(plan.trip_id)}">Excluir ciclo</button>`
     :`<button type="button" class="mini-btn pull-delete-action" data-pull-delete-plan="${esc(plan.id)}">Excluir viagem</button>`;
   return html.replace('</div></article>',`${action}</div></article>`);
+};
+const renderPullFarolBeforeDelete=renderPullFarol;
+renderPullFarol=function(...args){
+  const result=renderPullFarolBeforeDelete(...args);
+  if(!isAdmin())return result;
+  $('pullFarolCards')?.querySelectorAll('[data-pull-detail]').forEach(detail=>{
+    const button=document.createElement('button');
+    button.type='button';button.className='btn secondary wide pull-delete-action';
+    button.dataset.pullDeleteCycle=detail.dataset.pullDetail;
+    button.textContent='Excluir ciclo';
+    detail.parentElement?.appendChild(button);
+  });
+  return result;
+};
+const onPullFarolClickBeforeDelete=onPullFarolClick;
+onPullFarolClick=function(event){
+  const button=event.target.closest('[data-pull-delete-cycle]');
+  if(button)return void openPullDeleteCycle(button.dataset.pullDeleteCycle);
+  return onPullFarolClickBeforeDelete(event);
 };
 const onPullHistoryClickBeforeDelete=onPullHistoryClick;
 onPullHistoryClick=function(event){
@@ -12621,11 +12678,12 @@ async function openPullDeleteCycle(tripId){
     if(error)throw error;
     if(!preview)throw new Error('Ciclo não encontrado.');
     const code=String(preview.trip_code||'');
-    const body=`<div class="notice"><strong>${esc(code)} • ${esc(preview.plate)}</strong><br>${esc(preview.origin_unit)} • ${esc(preview.status)}<br>${esc(preview.driver1_name)} / ${esc(preview.driver2_name||'—')}</div><p>Serão removidos ${Number(preview.events)||0} etapas, ${Number(preview.checklists)||0} checklists, o trajeto, ocorrências, notas e ${Number(preview.files)||0} arquivo(s) privado(s) deste ciclo. <strong>${Number(preview.nris_preserved)||0} solicitação(ões) de NRI permanecerão no histórico, desvinculadas da Puxada.</strong></p><div class="field"><label for="pullDeleteConfirmCode">Digite ${esc(code)} para confirmar *</label><input id="pullDeleteConfirmCode" autocomplete="off" placeholder="${esc(code)}"></div>`;
-    openModal('Excluir ciclo de Puxada',`${code} • exclusão permanente`,body,[
+    const type=preview.cycle_type==='TRANSFER'?'transferência':'puxada';
+    const body=`<div class="notice"><strong>${esc(code)} • ${esc(preview.plate)}</strong><br>${esc(preview.origin_unit)} • ${esc(preview.status)}<br>${esc(preview.driver1_name)} / ${esc(preview.driver2_name||'—')}</div><p>Serão removidos ${Number(preview.events)||0} etapas, ${Number(preview.checklists)||0} checklists, o trajeto, ocorrências, notas e ${Number(preview.files)||0} arquivo(s) privado(s) deste ciclo. <strong>${Number(preview.nris_preserved)||0} solicitação(ões) de NRI permanecerão no histórico, desvinculadas do ciclo.</strong></p><div class="field"><label for="pullDeleteConfirmCode">Digite ${esc(code)} para confirmar *</label><input id="pullDeleteConfirmCode" autocomplete="off" placeholder="${esc(code)}"></div>`;
+    openModal(`Excluir ciclo de ${type}`,`${code} • exclusão permanente`,body,[
       {label:'Voltar',class:'secondary',onClick:closeModal},
       {label:'Excluir ciclo',class:'danger',onClick:async event=>{
-        if($('pullDeleteConfirmCode')?.value.trim().toUpperCase()!==code.toUpperCase())return toast('Digite o código exato da Puxada.','error');
+        if($('pullDeleteConfirmCode')?.value.trim().toUpperCase()!==code.toUpperCase())return toast('Digite o código exato do ciclo.','error');
         const button=event.currentTarget;button.disabled=true;button.textContent='Excluindo ciclo…';
         try{
           const {data,error}=await sb.rpc('delete_pull_cycle',{p_trip_id:tripId,p_trip_code:code});
@@ -12642,7 +12700,7 @@ async function openPullDeleteCycle(tripId){
 async function openPullDeletePlan(planId){
   if(!isAdmin()||!navigator.onLine)return toast('A exclusão da viagem exige acesso de administrador e internet.','error');
   const plan=pullPlans.find(row=>row.id===planId);
-  if(!plan||plan.trip_id||plan.cycle_type!=='PULL')return toast('Esta viagem já iniciou. Exclua o ciclo no histórico.','error');
+  if(!plan||plan.trip_id||!['PULL','TRANSFER'].includes(plan.cycle_type))return toast('Esta viagem já iniciou. Exclua o ciclo no histórico ou no Farol.','error');
   const body=`<div class="notice"><strong>${esc(plan.plate)} → ${esc(plan.factory)}</strong><br>${esc(plan.origin_unit)} • ${esc(plan.driver1_name)} / ${esc(plan.driver2_name||'—')}</div><p>A viagem planejada e as notas anexadas serão excluídas permanentemente.</p><div class="field"><label for="pullDeleteConfirmPlate">Digite a placa ${esc(plan.plate)} para confirmar *</label><input id="pullDeleteConfirmPlate" autocomplete="off" placeholder="${esc(plan.plate)}"></div>`;
   openModal('Excluir viagem planejada',plan.plate,body,[
     {label:'Voltar',class:'secondary',onClick:closeModal},
