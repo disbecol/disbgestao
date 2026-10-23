@@ -18,9 +18,10 @@ test('etapa sem checklist fica no aparelho e avança para o próximo motorista s
   const events=[];
   const trip={id:'trip-1',driver1_id:'driver-1',driver2_id:'driver-2',driver2_name:'Motorista 2'};
   const context={
+    pullStepActionPending:false,
     pullActiveTrip:trip,pullDriverEvents:events,pullDriverOccurrences:[],pullMainSteps:[step,next],
     pullNextStep:()=>step,pullCanExecuteStep:()=>true,$:id=>id==='btnPullNextStep'?button:hint,
-    refreshPullGpsTarget:async()=>200,captureGps:async()=>gps,
+    pullGpsTarget:()=>200,captureGps:async()=>gps,
     pendingPullStepOperation:async()=>null,
     offlineQueueAdd:async(type,payload)=>{const row={id:'operation-1',type,payload};queued.push(row);return row;},
     offlineLocalId:()=> 'local-event-1',authUser:{id:'driver-1'},profile:{name:'Motorista 1'},

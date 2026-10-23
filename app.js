@@ -2965,6 +2965,7 @@ let pullTrackWatch=null;
 let pullTrackLast=null;
 let pullGpsLiveSample=null;
 let pullGpsBestSample=null;
+let pullStepActionPending=false;
 let pullClockTimer=null;
 let pullMapInstances=[];
 let pullMapContexts=new Map();
@@ -2995,10 +2996,15 @@ function bindPullEvents(){
   $('formPullStart')?.addEventListener('submit',event=>event.preventDefault());
   $('btnPullNextStep')?.addEventListener('click',recordPullNextStep);
   $('btnPullRefreshSteps')?.addEventListener('click',async()=>{
+    if(pullStepActionPending)return toast('Aguarde o registro da etapa antes de atualizar.','');
     if(!navigator.onLine)return toast('Conecte-se à internet para atualizar as etapas.','error');
     const button=$('btnPullRefreshSteps');
     button.disabled=true;button.textContent='Atualizando…';
-    try{if(await loadPullActiveTrip())toast('Etapas atualizadas.','success');}
+    try{
+      if(await withDeadline(loadPullActiveTrip(),12000,'PULL_REFRESH_TIMEOUT'))toast('Etapas atualizadas.','success');
+    }catch(error){
+      toast(error?.message==='PULL_REFRESH_TIMEOUT'?'A atualização demorou. As etapas já carregadas continuam disponíveis; tente novamente quando a conexão melhorar.':humanPullError(error),'error');
+    }
     finally{button.disabled=false;button.textContent='↻ Atualizar etapas';}
   });
   $('pullOccurrenceButtons')?.addEventListener('click',onPullOccurrenceClick);
@@ -3546,8 +3552,8 @@ function renderPullDriver(){
   const occurrenceLocksStep=!!openOcc&&!!next&&next.required!==false;
   $('pullNextStepName').textContent=next?`${nextNo}. ${next.name}`:'Todas as etapas concluídas';
   const canPoint=!!next&&pullCanExecuteStep(next)&&!occurrenceLocksStep;
-  $('btnPullNextStep').disabled=!canPoint;
-  $('btnPullNextStep').textContent=!next?'Ciclo concluído':occurrenceLocksStep?`Finalize ${openOcc.occurrence_name}`:canPoint?'Registrar próxima etapa':`Aguardando ${responsible}`;
+  $('btnPullNextStep').disabled=!canPoint||pullStepActionPending;
+  if(!pullStepActionPending)$('btnPullNextStep').textContent=!next?'Ciclo concluído':occurrenceLocksStep?`Finalize ${openOcc.occurrence_name}`:canPoint?'Registrar próxima etapa':`Aguardando ${responsible}`;
   $('pullNextStepHint').textContent=nextNo?`Etapa ${nextNo}/${pullMainSteps.length} • responsável: ${executorNo?`Motorista ${executorNo} — `:''}${responsible}`:'Todas as etapas principais foram concluídas.';
   const occBox=$('pullOpenOccurrence');
   if(openOcc){occBox.classList.remove('hidden');occBox.innerHTML=`<div><small>OCORRÊNCIA EM ANDAMENTO</small><strong>${esc(openOcc.occurrence_name)}</strong><span>Iniciada ${fmtDateTime(openOcc.started_at)} por ${esc(openOcc.started_by_name)}</span></div><button class="btn primary" data-end-occ="${openOcc.id}" ${pullIsActiveDriver()?'':'disabled'}>Encerrar ocorrência</button>`;}
@@ -5068,6 +5074,7 @@ function humanError(e){const m=String(e?.message||e?.error_description||e||'Erro
 function humanGpsError(e){
   const code=e?.code,msg=String(e?.message||e||'erro ao obter localização.');
   const native=isNativeCapacitor();
+  if(/GPS_TIMEOUT/i.test(msg))return 'O GPS demorou para responder. Verifique se a localização do celular está ativada e tente novamente.';
   if(/GPS_PRECISAO_APROXIMADA/i.test(msg))return 'o Android está fornecendo localização aproximada. Abra Configurações > Apps > Disb Gestão > Permissões > Localização e ative “Usar localização precisa”.';
   if(/GPS_PRECISAO_INSUFICIENTE/i.test(msg)){
     const best=e?.bestAccuracy??Number(msg.split(':')[1]);
@@ -5160,6 +5167,13 @@ function rememberPullGpsSample(sample){if(!sample||!Number.isFinite(sample.latit
 function recentGpsSample(maxAgeMs=15000){const s=pullGpsLiveSample;if(!s)return null;const age=Date.now()-new Date(s.capturedAt).getTime();return age>=0&&age<=maxAgeMs?s:null;}
 function gpsAccuracyError(best,maxAccuracy){const err=new Error(`GPS_PRECISAO_INSUFICIENTE:${best?Math.round(best.accuracy):'SEM_SINAL'}:${maxAccuracy}`);err.code='GPS_PRECISAO_INSUFICIENTE';err.bestAccuracy=best?.accuracy??null;err.maxAccuracy=maxAccuracy;return err;}
 function waitMs(ms){return new Promise(r=>setTimeout(r,ms));}
+function withDeadline(promise,ms,code='TIMEOUT'){
+  let timer;
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(code)),ms);})
+  ]).finally(()=>clearTimeout(timer));
+}
 function browserHighAccuracyPosition(timeout=12000){
   return new Promise((resolve,reject)=>{
     if(!navigator.geolocation)return reject(new Error('GPS indisponível'));
@@ -5170,22 +5184,30 @@ async function captureGps({maxAccuracy=null,maxWaitMs=15000,onProgress=null,useR
   const limit=maxAccuracy==null?null:Math.max(1,Number(maxAccuracy));
   const recent=useRecent?recentGpsSample(12000):null;
   if(recent&&(!limit||recent.accuracy<=limit)){onProgress?.(recent);return recent;}
-  const samples=[];let best=recent||null;let lastError=null;let settled=false;let watchId=null;let timer=null;
+  const samples=[];let best=recent||null;let lastError=null;let settled=false;let watchId=null;let timer=null;let fallbackTimer=null;
   const capGeo=getCapacitorGeolocation();
   const accept=sample=>{samples.push(sample);rememberPullGpsSample(sample);if(!best||sample.accuracy<best.accuracy)best=sample;onProgress?.(best);return !limit||sample.accuracy<=limit;};
   if(capGeo&&isNativeCapacitor()){
-    let p=typeof capGeo.checkPermissions==='function'?await capGeo.checkPermissions():null;
-    if(!locationGranted(p)&&typeof capGeo.requestPermissions==='function')p=await capGeo.requestPermissions({permissions:['location','coarseLocation']});
-    if(limit&&!preciseLocationGranted(p)&&typeof capGeo.requestPermissions==='function')p=await capGeo.requestPermissions({permissions:['location']});
+    let p=typeof capGeo.checkPermissions==='function'?await withDeadline(capGeo.checkPermissions(),10000,'GPS_TIMEOUT'):null;
+    if(!locationGranted(p)&&typeof capGeo.requestPermissions==='function')p=await withDeadline(capGeo.requestPermissions({permissions:['location','coarseLocation']}),60000,'GPS_TIMEOUT');
+    if(limit&&!preciseLocationGranted(p)&&typeof capGeo.requestPermissions==='function')p=await withDeadline(capGeo.requestPermissions({permissions:['location']}),60000,'GPS_TIMEOUT');
     if(!locationGranted(p))throw new Error('PERMISSAO_LOCALIZACAO_NEGADA');
     if(limit&&p&&!preciseLocationGranted(p))throw new Error('GPS_PRECISAO_APROXIMADA');
     return await new Promise(async(resolve,reject)=>{
-      const cleanup=async()=>{if(timer)clearTimeout(timer);if(watchId!=null){try{await capGeo.clearWatch({id:watchId});}catch(_e){}}};
-      const finish=async(sample,err)=>{if(settled)return;settled=true;await cleanup();sample?resolve(sample):reject(err||lastError||new Error('GPS indisponível'));};
+      const clearWatch=()=>{if(watchId!=null){try{void Promise.resolve(capGeo.clearWatch({id:watchId})).catch(()=>{});}catch(_e){}}};
+      const finish=(sample,err)=>{if(settled)return;settled=true;if(timer)clearTimeout(timer);if(fallbackTimer)clearTimeout(fallbackTimer);clearWatch();sample?resolve(sample):reject(err||lastError||new Error('GPS indisponível'));};
       timer=setTimeout(()=>finish(limit&&best&&best.accuracy<=limit?best:null,limit?gpsAccuracyError(best,limit):(best?null:lastError||new Error('GPS indisponível'))),maxWaitMs);
+      if(typeof capGeo.getCurrentPosition==='function'){
+        fallbackTimer=setTimeout(()=>{
+          if(settled)return;
+          void Promise.resolve(capGeo.getCurrentPosition({enableHighAccuracy:true,timeout:Math.max(1000,maxWaitMs-5000),maximumAge:0}))
+            .then(pos=>{if(settled||!pos)return;const sample=gpsSample(pos);if(accept(sample))finish(sample,null);})
+            .catch(error=>{lastError=error;});
+        },Math.min(5000,Math.max(50,Math.floor(maxWaitMs/3))));
+      }
       try{
         watchId=await capGeo.watchPosition({enableHighAccuracy:true,timeout:maxWaitMs,maximumAge:0,minimumUpdateInterval:750},(pos,err)=>{if(err){lastError=err;return;}if(!pos)return;const sample=gpsSample(pos);if(accept(sample))finish(sample,null);});
-        if(settled&&watchId!=null){try{await capGeo.clearWatch({id:watchId});}catch(_e){}}
+        if(settled)clearWatch();
       }catch(e){lastError=e;if(best&&(!limit||best.accuracy<=limit))finish(best,null);else finish(null,limit?gpsAccuracyError(best,limit):e);}
     });
   }
@@ -6704,8 +6726,16 @@ loadPullReferenceData = async function(){
   try{await loadPullReferenceDataV151();await cachePullOfflineSnapshot();}catch(e){const ok=await restorePullOfflineSnapshot();if(!ok)throw e;}
 };
 refreshPullGpsTarget = async function(){
-  if(!navigator.onLine)return pullGpsTarget();
-  try{const {data,error}=await sb.from('pull_settings').select('singleton,gps_max_accuracy_m,track_interval_seconds,track_min_distance_m,checklist_enabled,updated_at').eq('singleton',true).maybeSingle();if(error)throw error;if(data)pullSettings={...(pullSettings||{}),...data};await cachePullOfflineSnapshot();return pullGpsTarget();}catch(e){console.warn('GPS: usando tolerância em cache.',e);return pullGpsTarget();}
+  if(!navigator.onLine||!sb)return pullGpsTarget();
+  try{
+    const {data,error}=await withDeadline(
+      sb.from('pull_settings').select('singleton,gps_max_accuracy_m,track_interval_seconds,track_min_distance_m,checklist_enabled,updated_at').eq('singleton',true).maybeSingle(),
+      3500,'GPS_SETTINGS_TIMEOUT'
+    );
+    if(error)throw error;
+    if(data){pullSettings={...(pullSettings||{}),...data};void cachePullOfflineSnapshot();}
+    return pullGpsTarget();
+  }catch(e){console.warn('GPS: usando tolerância em cache.',e);return pullGpsTarget();}
 };
 loadPullActiveTrip = async function(silent=false){
 
@@ -6995,7 +7025,7 @@ async function reconcilePullStepQueueRow(row){
 
 recordPullNextStep = async function(){
 
-  if(!pullActiveTrip)return;
+  if(!pullActiveTrip||pullStepActionPending)return;
 
   const step=
     pullNextStep();
@@ -7030,6 +7060,8 @@ recordPullNextStep = async function(){
     return;
   }
 
+  pullStepActionPending=true;
+
   const btn=
     $('btnPullNextStep');
 
@@ -7045,7 +7077,7 @@ recordPullNextStep = async function(){
   try{
 
     const target=
-      await refreshPullGpsTarget();
+      pullGpsTarget();
 
     const gps=
       await captureGps({
@@ -7326,6 +7358,7 @@ recordPullNextStep = async function(){
   }
   finally{
 
+    pullStepActionPending=false;
     btn.disabled=false;
 
     renderPullDriver();
@@ -12190,7 +12223,6 @@ renderPullDriver=function(){
 };
 const recordPullNextStepBeforeChecklist=recordPullNextStep;
 recordPullNextStep=async function(){
-  if(navigator.onLine)await refreshPullGpsTarget();
   if(pullChecklistEnabled()&&pullActiveTrip?.week_trip_type&&!pullChecklistStateReady)return toast('Conecte-se para carregar o checklist desta viagem.','error');
   const pending=pullChecklistPending()[0];
   if(pending)return pullOpenChecklist(pending.checkpoint_code);
