@@ -1,6 +1,6 @@
 {
   "name": "disb-gestao",
-  "version": "1.7.55",
+  "version": "1.7.56",
   "private": true,
   "scripts": {
     "prepare:web": "node scripts/copy-web.mjs",
