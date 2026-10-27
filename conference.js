@@ -2,15 +2,15 @@
   'use strict';
 
   const types = [
-    {key:'g300',label:'Garrafeiras de 300ml',unitsPerCrate:23,value:69.5},
-    {key:'g600_green',label:'Garrafeiras 600ml Verde',unitsPerCrate:24,value:83},
-    {key:'g600_brown',label:'Garrafeiras 600ml Marrom',unitsPerCrate:24,value:71},
-    {key:'g_litrao',label:'Garrafeiras de Litrão',unitsPerCrate:12,value:59},
+    {key:'g300',label:'Garrafeiras de 300ml',unitsPerCrate:23,value:69.5,bottleValue:1.5},
+    {key:'g600_green',label:'Garrafeiras 600ml Verde',unitsPerCrate:24,value:83,bottleValue:2},
+    {key:'g600_brown',label:'Garrafeiras 600ml Marrom',unitsPerCrate:24,value:71,bottleValue:1.5},
+    {key:'g_litrao',label:'Garrafeiras de Litrão',unitsPerCrate:12,value:59,bottleValue:1.5},
     {key:'keg30',label:'Barris de Chopp 30L',unitsPerCrate:0,value:400},
     {key:'keg50',label:'Barris de Chopp 50L',unitsPerCrate:0,value:400},
-    {key:'chapatex',label:'Chapatex',unitsPerCrate:0,value:null},
-    {key:'pbr1',label:'PBR 1',unitsPerCrate:0,value:null},
-    {key:'pbr2',label:'PBR 2',unitsPerCrate:0,value:null},
+    {key:'chapatex',label:'Chapatex',unitsPerCrate:0,value:8},
+    {key:'pbr1',label:'PBR 1',unitsPerCrate:0,value:45},
+    {key:'pbr2',label:'PBR 2',unitsPerCrate:0,value:45},
   ];
   const typeByKey = new Map(types.map(type=>[type.key,type]));
   const count = value => Math.max(0, Number(value)||0);
@@ -41,7 +41,8 @@
   function bottlesFromCrates(conference){
     const gross=types.reduce((total,type)=>total+(type.unitsPerCrate?count(conference?.[type.key])*type.unitsPerCrate:0),0);
     const looseSales=types.reduce((total,type)=>total+saleTotals(conference,type.key).looseBottles,0);
-    return {gross,looseSales,estimated:Math.max(0,gross-looseSales)};
+    const emptyCrateBottles=types.reduce((total,type)=>{const sold=saleTotals(conference,type.key);return total+(sold.containers-sold.complete)*type.unitsPerCrate;},0);
+    return {gross,emptyCrateBottles,looseSales,estimated:gross+emptyCrateBottles-looseSales};
   }
 
   function aggregateMaps(rows,conference){
@@ -64,17 +65,21 @@
       const sold=saleTotals(conference,type.key);
       const expected=plan==null?null:plan-sold.containers;
       const diff=expected==null?null:actual-expected;
-      // Garrafas avulsas não alteram a contagem física de garrafeiras. Sem uma
-      // contagem separada de garrafas, o saldo de unidades é estimado a partir
-      // das garrafeiras retornadas e da venda avulsa informada.
-      const expectedBottles=expected==null||!type.unitsPerCrate?null:expected*type.unitsPerCrate-sold.looseBottles;
-      const actualBottles=!type.unitsPerCrate?null:actual*type.unitsPerCrate-sold.looseBottles;
+      const planBottles=plan==null||!type.unitsPerCrate?null:plan*type.unitsPerCrate;
+      const expectedBottles=planBottles==null?null:planBottles-sold.bottles;
+      // O conferente informa garrafeiras, sem contar garrafas avulsas à parte.
+      // Garrafeira vendida vazia conserva as garrafas no saldo estimado; venda
+      // completa retira ambos e venda avulsa retira só as garrafas.
+      const actualBottles=!type.unitsPerCrate?null:actual*type.unitsPerCrate+(sold.containers-sold.complete)*type.unitsPerCrate-sold.looseBottles;
       const diffUnits=expectedBottles==null?null:actualBottles-expectedBottles;
-      const value=diff==null||type.value==null?null:Math.abs(diff)*type.value;
-      diffs[type.key]={...type,plan,actual,sold,expected,diff,expectedBottles,actualBottles,diffUnits,value};
-      if(diff!=null&&diff!==0){
+      const containerValue=diff==null||type.value==null?null:Math.abs(diff)*type.value;
+      const bottleValue=diffUnits==null||type.bottleValue==null?null:Math.abs(diffUnits)*type.bottleValue;
+      const value=containerValue==null?null:containerValue+(bottleValue||0);
+      diffs[type.key]={...type,plan,planBottles,actual,sold,expected,diff,expectedBottles,actualBottles,diffUnits,containerValue,bottleValue,value};
+      if(diff!=null&&(diff!==0||diffUnits!==null&&diffUnits!==0)){
         divCount++;
-        if(value!=null){if(diff>0)pos+=value;else neg+=value;}
+        if(containerValue!=null){if(diff>0)pos+=containerValue;else if(diff<0)neg+=containerValue;}
+        if(bottleValue!=null){if(diffUnits>0)pos+=bottleValue;else if(diffUnits<0)neg+=bottleValue;}
       }
     }
     return {...combined,diffs,pos,neg,divCount,status:!combined.complete?'SEM_BASE':divCount?'DIVERGENTE':'OK'};

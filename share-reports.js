@@ -32,7 +32,7 @@
     const numbers=(Array.isArray(row.conference?.map_numbers)&&row.conference.map_numbers.length?row.conference.map_numbers:String(row.map_number||'').split(' + ')).filter(Boolean);
     const mapLines=[];for(let i=0;i<numbers.length;i+=6)mapLines.push(numbers.slice(i,i+6).join('  •  '));
     if(!mapLines.length)mapLines.push('—');
-    const rowHeight=84,peopleTop=190+Math.max(60,mapLines.length*30+25)+16,rowsTop=peopleTop+223,height=rowsTop+types.length*rowHeight+245;
+    const rowHeight=112,peopleTop=190+Math.max(60,mapLines.length*30+25)+16,rowsTop=peopleTop+223,height=rowsTop+types.length*rowHeight+280;
     const {c,x:ctx}=canvas(height);x=ctx;
     const conf=row.conference||{},hasMap=row.status!=='SEM_BASE';
     header('Conferência de vasilhames','Conferência de mapas',`Rota: ${date(row.source_map_date)}  •  Conferência: ${date(conf.conference_date)}  •  ${crop(row.city||'Sem cidade',45)}`);
@@ -41,19 +41,27 @@
     box(x,peopleTop,W-pad*2,125);
     const people=[['MOTORISTA',row.driver],['AJUDANTE 1',row.helper1],['AJUDANTE 2',row.helper2],['CONFERENTE',conf.checker_name]];
     people.forEach(([label,value],i)=>{const left=pad+22+i*242;text(label,left,peopleTop+35,16,muted,800);text(crop(value||'—',16),left,peopleTop+74,23,navy,700);});
-    text('PLANILHA • VENDAS • CONFERIDO • DIFERENÇA',pad+18,peopleTop+179,18,muted,800);
+    text('GARRAFEIRAS E GARRAFAS • SALDOS E VALORES',pad+18,peopleTop+179,18,muted,800);
     types.forEach((type,i)=>{
       const diff=row.diffs?.[type.key]||{},sold=diff.sold||{},y=rowsTop+i*rowHeight;
       x.fillStyle=i%2?'#f8fafd':'#fff';x.fillRect(pad,y-25,W-pad*2,rowHeight);
       text(crop(type.label,64),pad+18,y-1,21,navy,700);
-      const plan=diff.plan==null?'sem base':number(diff.plan);
-      const expected=diff.expected==null?'—':number(diff.expected);
-      const difference=diff.diff==null?'—':`${diff.diff>0?'+':''}${number(diff.diff)}`;
-      text(`Planilha ${plan}  •  Após venda ${expected}  •  Conferido ${number(diff.actual)}`,pad+18,y+26,18,muted,600);
-      const saleText=type.unitsPerCrate?`Venda vasilhame ${number(sold.bottles)}  •  Venda garrafeira ${number(sold.containers)}`:`Venda item ${number(sold.containers)}`;
-      text(`${saleText}  •  Diferença ${difference}  •  ${diff.value==null?'Valor —':currency(diff.value)}`,pad+18,y+51,17,diff.diff>0?'#087d41':diff.diff<0?'#c43b39':muted,600);
+      const qty=(value,signed=false)=>value==null?'—':`${signed&&value>0?'+':''}${number(value)}`;
+      if(type.unitsPerCrate){
+        text(`Planilha ${qty(diff.plan)} GFA  •  ${qty(diff.planBottles)} garrafas`,pad+18,y+25,17,muted,600);
+        text(`Vendas ${qty(sold.containers)} GFA  •  ${qty(sold.bottles)} garrafas`,pad+18,y+49,17,muted,600);
+        text(`Previsto ${qty(diff.expected)} GFA  •  ${qty(diff.expectedBottles)} garrafas`,pad+18,y+73,17,muted,600);
+        text(`Retorno ${qty(diff.actual)} GFA  •  ${qty(diff.actualBottles)} garrafas*`,550,y+25,17,navy,600);
+        text(`Diferença ${qty(diff.diff,true)} GFA  •  ${qty(diff.diffUnits,true)} garrafas`,550,y+49,17,diff.diff>0?'#087d41':diff.diff<0?'#c43b39':muted,700);
+        text(`Valor GFA ${diff.containerValue==null?'—':currency(diff.containerValue)}  +  garrafas ${diff.bottleValue==null?'—':currency(diff.bottleValue)}`,550,y+73,16,muted,700);
+      }else{
+        text(`Planilha ${qty(diff.plan)}  •  Vendas ${qty(sold.containers)}`,pad+18,y+30,17,muted,600);
+        text(`Previsto ${qty(diff.expected)}  •  Conferido ${qty(diff.actual)}`,pad+18,y+60,17,muted,600);
+        text(`Diferença ${qty(diff.diff,true)}  •  Valor ${diff.value==null?'—':currency(diff.value)}`,550,y+45,17,diff.diff>0?'#087d41':diff.diff<0?'#c43b39':muted,700);
+      }
     });
-    const bottom=rowsTop+types.length*rowHeight+10;
+    const bottom=rowsTop+types.length*rowHeight+45;
+    text('* Garrafas retornadas estimadas pelas garrafeiras e pelas vendas informadas.',pad+8,bottom-22,17,muted,500);
     if(hasMap){
       box(x,bottom,W-pad*2,116,'#eaf3ff','#bed3ff');
       text('DIVERGÊNCIAS POSITIVAS',pad+24,bottom+32,18,muted,800);text(currency(row.pos),pad+24,bottom+76,29,blue,800);
