@@ -47,17 +47,18 @@
       x.fillStyle=i%2?'#f8fafd':'#fff';x.fillRect(pad,y-25,W-pad*2,rowHeight);
       text(crop(type.label,64),pad+18,y-1,21,navy,700);
       const qty=(value,signed=false)=>value==null?'—':`${signed&&value>0?'+':''}${number(value)}`;
+      const differenceColor=diff.diff==null?muted:diff.diff>0?blue:diff.diff<0?'#c43b39':'#168653';
       if(type.unitsPerCrate){
         text(`Planilha ${qty(diff.plan)} GFA  •  ${qty(diff.planBottles)} garrafas`,pad+18,y+25,17,muted,600);
         text(`Vendas ${qty(sold.containers)} GFA  •  ${qty(sold.bottles)} garrafas`,pad+18,y+49,17,muted,600);
         text(`Previsto ${qty(diff.expected)} GFA  •  ${qty(diff.expectedBottles)} garrafas`,pad+18,y+73,17,muted,600);
         text(`Retorno ${qty(diff.actual)} GFA  •  ${qty(diff.actualBottles)} garrafas*`,550,y+25,17,navy,600);
-        text(`Diferença ${qty(diff.diff,true)} GFA  •  ${qty(diff.diffUnits,true)} garrafas`,550,y+49,17,diff.diff>0?'#087d41':diff.diff<0?'#c43b39':muted,700);
-        text(`Valor GFA ${diff.containerValue==null?'—':currency(diff.containerValue)}  +  garrafas ${diff.bottleValue==null?'—':currency(diff.bottleValue)}`,550,y+73,16,muted,700);
+        text(`Diferença ${qty(diff.diff,true)} GFA  •  ${qty(diff.diffUnits,true)} garrafas`,550,y+49,17,differenceColor,700);
+        text(`Valor GFA ${diff.containerValue==null?'—':currency(diff.containerValue)}  +  garrafas ${diff.bottleValue==null?'—':currency(diff.bottleValue)}`,550,y+73,16,differenceColor,700);
       }else{
         text(`Planilha ${qty(diff.plan)}  •  Vendas ${qty(sold.containers)}`,pad+18,y+30,17,muted,600);
         text(`Previsto ${qty(diff.expected)}  •  Conferido ${qty(diff.actual)}`,pad+18,y+60,17,muted,600);
-        text(`Diferença ${qty(diff.diff,true)}  •  Valor ${diff.value==null?'—':currency(diff.value)}`,550,y+45,17,diff.diff>0?'#087d41':diff.diff<0?'#c43b39':muted,700);
+        text(diff.plan==null?`Sem base  •  Valor conferido ${currency(diff.checkedValue||0)}`:`Diferença ${qty(diff.diff,true)}  •  Valor ${diff.value==null?'—':currency(diff.value)}`,550,y+45,17,differenceColor,700);
       }
     });
     const bottom=rowsTop+types.length*rowHeight+45;
@@ -67,6 +68,7 @@
       text('DIVERGÊNCIAS POSITIVAS',pad+24,bottom+32,18,muted,800);text(currency(row.pos),pad+24,bottom+76,29,blue,800);
       text('DIVERGÊNCIAS NEGATIVAS',550,bottom+32,18,muted,800);text(currency(row.neg),550,bottom+76,29,'#c43b39',800);
     }else{box(x,bottom,W-pad*2,105,'#fff8e9','#f6df9d');text('Base MAPAS incompleta',pad+24,bottom+34,24,'#8b6200',800);text('O comparativo será exibido quando todos os mapas estiverem na planilha.',pad+24,bottom+72,19,muted,500);}
+    if(types.some(type=>!type.unitsPerCrate&&row.diffs?.[type.key]?.plan==null))text('Sem previsão na base MAPAS, o valor é do conferido e não entra nas divergências.',pad+8,bottom+149,16,muted,500);
     footer(c.height);return [{name:`vasilhames-mapas-${numbers.slice(0,6).join('-')||'conferencia'}${numbers.length>6?`-mais-${numbers.length-6}`:''}.png`,dataUrl:c.toDataURL('image/png')}];
   }
   function asset(count,view,rows){

@@ -75,7 +75,8 @@
       const containerValue=diff==null||type.value==null?null:Math.abs(diff)*type.value;
       const bottleValue=diffUnits==null||type.bottleValue==null?null:Math.abs(diffUnits)*type.bottleValue;
       const value=containerValue==null?null:containerValue+(bottleValue||0);
-      diffs[type.key]={...type,plan,planBottles,actual,sold,expected,diff,expectedBottles,actualBottles,diffUnits,containerValue,bottleValue,value};
+      const checkedValue=type.value==null?null:actual*type.value;
+      diffs[type.key]={...type,plan,planBottles,actual,sold,expected,diff,expectedBottles,actualBottles,diffUnits,containerValue,bottleValue,value,checkedValue};
       if(diff!=null&&(diff!==0||diffUnits!==null&&diffUnits!==0)){
         divCount++;
         if(containerValue!=null){if(diff>0)pos+=containerValue;else if(diff<0)neg+=containerValue;}

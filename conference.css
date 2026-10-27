@@ -44,6 +44,7 @@
 .conference-phase-line strong{color:#1e3b55;font-size:12px;white-space:nowrap}
 .conference-phase-line strong.value-positive{color:#0b6fc1}
 .conference-phase-line strong.value-negative{color:#c73737}
+.conference-phase-line strong.value-zero{color:#168653}
 .conference-simple-list{border:1px solid #d8e3ec;border-radius:12px;overflow:hidden;background:#fff}
 .conference-simple-row{display:grid;grid-template-columns:minmax(150px,1.5fr) repeat(6,minmax(0,1fr));align-items:center;border-top:1px solid #e8eef3}
 .conference-simple-row:first-child{border-top:0}
@@ -54,6 +55,7 @@
 .conference-simple-metric strong{color:#1e3b55;font-size:12px;white-space:nowrap}
 .conference-simple-metric strong.value-positive{color:#0b6fc1}
 .conference-simple-metric strong.value-negative{color:#c73737}
+.conference-simple-metric strong.value-zero{color:#168653}
 .conference-estimate-note{font-size:11px;color:#637d93;line-height:1.4;margin:9px 0 0}
 .conference-totals{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:12px}
 .conference-unpriced{color:#708295;font-weight:700}

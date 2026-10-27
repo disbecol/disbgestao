@@ -94,8 +94,13 @@ test('valores unitários incluem garrafa verde, Chapatex e PBR quando a base exi
 });
 
 test('campos ausentes da planilha não geram divergência artificial',()=>{
-  const row=conference.compare([mapA],{map_number:'122357',g300:5,g600_brown:17,chapatex:4,pbr1:2});
+  const row=conference.compare([mapA],{map_number:'122357',g300:5,g600_brown:17,chapatex:50,pbr1:2,pbr2:6});
   assert.equal(row.diffs.chapatex.plan,null);
   assert.equal(row.diffs.chapatex.diff,null);
+  assert.equal(row.diffs.chapatex.checkedValue,400);
+  assert.equal(row.diffs.pbr1.checkedValue,90);
+  assert.equal(row.diffs.pbr2.checkedValue,270);
+  assert.equal(row.pos,0);
+  assert.equal(row.neg,0);
   assert.equal(row.status,'OK');
 });
