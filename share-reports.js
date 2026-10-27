@@ -29,29 +29,37 @@
     text(new Date().toLocaleString('pt-BR'),W-pad,height-52,19,muted,500,'right');
   }
   function conference(row,types){
-    const {c,x:ctx}=canvas(1035);x=ctx;
+    const numbers=(Array.isArray(row.conference?.map_numbers)&&row.conference.map_numbers.length?row.conference.map_numbers:String(row.map_number||'').split(' + ')).filter(Boolean);
+    const mapLines=[];for(let i=0;i<numbers.length;i+=6)mapLines.push(numbers.slice(i,i+6).join('  •  '));
+    if(!mapLines.length)mapLines.push('—');
+    const rowHeight=84,peopleTop=190+Math.max(60,mapLines.length*30+25)+16,rowsTop=peopleTop+223,height=rowsTop+types.length*rowHeight+245;
+    const {c,x:ctx}=canvas(height);x=ctx;
     const conf=row.conference||{},hasMap=row.status!=='SEM_BASE';
-    header('Conferência de vasilhames',`Mapa ${row.map_number||'—'}`,`Rota: ${date(row.source_map_date)}  •  Conferência: ${date(conf.conference_date)}  •  ${crop(row.city||'Sem cidade',55)}`);
-    box(x,202,W-pad*2,125);
+    header('Conferência de vasilhames','Conferência de mapas',`Rota: ${date(row.source_map_date)}  •  Conferência: ${date(conf.conference_date)}  •  ${crop(row.city||'Sem cidade',45)}`);
+    box(x,190,W-pad*2,peopleTop-206,'#eaf3ff','#bed3ff');
+    mapLines.forEach((line,index)=>text(index===0?`Mapas: ${line}`:line,pad+20,218+index*30,19,navy,700));
+    box(x,peopleTop,W-pad*2,125);
     const people=[['MOTORISTA',row.driver],['AJUDANTE 1',row.helper1],['AJUDANTE 2',row.helper2],['CONFERENTE',conf.checker_name]];
-    people.forEach(([label,value],i)=>{const left=pad+22+i*242;text(label,left,237,16,muted,800);text(crop(value||'—',16),left,276,23,navy,700);});
-    box(x,352,W-pad*2,hasMap?420:390);
-    x.fillStyle='#eef3fa';x.fillRect(pad+1,353,W-pad*2-2,62);
-    const columns=hasMap?[pad+24,540,671,800,1025]:[pad+24,850];
-    ['VASILHAME',...(hasMap?['PLANILHA','CONFERIDO','DIFERENÇA','VALOR']:['CONFERIDO'])].forEach((label,i)=>text(label,columns[i],386,16,muted,800,i?'right':'left'));
+    people.forEach(([label,value],i)=>{const left=pad+22+i*242;text(label,left,peopleTop+35,16,muted,800);text(crop(value||'—',16),left,peopleTop+74,23,navy,700);});
+    text('PLANILHA • VENDAS • CONFERIDO • DIFERENÇA',pad+18,peopleTop+179,18,muted,800);
     types.forEach((type,i)=>{
-      const diff=row.diffs?.[type.key]||{},y=445+i*52;
-      if(i%2===1){x.fillStyle='#f8fafd';x.fillRect(pad+1,y-26,W-pad*2-2,52);}
-      text(crop(type.label,29),pad+24,y,21,navy,600);
-      if(hasMap){text(number(diff.plan),540,y,21,navy,600,'right');text(number(diff.actual),671,y,21,navy,700,'right');text(`${diff.diff>0?'+':''}${number(diff.diff)}`,800,y,21,diff.diff>0?'#087d41':diff.diff<0?'#c43b39':muted,700,'right');text(currency(diff.value),1025,y,20,diff.diff>0?'#087d41':diff.diff<0?'#c43b39':muted,700,'right');}
-      else text(number(diff.actual),850,y,21,navy,700,'right');
+      const diff=row.diffs?.[type.key]||{},sold=diff.sold||{},y=rowsTop+i*rowHeight;
+      x.fillStyle=i%2?'#f8fafd':'#fff';x.fillRect(pad,y-25,W-pad*2,rowHeight);
+      text(crop(type.label,64),pad+18,y-1,21,navy,700);
+      const plan=diff.plan==null?'sem base':number(diff.plan);
+      const expected=diff.expected==null?'—':number(diff.expected);
+      const difference=diff.diff==null?'—':`${diff.diff>0?'+':''}${number(diff.diff)}`;
+      text(`Planilha ${plan}  •  Após venda ${expected}  •  Conferido ${number(diff.actual)}`,pad+18,y+26,18,muted,600);
+      const saleText=type.unitsPerCrate?`Venda vasilhame ${number(sold.bottles)}  •  Venda garrafeira ${number(sold.containers)}`:`Venda item ${number(sold.containers)}`;
+      text(`${saleText}  •  Diferença ${difference}  •  ${diff.value==null?'Valor —':currency(diff.value)}`,pad+18,y+51,17,diff.diff>0?'#087d41':diff.diff<0?'#c43b39':muted,600);
     });
+    const bottom=rowsTop+types.length*rowHeight+10;
     if(hasMap){
-      box(x,798,W-pad*2,113,'#eaf3ff','#bed3ff');
-      text('DIVERGÊNCIAS POSITIVAS',pad+24,829,18,muted,800);text(currency(row.pos),pad+24,867,29,blue,800);
-      text('DIVERGÊNCIAS NEGATIVAS',550,829,18,muted,800);text(currency(row.neg),550,867,29,'#c43b39',800);
-    }else{box(x,775,W-pad*2,105,'#fff8e9','#f6df9d');text('Sem mapa-base cadastrado',pad+24,809,24,'#8b6200',800);text('O comparativo será exibido quando a planilha estiver disponível.',pad+24,846,20,muted,500);}
-    footer(c.height);return [{name:`vasilhames-mapa-${row.map_number||'conferencia'}.png`,dataUrl:c.toDataURL('image/png')}];
+      box(x,bottom,W-pad*2,116,'#eaf3ff','#bed3ff');
+      text('DIVERGÊNCIAS POSITIVAS',pad+24,bottom+32,18,muted,800);text(currency(row.pos),pad+24,bottom+76,29,blue,800);
+      text('DIVERGÊNCIAS NEGATIVAS',550,bottom+32,18,muted,800);text(currency(row.neg),550,bottom+76,29,'#c43b39',800);
+    }else{box(x,bottom,W-pad*2,105,'#fff8e9','#f6df9d');text('Base MAPAS incompleta',pad+24,bottom+34,24,'#8b6200',800);text('O comparativo será exibido quando todos os mapas estiverem na planilha.',pad+24,bottom+72,19,muted,500);}
+    footer(c.height);return [{name:`vasilhames-mapas-${numbers.slice(0,6).join('-')||'conferencia'}${numbers.length>6?`-mais-${numbers.length-6}`:''}.png`,dataUrl:c.toDataURL('image/png')}];
   }
   function asset(count,view,rows){
     const accent=view==='PATIO'?'#0d9c5c':view==='REFUGO'?'#d54848':blue;

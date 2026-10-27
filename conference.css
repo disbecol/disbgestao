@@ -1,0 +1,32 @@
+.conference-map-fields{margin-bottom:8px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.conference-map-row{position:relative;min-width:0}
+.conference-map-row input{width:100%}
+.conference-map-row button{position:absolute;right:2px;top:22px;height:35px;width:36px;border:0;border-radius:8px;background:#f9e9e9;color:#a33939;font-weight:900;cursor:pointer}
+.conference-map-row:has(button) input{padding-right:40px}
+.conference-add-map{margin:0 0 8px}
+.conference-map-fields .field{min-width:0}
+.conference-map-fields input{width:100%}
+.conference-qty-card{align-items:stretch}
+.conference-qty-card>label{display:block;color:#183851;font-size:11px;font-weight:900}
+.conference-qty-card>input{width:100%;font-size:15px;font-weight:700}
+.conference-sale-toggle{border-top:1px solid #e1e9f0;padding-top:10px;display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:8px;font-size:11px}
+.conference-sale-toggle>span{font-weight:800;color:#355570}
+.conference-sale-toggle label{display:inline-flex;align-items:center;gap:4px;font-weight:700;cursor:pointer}
+.conference-sale-toggle input{accent-color:#1764c3}
+.conference-sale-details{display:flex;flex-direction:column;gap:8px;border:1px solid #cde0f5;background:#f4f9ff;border-radius:10px;padding:9px}
+.conference-sale-details.hidden{display:none}
+.conference-sale-row{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(78px,.7fr) auto;align-items:center;gap:6px}
+.conference-sale-row select,.conference-sale-row input{width:100%;min-width:0;height:38px;border:1px solid #c9d9e7;border-radius:8px;background:#fff;padding:0 8px;color:#183851;font-size:11px}
+.conference-sale-row button{height:38px;border:1px solid #e5c8c8;border-radius:8px;background:#fff;color:#a13737;font-size:11px;font-weight:900;cursor:pointer}
+.conference-add-sale{align-self:flex-start;border:0;background:none;color:#1764c3;font-size:11px;font-weight:900;cursor:pointer;padding:4px}
+.conference-bottle-summary{margin-top:14px;padding:14px 16px;border:1px solid #b8d8f3;border-radius:13px;background:#f0f8ff;display:flex;flex-direction:column;gap:4px}
+.conference-bottle-summary span{color:#466782;font-size:10px;font-weight:900;text-transform:uppercase}
+.conference-bottle-summary strong{color:#0b559c;font-size:22px}
+.conference-bottle-summary small{color:#59748d;font-size:11px}
+.conference-detail-table{min-width:1050px}
+.conference-detail-table th,.conference-detail-table td{white-space:nowrap}
+.conference-detail-table td:first-child,.conference-detail-table th:first-child{white-space:normal;min-width:170px}
+.conference-unpriced{color:#708295;font-weight:700}
+@media(max-width:520px){.conference-sale-toggle{grid-template-columns:1fr auto auto}.conference-sale-row{grid-template-columns:minmax(0,1.25fr) minmax(70px,.75fr) auto}}
+@media(max-width:820px){.conference-map-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){.conference-map-fields{grid-template-columns:1fr}}
