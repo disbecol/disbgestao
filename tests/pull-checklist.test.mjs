@@ -53,6 +53,21 @@ test('desabilitar checklist libera etapas pendentes sem apagar respostas',async(
   assert.equal(vm.runInContext('pullChecklistGatePending().checkpoint_code',ctx),'D1_SUPPORT_OUT');
 });
 
+test('etapa consulta a configuração atual antes de aplicar bloqueio antigo do checklist',async()=>{
+  let proceeded=false,refreshed=0;
+  const ctx=checklistContext({
+    navigator:{onLine:true},
+    refreshPullGpsTarget:async()=>{refreshed++;ctx.pullSettings.checklist_enabled=false;return 200;},
+    recordPullNextStep:()=>{proceeded=true;}
+  });
+  vm.runInContext(`pullChecklistStateReady=false;
+    pullDriverEvents=[{action_code:'ARRIVE_SUPPORT_OUT'}];
+    pullChecklistRequirements=[{checkpoint_code:'D1_SUPPORT_OUT',after_action:'ARRIVE_SUPPORT_OUT',gate_action:'DRIVER_SWAP_OUT'}];`,ctx);
+  await vm.runInContext('recordPullNextStep()',ctx);
+  assert.equal(refreshed,1);
+  assert.equal(proceeded,true);
+});
+
 test('checklists de retorno e saída aparecem em sequência dentro da próxima etapa',()=>{
   const ctx=checklistContext();
   const elements=new Map([

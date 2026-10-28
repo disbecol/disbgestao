@@ -25,7 +25,7 @@ function attachmentHarness(){
     return elements.get(id);
   }};
   const window={addEventListener(){}};
-  vm.runInNewContext(source,{window,document,navigator:{onLine:false},setInterval(){},setTimeout(){}},{timeout:3000});
+  vm.runInNewContext(source,{window,document,navigator:{onLine:false},setInterval(){},setTimeout(){},clearTimeout(){}},{timeout:3000});
   return window.pullAttachmentTest;
 }
 
