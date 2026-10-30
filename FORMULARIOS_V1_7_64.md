@@ -7,7 +7,7 @@ Atualização das referências e alterações confirmadas em 30/10/2026.
 - Catálogo com pesquisa, filtro de tipo e filtro de área combinados.
 - Menu fixo com criação, formulários disponíveis, agendamentos e acompanhamento.
   Criar um modelo não cria mais um submódulo.
-- Agendamentos quinzenais a cada 14 dias e abas Lista e Calendário.
+- Agendamentos quinzenais a cada 15 dias e abas Lista e Calendário.
 - Avaliação de colaboradores: o gestor informa a área avaliada e seleciona
   as pessoas que pertencem à área, respeitando as unidades do formulário.
 - Ao iniciar, o aplicador escolhe uma ou mais pessoas dessa lista.

@@ -1,3 +1,4 @@
+// Revisão de calendário quinzenal: 15 dias.
 const CACHE='disb-gestao-v1.7.64-forms';
 const IMAGE_CACHE=`${CACHE}-images`;
 const IMAGE_CACHE_LIMIT=200;

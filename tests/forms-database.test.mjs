@@ -198,10 +198,10 @@ test('plano individual pertence à pessoa e não altera o plano de outra respost
  await assert.rejects(()=>sql('select public.save_form_evaluation_plan($1,$2,0,$3::jsonb)',[row.id,'person@'+ids.outsider,JSON.stringify(data)]),/FORM_ISSUE_INVALID/);
  await assert.rejects(()=>sql('select public.save_form_evaluation_plan($1,$2,0,$3::jsonb)',[row.id,'person@'+ids.b,JSON.stringify(data)]),/FORM_EVALUATION_USER_INVALID/);
 });
-test('repetição quinzenal gera a cada 14 dias sem duplicar',async()=>{
+test('repetição quinzenal gera a cada 15 dias sem duplicar',async()=>{
  const form=await createForm();await as('manager');const args=[form.id,A,[ids.a],'2026-10-01','2026-10-31','BIWEEKLY'];
  assert.equal((await sql('select public.create_form_schedule($1,$2,$3::uuid[],$4::date,$5::date,$6) as n',args))[0].n,3);
- const rows=await sql("select due_date::text from public.form_assignments where form_id=$1 order by due_date",[form.id]);assert.deepEqual(rows.map(r=>r.due_date),['2026-10-01','2026-10-15','2026-10-29']);
+ const rows=await sql("select due_date::text from public.form_assignments where form_id=$1 order by due_date",[form.id]);assert.deepEqual(rows.map(r=>r.due_date),['2026-10-01','2026-10-16','2026-10-31']);
  assert.equal((await sql('select public.create_form_schedule($1,$2,$3::uuid[],$4::date,$5::date,$6) as n',args))[0].n,0);
 });
 test('fotos obrigatórias exigem arquivo privado do próprio registro e ficam preservadas',async()=>{

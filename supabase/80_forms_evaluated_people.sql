@@ -289,7 +289,7 @@ begin
  if exists(select 1 from unnest(p_users) u where not public.forms_subject_allowed(p_form_id,u,'FILL',p_unit)) then raise exception 'FORM_SCHEDULE_USER_FORBIDDEN';end if;
  for v_date in select generate_series(p_start,p_end,interval '1 day')::date loop
   if (p_repeat='ONCE' and v_date<>p_start) or (p_repeat='WEEKLY' and not(extract(dow from v_date)::integer=any(p_weekdays)))
-   or (p_repeat='BIWEEKLY' and (v_date-p_start)%14<>0)
+   or (p_repeat='BIWEEKLY' and (v_date-p_start)%15<>0)
    or (p_repeat='MONTHLY' and extract(day from v_date)<>extract(day from p_start)) then continue;end if;
   foreach v_user in array p_users loop
    select name into v_name from public.profiles where id=v_user;
