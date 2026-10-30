@@ -25,6 +25,7 @@ const PERMISSION_CATALOG = [
   ['Refugo','REFUGO_AFERIR','Aferir mapa'],['Refugo','REFUGO_HISTORICO','Histórico / CSV'],['Refugo','REFUGO_CONFIG','Cadastros'],
   ['Validade do Estoque','SALES_STOCK_VALIDITY_VIEW','Consultar validades'],['Validade do Estoque','SALES_STOCK_VALIDITY_IMPORT','Importar arquivo'],
   ['Escalonada Digital','SALES_PRICING_VIEW','Consultar preços'],
+  ['Formulários','FORMS_FILL','Preencher formulários'],['Formulários','FORMS_REPORT','Acompanhamento e planos de ação'],['Formulários','FORMS_MANAGE','Criar formulários e agendamentos'],
   ['Puxada','PULL_PLAN','Cadastrar viagens'],['Puxada','PULL_TRIP','Viagem'],['Puxada','PULL_FAROL','Farol de andamento'],['Puxada','PULL_HISTORY','Histórico'],['Puxada','PULL_DASHBOARD','Dashboards'],['Puxada','PULL_GOALS','Metas'],['Puxada','PULL_CONFIG','Configurações'],['Puxada','PULL_TMA_ADJUST','Ajustar TMA'],
   ['Administração','ADMIN_USERS','Usuários e permissões'],['Administração','ADMIN_BASES','Bases / importação']
 ].map(([module,code,name],sort)=>({module,code,name,sort}));
@@ -40,6 +41,7 @@ const MODULE_CATALOG = [
   {name:'Avarias de Vendas',icon:'!',description:'Solicitações, acompanhamento e gestão das avarias de vendas.'},
   {name:'Validade do Estoque',icon:'◷',description:'Consulta e importação das validades por unidade.'},
   {name:'Escalonada Digital',icon:'R$',description:'Consulta dos preços TTC e TTV por segmento na planilha.'},
+  {name:'Formulários',icon:'▤',description:'Formulários personalizados, agendamentos e acompanhamento por unidade.'},
   {name:'Puxada',icon:'↗',description:'Viagens, farol, histórico, dashboards e configuração.'}
 ];
 
@@ -52,6 +54,7 @@ const ROLE_PERMISSION_DEFAULTS = {
   VENDEDOR:['SALES_DAMAGE_CREATE','SALES_DAMAGE_VIEW_OWN','SALES_STOCK_VALIDITY_VIEW','SALES_PRICING_VIEW'],
   GERENTE_VENDAS:['SALES_DAMAGE_CREATE','SALES_DAMAGE_VIEW_OWN','SALES_DAMAGE_VIEW_ALL','SALES_DAMAGE_REVIEW','SALES_STOCK_VALIDITY_VIEW','SALES_PRICING_VIEW']
 };
+Object.values(ROLE_PERMISSION_DEFAULTS).forEach(codes=>{for(const code of ['FORMS_FILL','FORMS_REPORT'])if(!codes.includes(code))codes.push(code);});
 const VALUE_TYPES = window.DISB_CONFERENCE?.types || [
   {key:'g300',label:'Garrafeiras de 300ml',unitsPerCrate:23,value:69.5,bottleValue:1.5},
   {key:'g600_green',label:'Garrafeiras 600ml Verde',unitsPerCrate:24,value:83,bottleValue:2},
@@ -182,6 +185,10 @@ const viewMeta = {
   'sales-avaria-gestao':['Gestão de avarias de vendas','Aprovação, reprovação e auditoria'],
   'sales-stock-validity':['Consulta de validades','Vencimento dos produtos da unidade'],
   'sales-pricing':['Escalonada Digital','Preços TTC e TTV por segmento'],
+  'forms-manage':['Criar formulários','Modelos, seções, perguntas e permissões'],
+  'forms-fill':['Formulários','Aplicar, continuar e consultar suas aplicações'],
+  'forms-report':['Acompanhamento de formulários','Resultados, conformidade e planos de ação'],
+  'forms-schedule':['Agendamentos de formulários','Responsáveis, datas e execução'],
   'nri-historico':['Histórico NRI','Rastreabilidade completa'],
   'nri-avarias-historico':['Paletes avariados','Nota Fiscal, fotos e rastreabilidade'],
   'conf-historico':['Histórico de conferências','Todos os registros'],
@@ -225,7 +232,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.52-sales-pricing',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.63-forms',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -961,6 +968,7 @@ function moduleNameForPermission(code){
   if(code.startsWith('SALES_DAMAGE_'))return 'Avarias de Vendas';
   if(code.startsWith('SALES_STOCK_VALIDITY_'))return 'Validade do Estoque';
   if(code.startsWith('SALES_PRICING_'))return 'Escalonada Digital';
+  if(code.startsWith('FORMS_'))return 'Formulários';
   if(code.startsWith('PULL_'))return 'Puxada';
   return '';
 }
@@ -1022,6 +1030,7 @@ async function onModuleSettingsClick(event){
 }
 
 async function logout(){
+  formsModule?.stop();
 
   offlineClearIdentityV171();
   salesPricingProducts=[];salesPricingLoaded=false;salesPricingError='';
@@ -1102,6 +1111,7 @@ async function startApp(){
   applyRole(); restoreNavNavigation(); fillDefaultDates(); updateDashboardPeriod();
   await loadHomeShortcuts();
   await loadReferences(true);
+  void formsModule?.start();
   prepareSalesDamageForm();
   setupRealtime();
   if(canPull())await initPullModule();
@@ -1304,6 +1314,7 @@ function openView(name,force=false){
   if(name==='sales-avaria-gestao')loadSalesDamageManage();
   if(name==='sales-stock-validity')loadStockValidity(true);
   if(name==='sales-pricing')loadSalesPricing(true);
+  if(name.startsWith('forms-'))void formsModule?.enter(name);
   if(name==='conf-minhas')loadMyConferences();
   if(name==='conf-historico')loadConferenceHistory();
   if(name==='conf-dashboard')loadDashboard();
@@ -1325,6 +1336,7 @@ function toggleSidebar(open){$('sidebar').classList.toggle('open',open);$('overl
 function setupRealtime(){
   teardownRealtime();
   realtimeChannel=sb.channel(`ops-${authUser.id}`);
+  if(hasAnyPerm('FORMS_FILL,FORMS_REPORT,FORMS_MANAGE'))realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'form_definitions'},()=>{void formsModule?.start();});
   if(canNri()) { realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'nris'},()=>debounceReload('nri')); realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'marketplace_receipts'},()=>debounceReload('marketplace')); }
   if(canAvaria()){
     realtimeChannel.on('postgres_changes',{event:'*',schema:'public',table:'damage_requests'},()=>debounceReload('avaria'));
@@ -8212,9 +8224,12 @@ function resetUnitScopedState(){
 }
 async function changeActiveUnit(next){
   next=String(next||'').trim();if(!myUnits.includes(next)||next===activeUnit)return;
+  if(formsModule&&!formsModule.canChangeUnit()){renderActiveUnitSelector();return;}
+  formsModule?.stop();
   activeUnit=next;try{localStorage.setItem(unitAccessKey(),activeUnit);}catch(_e){}
   resetUnitScopedState();renderActiveUnitSelector();refRefreshPromise=null;refs.units=myUnits.map(name=>({name}));populateReferenceInputs();
   await loadReferences(false);
+  void formsModule?.start();
   if(canNri()){await loadPending(true);if(hasPerm('MARKETPLACE_RECEIVE'))await loadMarketplaceModule(true);if(hasPerm('NRI_PENDING_VIEW'))await loadPullNriPending(true);}
   if(canFefo())await refreshFefoBadge(true);
   if(canRotatingAsset()){await loadRotatingAssetProducts(true);if(hasPerm('ROTATING_ASSET_CREATE'))await loadRotatingAssetCurrent(true);}
@@ -13121,5 +13136,31 @@ async function deleteFefoCorrectionItem(itemId){
 }
 
 // FEFO_COMPLETED_EDITS_END
+
+// FORMULARIOS_MODULE_START
+const formsModule=window.DISB_FORMS_UI?.create({
+  context:()=>({client:sb,user:authUser,profile,unit:activeUnit,units:[...myUnits],roles:ROLE_LABELS}),
+  hasPermission:hasPerm,openView,toast,
+  modal:({title,subtitle,html,actions})=>{
+    openModal(title,subtitle,html,[]);
+    $('modal').classList.add('forms-modal');
+    $('modalActions').innerHTML=actions||'';
+  },
+  closeModal:()=>{closeModal();$('modal').classList.remove('forms-modal');},
+  download:async(name,blob)=>{
+    if(isNativeCapacitor()){
+      const cap=window.Capacitor,files=cap.Plugins?.Filesystem||cap.registerPlugin?.('Filesystem'),share=cap.Plugins?.Share||cap.registerPlugin?.('Share');
+      if(!files||!share)throw new Error('Atualize o APK para salvar ou compartilhar os relatórios.');
+      const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||'').split(',')[1]||'');reader.onerror=()=>reject(new Error('Não foi possível preparar o relatório.'));reader.readAsDataURL(blob);});
+      const saved=await files.writeFile({path:name,data,directory:'CACHE'});await share.share({title:'Relatório de formulários',url:saved.uri,dialogTitle:'Salvar ou compartilhar relatório'});return;
+    }
+    const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+  }
+});
+const closeModalBeforeForms=closeModal;
+closeModal=function(){closeModalBeforeForms();$('modal')?.classList.remove('forms-modal');};
+const openModalBeforeForms=openModal;
+openModal=function(...args){$('modal')?.classList.remove('forms-modal');return openModalBeforeForms(...args);};
+// FORMULARIOS_MODULE_END
 
 })();
