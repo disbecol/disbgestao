@@ -31,6 +31,12 @@ before(async()=>{
  create table public.role_permissions(role text,permission_code text,primary key(role,permission_code));
  create table public.user_permissions(user_id uuid,permission_code text,allowed boolean);
  create table public.module_settings(module_name text primary key,active boolean default true,updated_at timestamptz default now());
+ create schema storage;
+ create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
+ create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text,unique(bucket_id,name));
+ alter table storage.objects enable row level security;
+ grant usage on schema storage to authenticated,anon;
+ grant select,insert,update,delete on storage.objects to authenticated,anon;
  create function public.is_admin() returns boolean language sql stable security definer set search_path=public as $$ select coalesce((select role='ADMIN' and active from public.profiles where id=auth.uid()),false) $$;`);
  const permissionSource=await readFile(new URL('../supabase/18_v1_4_0_permissoes_avarias_vendas.sql',import.meta.url),'utf8');
  const unitSource=await readFile(new URL('../supabase/26_v1_6_0_unidades_por_usuario.sql',import.meta.url),'utf8');
@@ -44,12 +50,20 @@ before(async()=>{
  await db.query('insert into public.user_units values($1,$2)',[ids.admin,B]);
  const migration=await readFile(new URL('../supabase/79_forms_module.sql',import.meta.url),'utf8');
  try{await db.exec(migration);}catch(e){throw Error(`${e.message}; linha ${migration.slice(0,Number(e.position||1)).split('\n').length}; ${e.where||''}`);}
+ await db.exec(await readFile(new URL('../supabase/80_forms_evaluated_people.sql',import.meta.url),'utf8'));
  await db.query("insert into public.user_permissions values($1,'FORMS_MANAGE',true)",[ids.manager]);
 });
 after(async()=>{await db.close();});
 
+const evaluationSchema=()=>({evaluation:{enabled:true,area:'Entrega',user_ids:[ids.a,ids.outsider]},sections:[{id:'checks',title:'Rotina',fields:[
+ {id:'shared',label:'Equipe no horário?',type:'BOOLEAN',scope:'GROUP',required:true,scored:true,expected:'YES',allow_na:true,require_note:true},
+ {id:'person',label:'Guardou as chaves?',type:'BOOLEAN',scope:'INDIVIDUAL',required:true,scored:true,expected:'YES',allow_na:true,require_note:true}]}]});
+async function startEvaluated(form,people=[ids.a,ids.outsider],id=randomUUID(),assignment=null){return (await sql('select to_jsonb(public.start_form_response_evaluated($1,$2,$3,$4::uuid[],$5)) as value',[form.id,A,id,people,assignment]))[0].value;}
+const evaluatedAnswers=()=>({shared:{value:'YES'},__evaluations:{[ids.a]:{person:{value:'NO',observation:'Deixou na mesa',plan:'Orientação individual'}},[ids.outsider]:{person:{value:'YES'}}}});
+
 test('migração pode ser aplicada novamente sem apagar modelos ou permissões',async()=>{
  const form=await createForm();await db.exec('reset role');await db.exec(await readFile(new URL('../supabase/79_forms_module.sql',import.meta.url),'utf8'));
+ await db.exec(await readFile(new URL('../supabase/80_forms_evaluated_people.sql',import.meta.url),'utf8'));
  assert.equal((await sql('select count(*)::int as n from public.form_definitions where id=$1',[form.id]))[0].n,1);
  assert.equal((await sql("select count(*)::int as n from public.user_permissions where permission_code='FORMS_MANAGE'"))[0].n,1);
 });
@@ -149,4 +163,62 @@ test('desativar módulo ou usuário bloqueia leituras e escrita sem excluir dado
 });
 test('anônimo não pode ler modelos nem usar as rotinas do módulo',async()=>{
  await db.exec('reset role;set role anon');await assert.rejects(()=>sql('select * from public.form_definitions'),/permission denied/);await assert.rejects(()=>sql('select public.forms_people()'),/permission denied/);
+});
+
+test('novos tipos e perguntas individuais exigem área e pessoas válidas nas unidades',async()=>{
+ for(const type of ['DTO','GSP','GSDPQ','GSA','GSR','ANOMALY','SAFETY','5S','OTHER'])assert.equal((await createForm({form_type:type})).form_type,type);
+ const invalid=evaluationSchema();invalid.evaluation.user_ids=[ids.b];await assert.rejects(()=>createForm({schema:invalid}),/FORM_EVALUATION_USER_INVALID/);
+ const disabled=evaluationSchema();disabled.evaluation.enabled=false;await assert.rejects(()=>createForm({schema:disabled}),/FORM_SCOPE_INVALID/);
+});
+test('avaliação mistura resposta de grupo e respostas individuais sem atribuir nota ao aplicador',async()=>{
+ const form=await createForm({schema:evaluationSchema(),form_type:'DTO'}),row=await startEvaluated(form),finished=await saveResponse(row,evaluatedAnswers());
+ assert.equal(finished.respondent_id,ids.admin);assert.deepEqual(finished.evaluated_people.map(p=>p.id).sort(),[ids.a,ids.outsider].sort());
+ assert.equal(finished.ok_count,3);assert.equal(finished.nok_count,1);assert.equal(Number(finished.score),75);
+ assert.equal(finished.answers.__evaluations[ids.a].person.value,'NO');assert.equal(finished.answers.__evaluations[ids.outsider].person.value,'YES');assert.equal(finished.answers.__evaluations[ids.a].shared,undefined);
+ assert.equal(finished.evaluated_people.find(p=>p.id===ids.a).name,'a');
+});
+test('seleção de avaliados é imutável, idempotente e não permite nomes ou pessoas de outra unidade',async()=>{
+ const form=await createForm({schema:evaluationSchema()}),request=randomUUID(),row=await startEvaluated(form,undefined,request);
+ assert.equal((await startEvaluated(form,[ids.outsider,ids.a],request)).id,row.id);
+ await assert.rejects(()=>startEvaluated(form,[ids.a],request),/FORM_EVALUATION_LOCKED/);
+ const other=await createForm({schema:evaluationSchema()});await assert.rejects(()=>startEvaluated(other,[ids.b]),/FORM_EVALUATION_USER_INVALID/);
+ const missing=await createForm({schema:evaluationSchema()}),bare=await startResponse(missing);await assert.rejects(()=>saveResponse(bare,evaluatedAnswers()),/FORM_EVALUATION_REQUIRED/);
+});
+test('todas as respostas individuais obrigatórias e observações NOK são validadas no banco',async()=>{
+ const form=await createForm({schema:evaluationSchema()}),row=await startEvaluated(form),a=evaluatedAnswers();delete a.__evaluations[ids.outsider];await assert.rejects(()=>saveResponse(row,a),/FORM_REQUIRED/);
+ const b=evaluatedAnswers();delete b.__evaluations[ids.a].person.observation;await assert.rejects(()=>saveResponse(row,b),/FORM_NOK_NOTE_REQUIRED/);
+ const c=evaluatedAnswers();c.__evaluations[ids.b]={person:{value:'YES'}};await assert.rejects(()=>saveResponse(row,c),/FORM_EVALUATION_USER_INVALID/);
+ const d=evaluatedAnswers();d.__evaluations[ids.a].shared={value:'NO'};const saved=await saveResponse(row,d);assert.equal(saved.answers.shared.value,'YES');assert.equal(saved.answers.__evaluations[ids.a].shared,undefined);
+});
+test('plano individual pertence à pessoa e não altera o plano de outra resposta',async()=>{
+ const form=await createForm({schema:evaluationSchema()}),row=await saveResponse(await startEvaluated(form),evaluatedAnswers()),key='person@'+ids.a;
+ const existing=(await sql('select * from public.form_action_plans where response_id=$1',[row.id]))[0];assert.equal(existing.field_id,key);
+ const data={description:'Orientar Daniel',responsible_id:ids.admin,status:'DONE',completion_note:'Orientação realizada'};
+ const saved=(await sql('select to_jsonb(public.save_form_evaluation_plan($1,$2,$3,$4::jsonb)) as v',[row.id,key,existing.revision,JSON.stringify(data)]))[0].v;assert.equal(saved.status,'DONE');
+ await assert.rejects(()=>sql('select public.save_form_evaluation_plan($1,$2,0,$3::jsonb)',[row.id,'person@'+ids.outsider,JSON.stringify(data)]),/FORM_ISSUE_INVALID/);
+ await assert.rejects(()=>sql('select public.save_form_evaluation_plan($1,$2,0,$3::jsonb)',[row.id,'person@'+ids.b,JSON.stringify(data)]),/FORM_EVALUATION_USER_INVALID/);
+});
+test('repetição quinzenal gera a cada 14 dias sem duplicar',async()=>{
+ const form=await createForm();await as('manager');const args=[form.id,A,[ids.a],'2026-10-01','2026-10-31','BIWEEKLY'];
+ assert.equal((await sql('select public.create_form_schedule($1,$2,$3::uuid[],$4::date,$5::date,$6) as n',args))[0].n,3);
+ const rows=await sql("select due_date::text from public.form_assignments where form_id=$1 order by due_date",[form.id]);assert.deepEqual(rows.map(r=>r.due_date),['2026-10-01','2026-10-15','2026-10-29']);
+ assert.equal((await sql('select public.create_form_schedule($1,$2,$3::uuid[],$4::date,$5::date,$6) as n',args))[0].n,0);
+});
+test('fotos obrigatórias exigem arquivo privado do próprio registro e ficam preservadas',async()=>{
+ const photoSchema={sections:[{id:'s',title:'Evidência',fields:[{id:'photo',label:'Fotos do veículo',type:'PHOTO',required:true}]}]},form=await createForm({schema:photoSchema}),row=await startResponse(form),path=ids.admin+'/'+row.id+'/'+randomUUID()+'.jpg';
+ await assert.rejects(()=>saveResponse(row,{photo:{photos:[]}}),/FORM_REQUIRED/);
+ await assert.rejects(()=>saveResponse(row,{photo:{photos:[path]}}),/FORM_PHOTO_INVALID/);
+ await sql("insert into storage.objects(bucket_id,name) values('form-evidence',$1)",[path]);
+ const saved=await saveResponse(row,{photo:{photos:[path]}});assert.deepEqual(saved.answers.photo.photos,[path]);assert.deepEqual(saved.answers.photo.value,[path]);
+ assert.equal((await sql('select name from storage.objects where name=$1',[path])).length,1);
+ assert.equal((await sql('delete from storage.objects where name=$1 returning name',[path])).length,0);
+ await assert.rejects(()=>sql("insert into storage.objects(bucket_id,name) values('form-evidence',$1)",[ids.admin+'/'+row.id+'/'+randomUUID()+'.jpg']),/row-level security/);
+ await as('review');assert.equal((await sql('select name from storage.objects where name=$1',[path])).length,1);
+ await as('outsider');assert.equal((await sql('select name from storage.objects where name=$1',[path])).length,0);
+ await as('b');await assert.rejects(()=>sql("insert into storage.objects(bucket_id,name) values('form-evidence',$1)",[path.replace(/[^/]+$/,randomUUID()+'.jpg')]),/row-level security/);
+});
+test('foto NOK individual não pode usar foto de outra aplicação ou pessoa de outra unidade',async()=>{
+ const form=await createForm({schema:evaluationSchema()}),row=await startEvaluated(form),path=ids.admin+'/'+row.id+'/'+randomUUID()+'.jpg';await sql("insert into storage.objects(bucket_id,name) values('form-evidence',$1)",[path]);
+ const answers=evaluatedAnswers();answers.__evaluations[ids.a].person.photos=[path];const finished=await saveResponse(row,answers);assert.deepEqual(finished.answers.__evaluations[ids.a].person.photos,[path]);
+ const other=await createForm({schema:evaluationSchema()}),r=await startEvaluated(other);await assert.rejects(()=>saveResponse(r,answers),/FORM_PHOTO_INVALID/);
 });
