@@ -1,10 +1,10 @@
-// Revisão de calendário quinzenal: 15 dias.
-const CACHE='disb-gestao-v1.7.64-forms';
+// Áreas dinâmicas e resultados privados por colaborador.
+const CACHE='disb-gestao-v1.7.65-forms';
 const IMAGE_CACHE=`${CACHE}-images`;
 const IMAGE_CACHE_LIMIT=200;
-const STATIC=['./','index.html','styles.css?v=1.7.60-conference-colors','conference.css?v=1.7.60','visual-refresh.css?v=1.7.1-visual','pull-dashboard.css?v=1.7.1-pull-dashboard','damage-geofence.css?v=2','refugo.css?v=1.7.16','sales-pricing.css?v=1.7.52','sales-pricing.js?v=1.7.52','share-reports.js?v=1.7.60','pull-report.js?v=2','invoice-note.js?v=1.7.31-keg-liters','pull-camera.js?v=1.7.32-pull-camera','asset-conversion.js?v=1.7.49','conference.js?v=1.7.60','vendor/supabase.js','vendor/leaflet.js','vendor/leaflet.css','vendor/images/layers.png','vendor/images/layers-2x.png','vendor/images/marker-icon.png','vendor/images/marker-icon-2x.png','vendor/images/marker-shadow.png','vendor/pdf-lib.min.js','vendor/pdfjs.min.js','vendor/pdfjs.worker.min.js','app.js?v=1.7.64-forms','config.js?v=1.7.0','manifest.webmanifest','assets/icon-192.png','assets/icon-512.png'];
+const STATIC=['./','index.html','styles.css?v=1.7.60-conference-colors','conference.css?v=1.7.60','visual-refresh.css?v=1.7.1-visual','pull-dashboard.css?v=1.7.1-pull-dashboard','damage-geofence.css?v=2','refugo.css?v=1.7.16','sales-pricing.css?v=1.7.52','sales-pricing.js?v=1.7.52','share-reports.js?v=1.7.60','pull-report.js?v=2','invoice-note.js?v=1.7.31-keg-liters','pull-camera.js?v=1.7.32-pull-camera','asset-conversion.js?v=1.7.49','conference.js?v=1.7.60','vendor/supabase.js','vendor/leaflet.js','vendor/leaflet.css','vendor/images/layers.png','vendor/images/layers-2x.png','vendor/images/marker-icon.png','vendor/images/marker-icon-2x.png','vendor/images/marker-shadow.png','vendor/pdf-lib.min.js','vendor/pdfjs.min.js','vendor/pdfjs.worker.min.js','app.js?v=1.7.65-forms','config.js?v=1.7.0','manifest.webmanifest','assets/icon-192.png','assets/icon-512.png'];
 STATIC.push('stock-validity.css?v=1.7.41','stock-validity.js?v=1.7.41','vendor/read-excel-file.min.js');
-STATIC.push('forms.css?v=1.7.64','forms.js?v=1.7.64','forms-ui.js?v=1.7.64');
+STATIC.push('forms.css?v=1.7.65','forms.js?v=1.7.65','forms-ui.js?v=1.7.65');
 const STATIC_URLS=new Set(STATIC.map(path=>new URL(path,self.registration.scope).href));
 const EXTERNAL_STATIC_URLS=new Set();
 const IMAGE_PATHS=['assets/','imagens_produtos/'].map(path=>new URL(path,self.registration.scope).pathname);

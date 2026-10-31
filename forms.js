@@ -40,7 +40,7 @@
       }
     }
     if(count>300)throw Error('O formulário pode ter até 300 perguntas.');
-    if(schema.evaluation?.enabled&&(!clean(schema.evaluation.area)||clean(schema.evaluation.area).length>100||!Array.isArray(schema.evaluation.user_ids)||!schema.evaluation.user_ids.length||schema.evaluation.user_ids.length>100))throw Error('Informe a área avaliada e selecione de 1 a 100 colaboradores dessa área.');
+    if(schema.evaluation?.enabled&&(!clean(schema.evaluation.area)||clean(schema.evaluation.area).length>100))throw Error('Selecione a área que será avaliada.');
     return schema;
   }
   function outcome(field,answer){

@@ -25,7 +25,7 @@ const PERMISSION_CATALOG = [
   ['Refugo','REFUGO_AFERIR','Aferir mapa'],['Refugo','REFUGO_HISTORICO','Histórico / CSV'],['Refugo','REFUGO_CONFIG','Cadastros'],
   ['Validade do Estoque','SALES_STOCK_VALIDITY_VIEW','Consultar validades'],['Validade do Estoque','SALES_STOCK_VALIDITY_IMPORT','Importar arquivo'],
   ['Escalonada Digital','SALES_PRICING_VIEW','Consultar preços'],
-  ['Formulários','FORMS_FILL','Preencher formulários'],['Formulários','FORMS_REPORT','Acompanhamento e planos de ação'],['Formulários','FORMS_MANAGE','Criar formulários e agendamentos'],
+  ['Formulários','FORMS_SELF_VIEW','Consultar minhas avaliações'],['Formulários','FORMS_FILL','Preencher formulários'],['Formulários','FORMS_REPORT','Acompanhamento e planos de ação'],['Formulários','FORMS_MANAGE','Criar formulários e agendamentos'],
   ['Puxada','PULL_PLAN','Cadastrar viagens'],['Puxada','PULL_TRIP','Viagem'],['Puxada','PULL_FAROL','Farol de andamento'],['Puxada','PULL_HISTORY','Histórico'],['Puxada','PULL_DASHBOARD','Dashboards'],['Puxada','PULL_GOALS','Metas'],['Puxada','PULL_CONFIG','Configurações'],['Puxada','PULL_TMA_ADJUST','Ajustar TMA'],
   ['Administração','ADMIN_USERS','Usuários e permissões'],['Administração','ADMIN_BASES','Bases / importação']
 ].map(([module,code,name],sort)=>({module,code,name,sort}));
@@ -54,7 +54,7 @@ const ROLE_PERMISSION_DEFAULTS = {
   VENDEDOR:['SALES_DAMAGE_CREATE','SALES_DAMAGE_VIEW_OWN','SALES_STOCK_VALIDITY_VIEW','SALES_PRICING_VIEW'],
   GERENTE_VENDAS:['SALES_DAMAGE_CREATE','SALES_DAMAGE_VIEW_OWN','SALES_DAMAGE_VIEW_ALL','SALES_DAMAGE_REVIEW','SALES_STOCK_VALIDITY_VIEW','SALES_PRICING_VIEW']
 };
-Object.values(ROLE_PERMISSION_DEFAULTS).forEach(codes=>{for(const code of ['FORMS_FILL','FORMS_REPORT'])if(!codes.includes(code))codes.push(code);});
+Object.values(ROLE_PERMISSION_DEFAULTS).forEach(codes=>{for(const code of ['FORMS_FILL','FORMS_REPORT','FORMS_SELF_VIEW'])if(!codes.includes(code))codes.push(code);});
 const VALUE_TYPES = window.DISB_CONFERENCE?.types || [
   {key:'g300',label:'Garrafeiras de 300ml',unitsPerCrate:23,value:69.5,bottleValue:1.5},
   {key:'g600_green',label:'Garrafeiras 600ml Verde',unitsPerCrate:24,value:83,bottleValue:2},
@@ -187,6 +187,7 @@ const viewMeta = {
   'sales-pricing':['Escalonada Digital','Preços TTC e TTV por segmento'],
   'forms-manage':['Criar formulários','Modelos, seções, perguntas e permissões'],
   'forms-fill':['Formulários','Aplicar, continuar e consultar suas aplicações'],
+  'forms-self':['Minhas avaliações','Meus resultados e evolução por pergunta'],
   'forms-report':['Acompanhamento de formulários','Resultados, conformidade e planos de ação'],
   'forms-schedule':['Agendamentos de formulários','Responsáveis, datas e execução'],
   'nri-historico':['Histórico NRI','Rastreabilidade completa'],
@@ -232,7 +233,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.64-forms',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.65-forms',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -2715,7 +2716,7 @@ async function loadUsers(){
 function permissionLabel(code){const x=(permissionRows.length?permissionRows:PERMISSION_CATALOG).find(p=>p.code===code);return x?.name||code;}
 function renderUsers(){
   const body=$('tbodyUsuarios');if(!body)return;
-  body.innerHTML=users.length?users.map(u=>{const enabled=effectiveUserPermissions(u),custom=userPermissionOverrides(u.id).length;return `<tr><td>${esc(u.username)}</td><td>${esc(u.name)}</td><td>${esc(ROLE_LABELS[u.role]||u.role)}</td><td><strong>${enabled.size} habilitada${enabled.size===1?'':'s'}</strong><small>${u.role==='ADMIN'?'Acesso total':custom?`${custom} exceção(ões) individual(is)`:'Padrão do cargo'}</small></td><td>${u.active?'<span class="status ok">Ativo</span>':'<span class="status bad">Inativo</span>'}</td><td><button class="mini-btn" data-user="${esc(u.username)}">Editar</button></td></tr>`;}).join(''):'<tr><td colspan="6">Nenhum usuário cadastrado.</td></tr>';
+  body.innerHTML=users.length?users.map(u=>{const enabled=effectiveUserPermissions(u),custom=userPermissionOverrides(u.id).length;return `<tr><td>${esc(u.username)}</td><td>${esc(u.name)}${u.evaluation_area?`<small>Área: ${esc(u.evaluation_area)}</small>`:''}</td><td>${esc(ROLE_LABELS[u.role]||u.role)}</td><td><strong>${enabled.size} habilitada${enabled.size===1?'':'s'}</strong><small>${u.role==='ADMIN'?'Acesso total':custom?`${custom} exceção(ões) individual(is)`:'Padrão do cargo'}</small></td><td>${u.active?'<span class="status ok">Ativo</span>':'<span class="status bad">Inativo</span>'}</td><td><button class="mini-btn" data-user="${esc(u.username)}">Editar</button></td></tr>`;}).join(''):'<tr><td colspan="6">Nenhum usuário cadastrado.</td></tr>';
 }
 function renderUserPermissionEditor(user=null,restoreRole=false){
 
@@ -2892,9 +2893,9 @@ function updatePermissionGroupCounts(){$('usuarioPermissoes')?.querySelectorAll(
 function selectedUserPermissions(){return [...($('usuarioPermissoes')?.querySelectorAll('[data-user-permission]:checked')||[])].map(x=>x.dataset.userPermission);}
 function onUserTableClick(e){
   const b=e.target.closest('button[data-user]');if(!b)return;const u=users.find(x=>x.username===b.dataset.user);if(!u)return;
-  $('usuarioOriginal').value=u.username;$('usuarioLogin').value=u.username;$('usuarioNome').value=u.name;$('usuarioPerfil').value=u.role;$('usuarioSenha').value='';$('usuarioAtivo').checked=u.active;renderUserPermissionEditor(u,false);
+  $('usuarioOriginal').value=u.username;$('usuarioLogin').value=u.username;$('usuarioNome').value=u.name;if($('usuarioArea'))$('usuarioArea').value=u.evaluation_area||'';$('usuarioPerfil').value=u.role;$('usuarioSenha').value='';$('usuarioAtivo').checked=u.active;renderUserPermissionEditor(u,false);
 }
-function clearUserForm(){$('usuarioOriginal').value='';$('usuarioLogin').value='';$('usuarioNome').value='';$('usuarioPerfil').value='COLABORADOR_ARMAZEM';$('usuarioSenha').value='';$('usuarioAtivo').checked=true;renderUserPermissionEditor(null,true);}
+function clearUserForm(){$('usuarioOriginal').value='';$('usuarioLogin').value='';$('usuarioNome').value='';if($('usuarioArea'))$('usuarioArea').value='';$('usuarioPerfil').value='COLABORADOR_ARMAZEM';$('usuarioSenha').value='';$('usuarioAtivo').checked=true;renderUserPermissionEditor(null,true);}
 async function saveUser(e){
   e.preventDefault();
   const original=$('usuarioOriginal').value.trim();
@@ -8279,9 +8280,9 @@ renderUsers=function(){
 };
 onUserTableClick=function(e){
   const b=e.target.closest('button[data-user]');if(!b)return;const u=users.find(x=>x.username===b.dataset.user);if(!u)return;
-  $('usuarioOriginal').value=u.username;$('usuarioLogin').value=u.username;$('usuarioNome').value=u.name;$('usuarioPerfil').value=u.role;$('usuarioSenha').value='';$('usuarioAtivo').checked=u.active;renderUserPermissionEditor(u,false);renderUserUnitEditor(u);
+  $('usuarioOriginal').value=u.username;$('usuarioLogin').value=u.username;$('usuarioNome').value=u.name;if($('usuarioArea'))$('usuarioArea').value=u.evaluation_area||'';$('usuarioPerfil').value=u.role;$('usuarioSenha').value='';$('usuarioAtivo').checked=u.active;renderUserPermissionEditor(u,false);renderUserUnitEditor(u);
 };
-clearUserForm=function(){$('usuarioOriginal').value='';$('usuarioLogin').value='';$('usuarioNome').value='';$('usuarioPerfil').value='COLABORADOR_ARMAZEM';$('usuarioSenha').value='';$('usuarioAtivo').checked=true;renderUserPermissionEditor(null,true);renderUserUnitEditor(null);};
+clearUserForm=function(){$('usuarioOriginal').value='';$('usuarioLogin').value='';$('usuarioNome').value='';if($('usuarioArea'))$('usuarioArea').value='';$('usuarioPerfil').value='COLABORADOR_ARMAZEM';$('usuarioSenha').value='';$('usuarioAtivo').checked=true;renderUserPermissionEditor(null,true);renderUserUnitEditor(null);};
 function adminUserErrorText(value){
   if(value==null)return '';
   if(typeof value==='string')return value;
@@ -8322,6 +8323,10 @@ saveUser=async function(e){
       throw new Error(detail||adminUserErrorText(error)||'Falha ao chamar a função admin-users.');
     }
     if(data?.ok===false)throw new Error(adminUserErrorText(data?.error??data)||'Falha ao salvar usuário.');
+    const savedUserId=data?.id;
+    if(!savedUserId)throw Error('O usuário foi salvo, mas não retornou identificação para atualizar a área. Atualize a lista e edite novamente.');
+    const areaResult=await sb.rpc('admin_set_form_staff_area',{p_user_id:savedUserId,p_area:$('usuarioArea')?.value||''});
+    if(areaResult.error)throw Error('Usuário salvo. Não foi possível salvar a área: '+areaResult.error.message);
     toast(data?.repaired?'Usuário recuperado e salvo com sucesso.':'Usuário, permissões e unidades salvos.','success');
     clearUserForm();
     await loadUsers();

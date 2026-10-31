@@ -51,6 +51,9 @@ before(async()=>{
  const migration=await readFile(new URL('../supabase/79_forms_module.sql',import.meta.url),'utf8');
  try{await db.exec(migration);}catch(e){throw Error(`${e.message}; linha ${migration.slice(0,Number(e.position||1)).split('\n').length}; ${e.where||''}`);}
  await db.exec(await readFile(new URL('../supabase/80_forms_evaluated_people.sql',import.meta.url),'utf8'));
+ await db.exec(await readFile(new URL('../supabase/81_forms_area_and_self_results.sql',import.meta.url),'utf8'));
+ await db.exec("insert into public.permissions values('ADMIN_USERS','Admin','Usuários','',1,true)");
+ await db.query("update public.profiles set evaluation_area='Entrega' where id=any($1::uuid[])",[[ids.a,ids.outsider]]);
  await db.query("insert into public.user_permissions values($1,'FORMS_MANAGE',true)",[ids.manager]);
 });
 after(async()=>{await db.close();});
@@ -64,6 +67,7 @@ const evaluatedAnswers=()=>({shared:{value:'YES'},__evaluations:{[ids.a]:{person
 test('migração pode ser aplicada novamente sem apagar modelos ou permissões',async()=>{
  const form=await createForm();await db.exec('reset role');await db.exec(await readFile(new URL('../supabase/79_forms_module.sql',import.meta.url),'utf8'));
  await db.exec(await readFile(new URL('../supabase/80_forms_evaluated_people.sql',import.meta.url),'utf8'));
+ await db.exec(await readFile(new URL('../supabase/81_forms_area_and_self_results.sql',import.meta.url),'utf8'));
  assert.equal((await sql('select count(*)::int as n from public.form_definitions where id=$1',[form.id]))[0].n,1);
  assert.equal((await sql("select count(*)::int as n from public.user_permissions where permission_code='FORMS_MANAGE'"))[0].n,1);
 });
@@ -167,7 +171,8 @@ test('anônimo não pode ler modelos nem usar as rotinas do módulo',async()=>{
 
 test('novos tipos e perguntas individuais exigem área e pessoas válidas nas unidades',async()=>{
  for(const type of ['DTO','GSP','GSDPQ','GSA','GSR','ANOMALY','SAFETY','5S','OTHER'])assert.equal((await createForm({form_type:type})).form_type,type);
- const invalid=evaluationSchema();invalid.evaluation.user_ids=[ids.b];await assert.rejects(()=>createForm({schema:invalid}),/FORM_EVALUATION_USER_INVALID/);
+ const invalid=evaluationSchema();invalid.evaluation.area='';await assert.rejects(()=>createForm({schema:invalid}),/FORM_EVALUATION_INVALID/);
+ const areaOnly=evaluationSchema();delete areaOnly.evaluation.user_ids;assert.equal((await createForm({schema:areaOnly})).schema.evaluation.membership,'AREA');
  const disabled=evaluationSchema();disabled.evaluation.enabled=false;await assert.rejects(()=>createForm({schema:disabled}),/FORM_SCOPE_INVALID/);
 });
 test('avaliação mistura resposta de grupo e respostas individuais sem atribuir nota ao aplicador',async()=>{
@@ -221,4 +226,70 @@ test('foto NOK individual não pode usar foto de outra aplicação ou pessoa de 
  const form=await createForm({schema:evaluationSchema()}),row=await startEvaluated(form),path=ids.admin+'/'+row.id+'/'+randomUUID()+'.jpg';await sql("insert into storage.objects(bucket_id,name) values('form-evidence',$1)",[path]);
  const answers=evaluatedAnswers();answers.__evaluations[ids.a].person.photos=[path];const finished=await saveResponse(row,answers);assert.deepEqual(finished.answers.__evaluations[ids.a].person.photos,[path]);
  const other=await createForm({schema:evaluationSchema()}),r=await startEvaluated(other);await assert.rejects(()=>saveResponse(r,answers),/FORM_PHOTO_INVALID/);
+});
+
+async function myCurrentEvaluations(unit=A,offset=0){const year=new Date().getUTCFullYear();return (await sql('select value from public.my_form_evaluations($1,$2::date,$3::date,$4) value',[unit,year+'-01-01',year+'-12-31',offset])).map(r=>r.value);}
+
+test('equipe da área é consultada novamente em cada aplicação, sem lista fixa no modelo',async()=>{
+ const schema=evaluationSchema();schema.evaluation.user_ids=[ids.a];const form=await createForm({schema});
+ assert.equal(form.schema.evaluation.user_ids,undefined);
+ const eligible=()=>sql('select * from public.forms_evaluation_people($1,$2)',[form.id,A]);
+ assert.deepEqual((await eligible()).map(p=>p.id).sort(),[ids.a,ids.outsider].sort());
+ await sql('select public.admin_set_form_staff_area($1,$2)',[ids.review,'Entrega']);
+ assert.ok((await eligible()).some(p=>p.id===ids.review));
+ await startEvaluated(form,[ids.review]);
+ await sql('select public.admin_set_form_staff_area($1,$2)',[ids.review,'Vendas']);
+ assert.ok(!(await eligible()).some(p=>p.id===ids.review));
+ const other=await createForm({schema:evaluationSchema()});await assert.rejects(()=>startEvaluated(other,[ids.review]),/FORM_EVALUATION_USER_INVALID/);
+ await as('a');await assert.rejects(()=>sql('select public.admin_set_form_staff_area($1,$2)',[ids.a,'Gestão']),/FORBIDDEN/);
+ await as('admin');assert.ok((await sql('select * from public.form_staff_area_audit where user_id=$1',[ids.review])).length>=2);
+});
+
+test('cada avaliado consulta sua nota e respostas, sem nomes, respostas ou planos dos colegas',async()=>{
+ const form=await createForm({schema:evaluationSchema(),apply_roles:['ADMIN'],report_roles:[]}),row=await saveResponse(await startEvaluated(form),evaluatedAnswers());
+ await as('a');assert.equal((await sql('select * from public.form_responses where id=$1',[row.id])).length,0);
+ assert.equal((await sql('select * from public.form_definitions where id=$1',[form.id])).length,0);
+ const own=(await myCurrentEvaluations()).find(r=>r.id===row.id);assert.ok(own);assert.equal(own.score,50);assert.equal(own.ok_count,1);assert.equal(own.nok_count,1);
+ assert.equal(own.answers.shared.value,'YES');assert.equal(own.answers.person.value,'NO');assert.equal(own.answers.__evaluations,undefined);
+ assert.equal(own.evaluated_people.length,1);assert.equal(own.evaluated_user_id,ids.a);assert.equal(own.schema_snapshot.evaluation.user_ids,undefined);
+ assert.equal(own.own_plans.length,1);assert.equal(own.own_plans[0].field_id,'person@'+ids.a);
+ assert.ok(!JSON.stringify(own).includes(ids.outsider));assert.equal(own._self_view,true);assert.equal(own._evaluation_view,true);
+ await as('outsider');const other=(await myCurrentEvaluations()).find(r=>r.id===row.id);assert.equal(other.score,100);assert.equal(other.nok_count,0);assert.equal(other.answers.person.value,'YES');assert.deepEqual(other.own_plans,[]);assert.ok(!JSON.stringify(other).includes(ids.a));
+ await as('review');assert.ok(!(await myCurrentEvaluations()).some(r=>r.id===row.id));
+});
+
+test('consulta individual exclui rascunhos, respeita unidade, conta ativa e permissão própria',async()=>{
+ const form=await createForm({schema:evaluationSchema(),apply_roles:['ADMIN'],report_roles:[]}),draft=await startEvaluated(form);
+ await as('a');assert.ok(!(await myCurrentEvaluations()).some(r=>r.id===draft.id));
+ await as('admin');const saved=await saveResponse(draft,evaluatedAnswers());await as('a');assert.ok((await myCurrentEvaluations()).some(r=>r.id===saved.id));
+ await assert.rejects(()=>myCurrentEvaluations(B),/FORBIDDEN/);
+ await db.exec('reset role');await db.query("insert into public.user_permissions values($1,'FORMS_SELF_VIEW',false)",[ids.a]);await as('a');await assert.rejects(()=>myCurrentEvaluations(),/FORBIDDEN/);
+ await db.exec('reset role');await db.query("delete from public.user_permissions where user_id=$1 and permission_code='FORMS_SELF_VIEW'",[ids.a]);await db.query('update public.profiles set active=false where id=$1',[ids.a]);await as('a');await assert.rejects(()=>myCurrentEvaluations(),/FORBIDDEN/);
+ await db.exec('reset role');await db.query('update public.profiles set active=true where id=$1',[ids.a]);await as('a');
+ await assert.rejects(()=>myCurrentEvaluations(A,-1),/FORM_FILTER_INVALID/);
+ await assert.rejects(()=>myCurrentEvaluations(A,10000),/FORM_FILTER_INVALID/);
+});
+
+test('fotos da visão individual permitem apenas fotos compartilhadas e da própria resposta',async()=>{
+ const form=await createForm({schema:evaluationSchema(),apply_roles:['ADMIN'],report_roles:[]}),row=await startEvaluated(form),paths=Array.from({length:4},()=>ids.admin+'/'+row.id+'/'+randomUUID()+'.jpg');
+ for(const path of paths)await sql("insert into storage.objects(bucket_id,name) values('form-evidence',$1)",[path]);
+ const answers=evaluatedAnswers();answers.shared.photos=[paths[0]];answers.__evaluations[ids.a].person.photos=[paths[1]];answers.__evaluations[ids.outsider].person.photos=[paths[2]];
+ await saveResponse(row,answers);await as('a');
+ assert.deepEqual((await sql("select name from storage.objects where name=any($1::text[]) order by name",[paths])).map(p=>p.name),paths.slice(0,2).sort());
+ await assert.rejects(()=>sql("insert into storage.objects(bucket_id,name) values('form-evidence',$1)",[ids.a+'/'+row.id+'/'+randomUUID()+'.jpg']),/row-level security/);
+ await as('outsider');assert.deepEqual((await sql("select name from storage.objects where name=any($1::text[]) order by name",[paths])).map(p=>p.name),[paths[0],paths[2]].sort());
+ await as('b');assert.equal((await sql("select name from storage.objects where name=any($1::text[])",[paths])).length,0);
+});
+
+test('histórico individual mantém nome e área originais mesmo após mudar o cadastro',async()=>{
+ const form=await createForm({schema:evaluationSchema()}),row=await saveResponse(await startEvaluated(form),evaluatedAnswers());
+ await db.exec('reset role');await db.query("update public.profiles set name='Novo nome',evaluation_area='Outra área' where id=$1",[ids.a]);await as('a');
+ const own=(await myCurrentEvaluations()).find(r=>r.id===row.id);assert.equal(own.evaluated_name,'a');assert.equal(own.evaluated_area,'Entrega');assert.equal(own.score,50);
+ await db.exec('reset role');await db.query("update public.profiles set name='a',evaluation_area='Entrega' where id=$1",[ids.a]);
+});
+
+test('consulta própria não fica exposta a anônimos nem permite chamar o extrator interno',async()=>{
+ await db.exec('reset role;set role anon');await assert.rejects(()=>myCurrentEvaluations(),/permission denied/);
+ await as('a');await assert.rejects(()=>sql("select public.forms_person_answers('{}','{}',$1)",[ids.outsider]),/permission denied/);
+ assert.equal((await sql('select * from public.form_staff_area_audit')).length,0);
 });
