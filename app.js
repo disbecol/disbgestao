@@ -233,7 +233,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.65-forms',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.66-forms',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -310,14 +310,7 @@ async function init(){
           },
 
           global:{
-            fetch:(input,options={})=>
-              fetch(
-                input,
-                {
-                  ...options,
-                  cache:'no-store'
-                }
-              )
+            fetch:backendFetch
           }
         }
       );
@@ -401,7 +394,7 @@ async function init(){
       },
       error
     }=
-      await sb.auth.getSession();
+      await withDeadline(sb.auth.getSession(),10000,'AUTH_SESSION_TIMEOUT');
 
     if(error)throw error;
 
@@ -3073,6 +3066,8 @@ function bindPullEvents(){
     const button=$('btnPullRefreshSteps');
     button.disabled=true;button.textContent='Atualizando…';
     try{
+      try{await withDeadline(syncOfflineQueue({silent:true,pullOnly:true}),12000,'PULL_SYNC_TIMEOUT');}
+      catch(error){console.warn('[PUXADA] envio pendente durante atualização manual',error);}
       if(await withDeadline(loadPullActiveTrip(),12000,'PULL_REFRESH_TIMEOUT'))toast('Etapas atualizadas.','success');
     }catch(error){
       toast(error?.message==='PULL_REFRESH_TIMEOUT'?'A atualização demorou. As etapas já carregadas continuam disponíveis; tente novamente quando a conexão melhorar.':humanPullError(error),'error');
@@ -3558,6 +3553,17 @@ function teardownPullRealtime(){if(pullRealtimeChannel&&sb){sb.removeChannel(pul
 function schedulePullReload(){clearTimeout(pullReloadTimer);pullReloadTimer=setTimeout(async()=>{try{if(hasPerm('PULL_TRIP'))await loadPullActiveTrip(true);if(hasPerm('NRI_PENDING_VIEW'))await loadPullNriPending(true);if(activeView==='puxada-cadastrar'&&hasPerm('PULL_PLAN'))await loadPullPlans(true);if(activeView==='puxada-farol'&&hasPerm('PULL_FAROL'))await loadPullFarol(true);if(activeView==='puxada-historico'&&hasPerm('PULL_HISTORY'))await loadPullHistory(true);if(activeView==='puxada-dashboard'&&hasPerm('PULL_DASHBOARD'))await loadPullDashboard(true);}catch(e){console.warn(e);}},350);}
 window.addEventListener('online',()=>{if(authUser&&isPullDriver())schedulePullReload();});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&navigator.onLine&&authUser&&isPullDriver())schedulePullReload();});
+let pullDriverPollRunning=false;
+setInterval(async()=>{
+  if(pullDriverPollRunning||document.hidden||!navigator.onLine||!authUser||!isPullDriver()||activeView!=='puxada-viagem'||pullStepActionPending)return;
+  pullDriverPollRunning=true;
+  try{
+    void syncOfflineQueue({silent:true,pullOnly:true}).catch(error=>console.warn('[PUXADA] envio automático',error));
+    await withDeadline(loadPullActiveTrip(true),10000,'PULL_REFRESH_TIMEOUT');
+  }catch(error){console.warn('[PUXADA] consulta automática',error);}
+  finally{pullDriverPollRunning=false;}
+},12000);
+
 
 async function loadPullActiveTrip(silent=false){
   if(!isPullDriver())return;
@@ -3602,6 +3608,14 @@ async function refreshPullGpsTarget(){
 }
 function renderPullDriver(){
   const active=!!pullActiveTrip;
+  const syncNotice=$('pullStepSyncNotice');
+  if(syncNotice){
+    const waiting=pullDriverEvents.filter(event=>event._offline);
+    syncNotice.classList.toggle('hidden',!active||!waiting.length);
+    syncNotice.textContent=waiting.length
+      ?`${waiting.length} etapa(s) salva(s) neste aparelho e aguardando envio. Para liberar a continuação no outro celular, mantenha este aparelho conectado e toque em “Atualizar etapas”.`
+      :'';
+  }
   if(active&&pullRenderedTripId!==pullActiveTrip.id){
     if($('pullDriverDetails'))$('pullDriverDetails').open=false;
     pullAttachmentNativeFile=null;$('formPullAttachment')?.reset();updatePullAttachmentCaptureUi();
@@ -5237,7 +5251,7 @@ async function ensureAvariaLocationPermission(){
   }catch(e){console.warn('Falha ao solicitar permissão de localização',e);return false;}
 }
 function gpsSample(pos){
-  return {latitude:pos.coords.latitude,longitude:pos.coords.longitude,accuracy:Number(pos.coords.accuracy)||99999,capturedAt:new Date(pos.timestamp||Date.now()).toISOString()};
+  return {latitude:Number(pos.coords.latitude),longitude:Number(pos.coords.longitude),accuracy:Number(pos.coords.accuracy),capturedAt:new Date(pos.timestamp||Date.now()).toISOString()};
 }
 function bestGpsSample(samples){return samples.reduce((best,p)=>!best||p.accuracy<best.accuracy?p:best,null);}
 function rememberPullGpsSample(sample){if(!sample||!Number.isFinite(sample.latitude)||!Number.isFinite(sample.longitude))return;pullGpsLiveSample=sample;if(!pullGpsBestSample||sample.accuracy<pullGpsBestSample.accuracy||Date.now()-new Date(pullGpsBestSample.capturedAt).getTime()>30000)pullGpsBestSample=sample;}
@@ -5251,6 +5265,29 @@ function withDeadline(promise,ms,code='TIMEOUT'){
     new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(code)),ms);})
   ]).finally(()=>clearTimeout(timer));
 }
+async function pullRequest(query,ms,code){
+  const controller=new AbortController();
+  const request=typeof query.abortSignal==='function'?query.abortSignal(controller.signal):query;
+  try{return await withDeadline(request,ms,code);}
+  finally{controller.abort();}
+}
+async function backendFetch(input,options={}){
+  const url=typeof input==='string'?input:String(input?.url||input||'');
+  if(!url.includes('/auth/v1/'))return fetch(input,{...options,cache:'no-store'});
+  // A renovação de sessão não pode reter as próximas chamadas do SDK para sempre.
+  const controller=new AbortController(),upstream=options.signal;
+  const abort=()=>controller.abort();
+  if(upstream?.aborted)abort();else upstream?.addEventListener('abort',abort,{once:true});
+  try{
+    return await withDeadline((async()=>{
+      const response=await fetch(input,{...options,cache:'no-store',signal:controller.signal});
+      // Inclui o corpo do retorno de autenticação no prazo, preservando-o para o SDK.
+      await response.clone().arrayBuffer();
+      return response;
+    })(),15000,'AUTH_NETWORK_TIMEOUT');
+  }catch(error){controller.abort();throw error;}
+  finally{upstream?.removeEventListener('abort',abort);}
+}
 function browserHighAccuracyPosition(timeout=12000){
   return new Promise((resolve,reject)=>{
     if(!navigator.geolocation)return reject(new Error('GPS indisponível'));
@@ -5263,7 +5300,14 @@ async function captureGps({maxAccuracy=null,maxWaitMs=15000,onProgress=null,useR
   if(recent&&(!limit||recent.accuracy<=limit)){onProgress?.(recent);return recent;}
   const samples=[];let best=recent||null;let lastError=null;let settled=false;let watchId=null;let timer=null;let fallbackTimer=null;
   const capGeo=getCapacitorGeolocation();
-  const accept=sample=>{samples.push(sample);rememberPullGpsSample(sample);if(!best||sample.accuracy<best.accuracy)best=sample;onProgress?.(best);return !limit||sample.accuracy<=limit;};
+  const accept=sample=>{
+    if(settled||!sample||!Number.isFinite(sample.latitude)||!Number.isFinite(sample.longitude)
+      ||Math.abs(sample.latitude)>90||Math.abs(sample.longitude)>180||!Number.isFinite(sample.accuracy)||sample.accuracy<0)return false;
+    const age=Date.now()-Date.parse(sample.capturedAt);
+    if(!Number.isFinite(age)||age< -5000||age>30000)return false;
+    samples.push(sample);rememberPullGpsSample(sample);if(!best||sample.accuracy<best.accuracy)best=sample;
+    onProgress?.(best);return !limit||sample.accuracy<=limit;
+  };
   if(capGeo&&isNativeCapacitor()){
     let p=typeof capGeo.checkPermissions==='function'?await withDeadline(capGeo.checkPermissions(),10000,'GPS_TIMEOUT'):null;
     if(!locationGranted(p)&&typeof capGeo.requestPermissions==='function')p=await withDeadline(capGeo.requestPermissions({permissions:['location','coarseLocation']}),60000,'GPS_TIMEOUT');
@@ -5273,7 +5317,7 @@ async function captureGps({maxAccuracy=null,maxWaitMs=15000,onProgress=null,useR
     return await new Promise(async(resolve,reject)=>{
       const clearWatch=()=>{if(watchId!=null){try{void Promise.resolve(capGeo.clearWatch({id:watchId})).catch(()=>{});}catch(_e){}}};
       const finish=(sample,err)=>{if(settled)return;settled=true;if(timer)clearTimeout(timer);if(fallbackTimer)clearTimeout(fallbackTimer);clearWatch();sample?resolve(sample):reject(err||lastError||new Error('GPS indisponível'));};
-      timer=setTimeout(()=>finish(limit&&best&&best.accuracy<=limit?best:null,limit?gpsAccuracyError(best,limit):(best?null:lastError||new Error('GPS indisponível'))),maxWaitMs);
+      timer=setTimeout(()=>finish(best&&(!limit||best.accuracy<=limit)?best:null,limit?gpsAccuracyError(best,limit):(lastError||new Error('GPS indisponível'))),maxWaitMs);
       if(typeof capGeo.getCurrentPosition==='function'){
         fallbackTimer=setTimeout(()=>{
           if(settled)return;
@@ -5291,9 +5335,9 @@ async function captureGps({maxAccuracy=null,maxWaitMs=15000,onProgress=null,useR
   if(!navigator.geolocation)throw new Error('GPS indisponível');
   return await new Promise((resolve,reject)=>{
     let id=null;
-    const cleanup=()=>{if(timer)clearTimeout(timer);if(id!=null)navigator.geolocation.clearWatch(id);};
+    const cleanup=()=>{if(timer)clearTimeout(timer);if(id!=null){try{navigator.geolocation.clearWatch(id);}catch(_e){}}};
     const finish=(sample,err)=>{if(settled)return;settled=true;cleanup();sample?resolve(sample):reject(err||lastError||new Error('GPS indisponível'));};
-    timer=setTimeout(()=>finish(limit&&best&&best.accuracy<=limit?best:null,limit?gpsAccuracyError(best,limit):(best?null:lastError||new Error('GPS indisponível'))),maxWaitMs);
+    timer=setTimeout(()=>finish(best&&(!limit||best.accuracy<=limit)?best:null,limit?gpsAccuracyError(best,limit):(lastError||new Error('GPS indisponível'))),maxWaitMs);
     id=navigator.geolocation.watchPosition(pos=>{const sample=gpsSample(pos);if(accept(sample))finish(sample,null);},err=>{lastError=err;},{enableHighAccuracy:true,timeout:maxWaitMs,maximumAge:0});
   });
 }
@@ -6420,10 +6464,17 @@ async function offlineGetAll(store){
 function offlineUserStateKey(key){return `${authUser?.id||'anon'}:${key}`;}
 async function offlineStateSet(key,value){return offlinePut('state',{key:offlineUserStateKey(key),user_id:authUser?.id||'',value,updated_at:new Date().toISOString()});}
 async function offlineStateGet(key){const row=await offlineGet('state',offlineUserStateKey(key));return row?.value??null;}
-async function offlineQueueRows(){const rows=await offlineGetAll('queue');return rows.filter(x=>String(x.user_id||'')===String(authUser?.id||'')).sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)));}
+function offlineQueueOrder(row){return Number(row.queue_order)||Date.parse(row.created_at)*1000||0;}
+async function offlineQueueRows(){const rows=await offlineGetAll('queue');return rows.filter(x=>String(x.user_id||'')===String(authUser?.id||'')&&(x.type!=='PULL_CHECKLIST'||pullChecklistEnabled())).sort((a,b)=>offlineQueueOrder(a)-offlineQueueOrder(b));}
 async function offlinePendingCount(){try{return (await offlineQueueRows()).length;}catch{return 0;}}
+let offlineLastQueueOrder=0;
+let offlineQueueOrderReady=null;
 async function offlineQueueAdd(type,payload,id=uuid()){
-  const row={id,user_id:authUser?.id||'',type,payload,created_at:new Date().toISOString(),status:'PENDING',tries:0,last_error:''};
+  const owner=authUser?.id||'';
+  if(!offlineQueueOrderReady)offlineQueueOrderReady=offlineGetAll('queue').then(rows=>{offlineLastQueueOrder=rows.reduce((last,row)=>Math.max(last,offlineQueueOrder(row)),0);}).catch(error=>{offlineQueueOrderReady=null;throw error;});
+  await offlineQueueOrderReady;
+  offlineLastQueueOrder=Math.max(Date.now()*1000,offlineLastQueueOrder+1);
+  const row={id,user_id:owner,type,payload,created_at:new Date().toISOString(),queue_order:offlineLastQueueOrder,status:'PENDING',tries:0,last_error:''};
   await offlinePut('queue',row);updateOnlineStatus();return row;
 }
 async function offlineQueueUpdate(row){row.updated_at=new Date().toISOString();await offlinePut('queue',row);updateOnlineStatus();return row;}
@@ -6795,47 +6846,113 @@ finishFefoCount = async function(){
   finally{btn.disabled=false;if(fefoActiveCount&&!fefoActiveCount._finishPending)btn.textContent=old;}
 };
 
-async function cachePullOfflineSnapshot(){try{await offlineStateSet('pull_snapshot',{trip:pullActiveTrip,events:pullDriverEvents,occurrences:pullDriverOccurrences,mainSteps:pullMainSteps,allMainSteps:pullAllMainSteps,occurrenceTypes:pullOccurrenceTypes,settings:pullSettings,factories:pullFactories,vehicles:pullVehicles,profiles:pullProfiles});}catch(e){console.warn('Puxada cache',e);}}
-async function restorePullOfflineSnapshot(){try{const s=await offlineStateGet('pull_snapshot');if(!s)return false;pullActiveTrip=s.trip||null;pullDriverEvents=s.events||[];pullDriverOccurrences=s.occurrences||[];pullAllMainSteps=s.allMainSteps||s.mainSteps||[];pullMainSteps=pullStepsForCycle(pullActiveTrip?.cycle_type||'PULL',pullActiveTrip);pullOccurrenceTypes=s.occurrenceTypes||[];pullSettings=s.settings||pullSettings;pullFactories=s.factories||[];pullVehicles=s.vehicles||[];pullProfiles=s.profiles||[];populatePullReferenceInputs();renderPullDriver();return !!pullActiveTrip;}catch{return false;}}
+let pullSnapshotWrite=Promise.resolve();
+let pullFlowRevision=0;
+let pullCriticalSyncPromise=null;
+let pullCriticalSyncAgain=false;
+let pullSyncLaneCount=0;
+const pullCriticalTypes=new Set(['PULL_STEP','PULL_OCC_START','PULL_OCC_END','PULL_CHECKLIST']);
 
+async function cachePullOfflineSnapshot(){
+  const owner=authUser?.id;if(!owner)return;
+  const snapshot=structuredClone({trip:pullActiveTrip,events:pullDriverEvents,occurrences:pullDriverOccurrences,
+    mainSteps:pullMainSteps,allMainSteps:pullAllMainSteps,occurrenceTypes:pullOccurrenceTypes,
+    settings:pullSettings,factories:pullFactories,vehicles:pullVehicles,profiles:pullProfiles});
+  const write=pullSnapshotWrite.catch(()=>{}).then(()=>offlinePut('state',{
+    key:owner+':pull_snapshot',user_id:owner,value:snapshot,updated_at:new Date().toISOString()
+  }));
+  pullSnapshotWrite=write;
+  try{await write;}catch(error){console.warn('[PUXADA] cache da viagem',error);}
+}
+async function restorePullOfflineSnapshot({referencesOnly=false}={}){
+  const owner=authUser?.id;
+  try{
+    const s=await offlineStateGet('pull_snapshot');
+    if(!s||owner!==authUser?.id)return false;
+    pullAllMainSteps=s.allMainSteps||s.mainSteps||[];
+    pullOccurrenceTypes=s.occurrenceTypes||[];
+    // Uma falha no catálogo não pode restaurar uma viagem/etapa antiga.
+    if(!referencesOnly){
+      pullActiveTrip=s.trip||null;
+      pullDriverEvents=await pullEventsWithPendingSteps(pullActiveTrip,s.events||[]);
+      pullDriverOccurrences=await pullOccurrencesWithPending(pullActiveTrip,s.occurrences||[]);
+    }
+    pullSettings=s.settings||pullSettings;pullFactories=s.factories||[];
+    pullVehicles=s.vehicles||[];pullProfiles=s.profiles||[];
+    pullMainSteps=pullStepsForCycle(pullActiveTrip?.cycle_type||'PULL',pullActiveTrip);
+    if(!referencesOnly){populatePullReferenceInputs();renderPullDriver();}
+    return !!pullActiveTrip;
+  }catch(error){console.warn('[PUXADA] restaurar cache',error);return false;}
+}
+function pullProjectDriver(trip,events){
+  if(!trip)return;
+  const max=Math.max(-Infinity,...events.map(event=>Number(event.step_order)||0));
+  const next=pullStepsForCycle(trip.cycle_type,trip).find(step=>Number(step.sort_order)>max);
+  trip._offline_completion_pending=trip.status==='IN_PROGRESS'&&!next&&events.some(event=>event._offline);
+  const driver=pullTripSolo(trip)?1:Number(next?.executor_driver);
+  if(driver===1){trip.active_driver_id=trip.driver1_id;trip.active_driver_name=trip.driver1_name;}
+  if(driver===2){trip.active_driver_id=trip.driver2_id;trip.active_driver_name=trip.driver2_name;}
+}
 async function pullEventsWithPendingSteps(trip,serverEvents){
-  const events=[...serverEvents];
-  if(!trip)return events;
-  let queued=[];
-  try{queued=(await offlineQueueRows()).filter(row=>row.type==='PULL_STEP'&&row.payload?.p_trip_id===trip.id);}
-  catch(error){console.warn('[PUXADA] fila local indisponível ao atualizar etapas',error);return events;}
-  const previous=pullActiveTrip?.id===trip.id?pullDriverEvents:[];
-  let hasLocalPending=false;
+  const events=[...serverEvents];if(!trip)return events;
+  const queued=(await offlineQueueRows()).filter(row=>row.type==='PULL_STEP'&&row.payload?.p_trip_id===trip.id);
   for(const row of queued){
     const step=pullAllMainSteps.find(item=>item.id===row.payload?.p_step_id);
     if(!step||events.some(event=>event.step_id===step.id))continue;
-    hasLocalPending=true;
-    const saved=previous.find(event=>event._offline&&event.offline_operation_id===row.id);
-    const gps=row.payload;
-    events.push(saved||{
-      id:`local-pull-event-${row.id}`,trip_id:trip.id,step_id:step.id,
+    const p=row.payload;
+    events.push({id:'local-pull-event-'+row.id,trip_id:trip.id,step_id:step.id,
       step_name:step.name,action_code:step.action_code,step_order:step.sort_order,
-      user_id:authUser?.id,user_name:profile?.name||'Motorista',
-      recorded_at:gps.p_device_at||row.created_at,device_at:gps.p_device_at,
-      latitude:gps.p_latitude,longitude:gps.p_longitude,gps_accuracy:gps.p_accuracy,
-      geofence_status:'PENDING_SYNC',_offline:true,offline_operation_id:row.id
-    });
+      user_id:row.user_id||authUser?.id,user_name:profile?.name||'Motorista',
+      recorded_at:p.p_device_at||row.created_at,device_at:p.p_device_at,
+      latitude:p.p_latitude,longitude:p.p_longitude,gps_accuracy:p.p_accuracy,
+      geofence_status:'PENDING_SYNC',_offline:true,_sync_error:row.last_error||'',offline_operation_id:row.id});
   }
   events.sort((a,b)=>Number(a.step_order)-Number(b.step_order));
-  if(hasLocalPending){
-    const max=Math.max(...events.map(event=>Number(event.step_order)||0));
-    const next=pullStepsForCycle(trip.cycle_type,trip).find(step=>Number(step.sort_order)>max);
-    if(!next)trip._offline_completion_pending=true;
-    else if(Number(next.executor_driver)===1){trip.active_driver_id=trip.driver1_id;trip.active_driver_name=trip.driver1_name;}
-    else if(Number(next.executor_driver)===2){trip.active_driver_id=trip.driver2_id;trip.active_driver_name=trip.driver2_name;}
+  pullProjectDriver(trip,events);return events;
+}
+async function pullOccurrencesWithPending(trip,serverRows){
+  const rows=structuredClone(serverRows);if(!trip)return rows;
+  const queued=await offlineQueueRows();
+  for(const row of queued){
+    const p=row.payload||{};
+    if(row.type==='PULL_OCC_START'&&p.p_trip_id===trip.id){
+      const mapped=await offlineStateGet('pull_occ_map:'+p.local_occurrence_id);
+      if(rows.some(item=>item.id===(mapped||p.local_occurrence_id)))continue;
+      const step=pullOccurrenceTypes.find(item=>item.id===p.p_step_id);
+      const closed=step?.duration_mode==='POINT';
+      rows.push({id:mapped||p.local_occurrence_id,trip_id:trip.id,step_id:p.p_step_id,
+        occurrence_name:step?.name||'Ocorrência',duration_mode:step?.duration_mode,
+        started_by:row.user_id,started_by_name:profile?.name,started_at:p.p_device_at||row.created_at,
+        start_latitude:p.p_latitude,start_longitude:p.p_longitude,start_accuracy:p.p_accuracy,
+        status:closed?'CLOSED':'OPEN',ended_at:closed?p.p_device_at:null,note:p.p_note,_offline:true});
+    }
+    if(row.type==='PULL_OCC_END'){
+      const mapped=await offlineStateGet('pull_occ_map:'+p.p_occurrence_id);
+      const item=rows.find(item=>item.id===p.p_occurrence_id||item.id===mapped);
+      if(item)Object.assign(item,{status:'CLOSED',ended_at:p.p_device_at||row.created_at,
+        ended_by:row.user_id,ended_by_name:profile?.name,end_latitude:p.p_latitude,
+        end_longitude:p.p_longitude,end_accuracy:p.p_accuracy,_offline:true});
+    }
   }
-  return events;
+  return rows;
+}
+async function pullAcceptStepReceipt(row,data){
+  if(row.user_id&&row.user_id!==authUser?.id)return;
+  if(!data?.event?.id||data.event.trip_id!==row.payload.p_trip_id||data.event.step_id!==row.payload.p_step_id
+    ||data.trip?.id!==row.payload.p_trip_id)throw new Error('ETAPA_SEM_CONFIRMACAO_DO_SERVIDOR');
+  if(pullActiveTrip?.id!==data.trip.id)return;
+  pullFlowRevision++;pullTripLoadGeneration++;
+  pullDriverEvents=pullDriverEvents.filter(event=>event.step_id!==data.event.step_id);
+  pullDriverEvents.push({...data.event,_offline:false});
+  pullDriverEvents.sort((a,b)=>Number(a.step_order)-Number(b.step_order));
+  pullActiveTrip={...data.trip};pullProjectDriver(pullActiveTrip,pullDriverEvents);
+  await cachePullOfflineSnapshot();renderPullDriver();
 }
 
 const loadPullReferenceDataV151=loadPullReferenceData;
 loadPullReferenceData = async function(){
-  if(!navigator.onLine){const ok=await restorePullOfflineSnapshot();if(ok||pullMainSteps.length)return;}
-  try{await loadPullReferenceDataV151();await cachePullOfflineSnapshot();}catch(e){const ok=await restorePullOfflineSnapshot();if(!ok)throw e;}
+  if(!navigator.onLine){const ok=await restorePullOfflineSnapshot({referencesOnly:true});if(ok||pullMainSteps.length)return;}
+  try{await withDeadline(loadPullReferenceDataV151(),8000,'PULL_REFERENCE_TIMEOUT');await cachePullOfflineSnapshot();}catch(e){const ok=await restorePullOfflineSnapshot({referencesOnly:true});if(!ok&&!pullAllMainSteps.length)throw e;}
 };
 refreshPullGpsTarget = async function(){
   if(!navigator.onLine||!sb)return pullGpsTarget();
@@ -6849,144 +6966,58 @@ refreshPullGpsTarget = async function(){
     return pullGpsTarget();
   }catch(e){console.warn('GPS: usando tolerância em cache.',e);return pullGpsTarget();}
 };
+async function fetchPullDriverState(){
+  const result=await pullRequest(sb.rpc('pull_driver_state',{}),8000,'PULL_REFRESH_TIMEOUT');
+  if(!result.error){if(!result.data||!Array.isArray(result.data.events)||!Array.isArray(result.data.steps))throw new Error('PULL_STATE_INVALID');return result.data;}
+  // Compatibilidade durante a publicação da migração, sem puxar todo o catálogo.
+  if(!['PGRST202','42883'].includes(result.error.code))throw result.error;
+  const [tripResult,steps,settings]=await withDeadline(Promise.all([
+    sb.from('pull_trips').select('*').in('origin_unit',myUnits.length?myUnits:['__SEM_UNIDADE__'])
+      .eq('status','IN_PROGRESS').or('driver1_id.eq.'+authUser.id+',driver2_id.eq.'+authUser.id)
+      .order('started_at',{ascending:false}).limit(1).maybeSingle(),
+    sb.from('pull_steps').select('*').eq('active',true).order('sort_order'),
+    sb.from('pull_settings').select('*').eq('singleton',true).maybeSingle()
+  ]),8000,'PULL_REFRESH_TIMEOUT');
+  if(tripResult.error||steps.error||settings.error)throw tripResult.error||steps.error||settings.error;
+  const trip=tripResult.data;
+  const [events,occurrences]=trip?await withDeadline(Promise.all([
+    sb.from('pull_events').select('*').eq('trip_id',trip.id).order('step_order'),
+    sb.from('pull_occurrences').select('*').eq('trip_id',trip.id).order('started_at')
+  ]),8000,'PULL_REFRESH_TIMEOUT'):[{data:[]},{data:[]}];
+  if(events.error||occurrences.error)throw events.error||occurrences.error;
+  return {trip,steps:steps.data||[],settings:settings.data,events:events.data||[],occurrences:occurrences.data||[]};
+}
 loadPullActiveTrip = async function(silent=false){
-
-  if(!isPullDriver())return;
-  const generation=++pullTripLoadGeneration;
-
-  if(!navigator.onLine){
-
-    const ok=
-      await restorePullOfflineSnapshot();
-
-    if(!ok&&!silent){
-      toast(
-        'Nenhuma viagem recente disponível no aparelho.',
-        'error'
-      );
-    }
-
-    return ok;
-  }
-
+  if(!isPullDriver())return false;
+  const generation=++pullTripLoadGeneration,revision=pullFlowRevision,owner=authUser?.id;
+  if(!navigator.onLine){if(pullActiveTrip){renderPullDriver();return true;}return restorePullOfflineSnapshot();}
   try{
-
-    await loadPullReferenceData();
-
-    const {data,error}=
-      await sb
-        .from('pull_trips')
-        .select('*')
-        .in(
-          'origin_unit',
-          myUnits.length?myUnits:['__SEM_UNIDADE__']
-        )
-        .eq(
-          'status',
-          'IN_PROGRESS'
-        )
-        .or(
-          `driver1_id.eq.${authUser.id},driver2_id.eq.${authUser.id}`
-        )
-        .order(
-          'started_at',
-          {ascending:false}
-        )
-        .limit(1)
-        .maybeSingle();
-
-    if(error)throw error;
-
-    const trip=data||null;
-    let events=[];
-    let occurrences=[];
-    if(trip){
-
-      const [ev,oc]=
-        await Promise.all([
-
-          sb
-            .from('pull_events')
-            .select('*')
-            .eq(
-              'trip_id',
-              trip.id
-            )
-            .order('step_order'),
-
-          sb
-            .from('pull_occurrences')
-            .select('*')
-            .eq(
-              'trip_id',
-              trip.id
-            )
-            .order('started_at')
-
-        ]);
-
-      if(ev.error)throw ev.error;
-      if(oc.error)throw oc.error;
-
-      events=await pullEventsWithPendingSteps(trip,ev.data||[]);
-      occurrences=oc.data||[];
-    }
-    if(generation!==pullTripLoadGeneration)return false;
-    pullActiveTrip=trip;
+    const state=await fetchPullDriverState();
+    if(generation!==pullTripLoadGeneration||revision!==pullFlowRevision||owner!==authUser?.id)return false;
+    pullAllMainSteps=state.steps.filter(step=>step.step_type==='MAIN'&&step.active!==false);
+    pullOccurrenceTypes=state.steps.filter(step=>step.step_type==='OCCURRENCE'&&step.active!==false);
+    if(state.settings)pullSettings=state.settings;
+    const trip=state.trip||null;
+    const events=await pullEventsWithPendingSteps(trip,state.events);
+    const occurrences=await pullOccurrencesWithPending(trip,state.occurrences||[]);
+    if(generation!==pullTripLoadGeneration||revision!==pullFlowRevision||owner!==authUser?.id)return false;
+    pullActiveTrip=trip;pullDriverEvents=events;pullDriverOccurrences=occurrences;
     pullMainSteps=pullStepsForCycle(trip?.cycle_type||'PULL',trip);
-    pullDriverEvents=events;
-    pullDriverOccurrences=occurrences;
-
-    renderPullDriver();
-    syncPullTracking();
-    if(pullActiveTrip){
-      if($('pullAttachmentList')?.dataset.tripId!==pullActiveTrip.id){pullTripAttachments=[];$('pullAttachmentList').dataset.tripId=pullActiveTrip.id;}
-      void loadPullTripAttachments(pullActiveTrip.id,'pullAttachmentList',true);
-    }else{
-      pullTripAttachments=[];
-      if(activeView==='puxada-viagem')void loadAssignedPullPlans();
-    }
-
-    await cachePullOfflineSnapshot();
-    return true;
-
-  }
-  catch(e){
-    if(generation!==pullTripLoadGeneration)return false;
-
-    console.error(
-      '[PUXADA] Falha ao carregar viagem ativa',
-      e
-    );
-
-    if(
-      !navigator.onLine
-      ||
-      offlineIsNetworkError(e)
-    ){
-
-      const ok=
-        await restorePullOfflineSnapshot();
-
-      if(!ok&&!silent){
-        toast(
-          humanPullError(e),
-          'error'
-        );
-      }
-
-      return false;
-    }
-
-    if(!silent){
-      toast(
-        humanPullError(e),
-        'error'
-      );
-    }
+    renderPullDriver();void Promise.resolve(syncPullTracking()).catch(error=>console.warn('[PUXADA] rastreio',error));
+    if(trip){
+      const list=$('pullAttachmentList');
+      if(list&&list.dataset.tripId!==trip.id){pullTripAttachments=[];list.dataset.tripId=trip.id;void loadPullTripAttachments(trip.id,'pullAttachmentList',true);}
+    }else{pullTripAttachments=[];if(activeView==='puxada-viagem')void loadAssignedPullPlans();}
+    await cachePullOfflineSnapshot();return true;
+  }catch(error){
+    if(generation!==pullTripLoadGeneration||owner!==authUser?.id)return false;
+    console.warn('[PUXADA] atualização indisponível; mantendo os registros locais',error);
+    if(!pullActiveTrip)await restorePullOfflineSnapshot();
+    if(!silent)toast(offlineIsNetworkError(error)?'Não foi possível consultar o servidor. As etapas salvas neste aparelho foram mantidas.':humanPullError(error),'error');
     return false;
   }
 };
+
 async function pendingPullStepOperation(
   tripId,
   stepId
@@ -7034,7 +7065,7 @@ async function reconcilePullStepQueueRow(row){
 
       sb
         .from('pull_events')
-        .select('id,trip_id,step_id,step_order')
+        .select('*')
         .eq(
           'trip_id',
           p.p_trip_id
@@ -7047,7 +7078,7 @@ async function reconcilePullStepQueueRow(row){
 
       sb
         .from('pull_trips')
-        .select('id,status,cycle_type')
+        .select('*')
         .eq(
           'id',
           p.p_trip_id
@@ -7070,6 +7101,10 @@ async function reconcilePullStepQueueRow(row){
     (eventResult.data||[]).length
   ){
 
+    const event=eventResult.data[0];
+    if(event.user_id!==row.user_id)return false;
+    await pullAcceptStepReceipt(row,{event,trip:tripResult.data});
+
     console.info(
       '[PUXADA OFFLINE] removendo etapa ja sincronizada',
       {
@@ -7087,36 +7122,8 @@ async function reconcilePullStepQueueRow(row){
     return true;
   }
 
-  // O ciclo ja terminou.
-  // Uma operacao antiga nao pode bloquear
-  // a proxima viagem do motorista.
-  if(
-    !tripResult.data
-    ||
-    tripResult.data.status!=='IN_PROGRESS'
-  ){
-
-    console.warn(
-      '[PUXADA OFFLINE] removendo pendencia de ciclo encerrado',
-      {
-        operation_id:row.id,
-        trip_id:p.p_trip_id,
-        step_id:p.p_step_id,
-        status:
-          tripResult.data?.status
-          ||
-          'NAO_ENCONTRADO'
-      }
-    );
-
-    await offlineDelete(
-      'queue',
-      row.id
-    );
-
-    return true;
-  }
-
+  // Ciclos encerrados sem o evento não são considerados enviados.
+  // O envelope permanece rastreável no aparelho para diagnóstico.
   return false;
 }
 
@@ -7158,6 +7165,7 @@ recordPullNextStep = async function(){
     return;
   }
 
+  const selectedTrip=pullActiveTrip,owner=authUser.id;
   pullStepActionPending=true;
 
   const btn=
@@ -7194,6 +7202,8 @@ recordPullNextStep = async function(){
         }
       });
 
+    if(authUser?.id!==owner||pullActiveTrip?.id!==selectedTrip.id)throw new Error('VIAGEM_ALTERADA_DURANTE_REGISTRO');
+    pullFlowRevision++;pullTripLoadGeneration++;
     // Nao cria duas operacoes para
     // a mesma viagem + mesma etapa.
     let op=
@@ -7202,19 +7212,12 @@ recordPullNextStep = async function(){
         step.id
       );
 
+    if(authUser?.id!==owner||pullActiveTrip?.id!==selectedTrip.id)throw new Error('VIAGEM_ALTERADA_DURANTE_REGISTRO');
+
     if(op){
 
       op.status='PENDING';
       op.last_error='';
-
-      // Mantemos a coordenada mais recente.
-      op.payload={
-        ...op.payload,
-        p_latitude:gps.latitude,
-        p_longitude:gps.longitude,
-        p_accuracy:gps.accuracy,
-        p_device_at:gps.capturedAt
-      };
 
       await offlineQueueUpdate(op);
 
@@ -7260,6 +7263,7 @@ recordPullNextStep = async function(){
     }
 
     operationId=op.id;
+    if(authUser?.id!==owner||pullActiveTrip?.id!==selectedTrip.id)throw new Error('VIAGEM_ALTERADA_DURANTE_REGISTRO');
 
     // Movimento otimista na tela,
     // mas sem duplicar o mesmo passo.
@@ -7366,7 +7370,7 @@ recordPullNextStep = async function(){
     await cachePullOfflineSnapshot();
 
     renderPullDriver();
-    void syncPullTracking().catch(error=>console.warn('[PUXADA GPS] troca de motorista',error));
+    void Promise.resolve(syncPullTracking()).catch(error=>console.warn('[PUXADA GPS] troca de motorista',error));
 
     if(navigator.onLine){
 
@@ -7499,20 +7503,23 @@ async function syncNewPullOccurrence(op,successMessage){
 }
 
 onPullOccurrenceClick = async function(event){
-  const button=event.target.closest('button[data-occ]');if(!button||button.disabled||!pullActiveTrip)return;
+  const button=event.target.closest('button[data-occ]');if(!button||button.disabled||!pullActiveTrip||pullStepActionPending)return;
   if(pullActiveTrip._offline_completion_pending||!pullNextStep())return toast('O ciclo já foi encerrado neste aparelho e aguarda sincronização.','error');
   const step=pullOccurrenceTypes.find(x=>x.id===button.dataset.occ);if(!step||!pullIsActiveDriver())return;
   if(pullDriverOccurrences.some(x=>x.status==='OPEN'))return toast('Encerre a ocorrência em andamento primeiro.','error');
   const note=prompt(`Observação para ${step.name} (opcional):`,'')||'';
+  const tripId=pullActiveTrip.id,owner=authUser.id;pullStepActionPending=true;
   button.disabled=true;button.textContent='Capturando GPS…';
   try{
     const target=await refreshPullGpsTarget();
     const gps=await captureGps({maxAccuracy:target,maxWaitMs:navigator.onLine?15000:45000,onProgress:s=>button.textContent=`GPS ±${Math.round(s.accuracy)} m / limite ${target} m…`});
+    if(pullActiveTrip?.id!==tripId||authUser?.id!==owner)throw new Error('VIAGEM_ALTERADA_DURANTE_REGISTRO');
     const localId=offlineLocalId('pull-occurrence'),op=await offlineQueueAdd('PULL_OCC_START',{
       p_trip_id:pullActiveTrip.id,p_step_id:step.id,p_latitude:gps.latitude,p_longitude:gps.longitude,
       p_accuracy:gps.accuracy,p_note:note,p_device_at:gps.capturedAt,local_occurrence_id:localId
     });
     const closed=step.duration_mode==='POINT';
+    pullFlowRevision++;pullTripLoadGeneration++;
     pullDriverOccurrences.push({id:localId,trip_id:pullActiveTrip.id,step_id:step.id,occurrence_name:step.name,
       action_code:step.action_code,duration_mode:step.duration_mode,suggest_tma_discount:step.suggest_tma_discount,
       started_by:authUser.id,started_by_name:profile.name,started_at:gps.capturedAt,
@@ -7523,26 +7530,29 @@ onPullOccurrenceClick = async function(event){
     await cachePullOfflineSnapshot();renderPullDriver();
     await syncNewPullOccurrence(op,closed?`${step.name} registrado.`:`${step.name} iniciado.`);
   }catch(error){toast(humanGpsOrPullError(error),'error');}
-  finally{renderPullDriver();}
+  finally{pullStepActionPending=false;renderPullDriver();}
 };
 
 onPullOpenOccurrenceClick = async function(event){
-  const button=event.target.closest('[data-end-occ]');if(!button||button.disabled||!pullActiveTrip)return;
+  const button=event.target.closest('[data-end-occ]');if(!button||button.disabled||!pullActiveTrip||pullStepActionPending)return;
   const occurrence=pullDriverOccurrences.find(x=>String(x.id)===String(button.dataset.endOcc));
   if(!occurrence||occurrence.status!=='OPEN'||!pullIsActiveDriver())return;
+  const tripId=pullActiveTrip.id,owner=authUser.id;pullStepActionPending=true;
   button.disabled=true;button.textContent='Capturando GPS…';
   try{
     const target=await refreshPullGpsTarget();
     const gps=await captureGps({maxAccuracy:target,maxWaitMs:navigator.onLine?15000:45000,onProgress:s=>button.textContent=`GPS ±${Math.round(s.accuracy)} m / limite ${target} m…`});
-    const op=await offlineQueueAdd('PULL_OCC_END',{p_occurrence_id:occurrence.id,p_latitude:gps.latitude,
+    if(pullActiveTrip?.id!==tripId||authUser?.id!==owner)throw new Error('VIAGEM_ALTERADA_DURANTE_REGISTRO');
+    const op=await offlineQueueAdd('PULL_OCC_END',{p_trip_id:tripId,p_occurrence_id:occurrence.id,p_latitude:gps.latitude,
       p_longitude:gps.longitude,p_accuracy:gps.accuracy,p_device_at:gps.capturedAt});
+    pullFlowRevision++;pullTripLoadGeneration++;
     Object.assign(occurrence,{status:'CLOSED',ended_by:authUser.id,ended_by_name:profile.name,
       ended_at:gps.capturedAt,end_latitude:gps.latitude,end_longitude:gps.longitude,end_accuracy:gps.accuracy,
       _offline:true,offline_operation_id:op.id});
     await cachePullOfflineSnapshot();renderPullDriver();
     await syncNewPullOccurrence(op,'Ocorrência encerrada.');
   }catch(error){toast(humanGpsOrPullError(error),'error');}
-  finally{renderPullDriver();}
+  finally{pullStepActionPending=false;renderPullDriver();}
 };
 
 async function offlineUploadDamageStorage(path,blob){const {error}=await sb.storage.from('avarias').upload(path,blob,{contentType:'image/jpeg',upsert:true});if(error)throw error;}
@@ -7693,17 +7703,19 @@ async function processOfflineRecord(row){
   if(row.type==='FEFO_FINISH'){const countId=await resolveOfflineFefoCountId(row.payload.p_count_id);if(!countId)throw new Error('FEFO_AGUARDANDO_INICIO');const {data,error}=await sb.rpc('offline_sync_fefo_finish',{p_operation_id:row.id,p_count_id:countId});if(error)throw error;for(const unit of myUnits){const key=fefoOfflineSnapshotKey(unit),snap=await getFefoOfflineSnapshot(unit);if(snap?.count?.id===countId||snap?.count?.id===row.payload.p_count_id)await offlineStateSet(key,{count:null,items:[]});}return data;}
   if(row.type==='PULL_STEP'){
     const p=row.payload;
-    const {data,error}=await withDeadline(sb.rpc('offline_sync_pull_step',{
+    const {data,error}=await pullRequest(sb.rpc('offline_sync_pull_step',{
       p_operation_id:row.id,p_trip_id:p.p_trip_id,p_step_id:p.p_step_id,
       p_latitude:p.p_latitude,p_longitude:p.p_longitude,p_accuracy:p.p_accuracy,
       p_exception_reason:p.p_exception_reason||'',p_device_at:p.p_device_at
     }),15000,'PULL_SYNC_TIMEOUT');
     if(error)throw error;
+    await pullAcceptStepReceipt(row,data);
     return data;
   }
   if(row.type==='PULL_OCC_START'){
     const p=row.payload,{data,error}=await withDeadline(sb.rpc('offline_sync_pull_occurrence_start',{p_operation_id:row.id,p_trip_id:p.p_trip_id,p_step_id:p.p_step_id,p_latitude:p.p_latitude,p_longitude:p.p_longitude,p_accuracy:p.p_accuracy,p_note:p.p_note||'',p_device_at:p.p_device_at}),15000,'PULL_SYNC_TIMEOUT');
-    if(error)throw error;if(!data?.id)throw new Error('OCORRENCIA_SYNC_SEM_RETORNO');
+    if(error)throw error;if(!data?.id||data.trip_id!==p.p_trip_id)throw new Error('OCORRENCIA_SYNC_SEM_RETORNO');
+    if(row.user_id!==authUser?.id)return data;
     await offlineStateSet(`pull_occ_map:${p.local_occurrence_id}`,data.id);
     const local=pullDriverOccurrences.find(x=>x.id===p.local_occurrence_id);if(local){local.id=data.id;await cachePullOfflineSnapshot();}
     return data;
@@ -7712,7 +7724,16 @@ async function processOfflineRecord(row){
     const p=row.payload,occurrenceId=offlineIsLocalId(p.p_occurrence_id)?await offlineStateGet(`pull_occ_map:${p.p_occurrence_id}`):p.p_occurrence_id;
     if(!occurrenceId)throw new Error('OCORRENCIA_AGUARDANDO_INICIO');
     const {data,error}=await withDeadline(sb.rpc('offline_sync_pull_occurrence_end',{p_operation_id:row.id,p_occurrence_id:occurrenceId,p_latitude:p.p_latitude,p_longitude:p.p_longitude,p_accuracy:p.p_accuracy,p_device_at:p.p_device_at}),15000,'PULL_SYNC_TIMEOUT');
-    if(error)throw error;return data;
+    if(error)throw error;
+    if(!data?.id||data.id!==occurrenceId||data.status!=='CLOSED')throw new Error('OCORRENCIA_ENCERRAMENTO_SEM_CONFIRMACAO');
+    if(row.user_id!==authUser?.id)return data;
+    const index=pullDriverOccurrences.findIndex(item=>item.id===occurrenceId||item.id===p.p_occurrence_id);
+    if(index>=0){
+      pullFlowRevision++;pullTripLoadGeneration++;
+      pullDriverOccurrences[index]={...data,_offline:false};
+      await cachePullOfflineSnapshot();renderPullDriver();
+    }
+    return data;
   }
   if(row.type==='DAMAGE_CREATE'){
     const p=row.payload,base=`${authUser.id}/offline_${row.id}`,signaturePath=`${base}/assinatura.jpg`;await offlineUploadDamageStorage(signaturePath,p.signature_blob);const uploaded=[];
@@ -7735,282 +7756,86 @@ async function processOfflineRecord(row){
   throw new Error(`TIPO_OFFLINE_DESCONHECIDO:${row.type}`);
 }
 
-async function syncOfflineQueue({
-  silent=false,
-  pullOnly=false
-}={}){
-
-  if(
-    !navigator.onLine
-    ||
-    !sb
-    ||
-    !authUser
-  ){
-    return false;
-  }
-
-  // Cada chamada entra atras da chamada anterior.
-  // Nenhuma sincronizacao e simplesmente ignorada.
-  const previous=
-    offlineSyncPromise;
-
-  const current=
-    (async()=>{
-
-      if(previous){
-
-        try{
-          await previous;
-        }
-        catch(_e){}
-
-      }
-
-      if(
-        !navigator.onLine
-        ||
-        !sb
-        ||
-        !authUser
-      ){
-        return false;
-      }
-
-      offlineSyncRunning=true;
-      offlineSyncLastError='';
-
-      updateOnlineStatus();
-
-      let success=0;
-      let touchedFefo=false;
-      let touchedPull=false;
-      let touchedDamage=false;
-      let damagePushFailure='';
-
-      try{
-
-        const pendingRows=await offlineQueueRows();
-        // Pontos GPS podem somar milhares. As operacoes da viagem precisam
-        // sincronizar primeiro, mantendo a ordem entre etapas e ocorrencias.
-        const pullActions=new Set(['PULL_STEP','PULL_OCC_START','PULL_OCC_END','PULL_CHECKLIST']);
-        const rows=pullOnly
-          ?pendingRows.filter(row=>pullActions.has(row.type))
-          :[
-            ...pendingRows.filter(row=>pullActions.has(row.type)),
-            ...pendingRows.filter(row=>!pullActions.has(row.type)&&row.type!=='PULL_TRACK_POINT'),
-            ...pendingRows.filter(row=>row.type==='PULL_TRACK_POINT').slice(0,25)
-          ];
-
-        for(const row of rows){
-
-          try{
-
-            // Antes de reenviar uma etapa,
-            // verifica se o servidor ja a recebeu
-            // ou se aquela viagem ja terminou.
-            if(
-              row.type==='PULL_STEP'
-              &&
-              await reconcilePullStepQueueRow(
-                row
-              )
-            ){
-
-              success++;
-              touchedPull=true;
-
-              continue;
-            }
-
-            row.status='SYNCING';
-
-            row.tries=
-              Number(row.tries||0)+1;
-
-            row.last_error='';
-
-            await offlineQueueUpdate(row);
-
-            await processOfflineRecord(row);
-
-            await offlineDelete(
-              'queue',
-              row.id
-            );
-
-            success++;
-
-            if(
-              row.type.startsWith(
-                'FEFO_'
-              )
-            ){
-              touchedFefo=true;
-            }
-
-            if(row.type==='PULL_STEP'||row.type==='PULL_OCC_START'||row.type==='PULL_OCC_END'){
-              touchedPull=true;
-            }
-
-            if(
-              row.type==='DAMAGE_CREATE'
-            ){
-              touchedDamage=true;
-              const pushResult=damagePushResultsV174.get(row.id);
-              if(pushResult&&!pushResult.ok)damagePushFailure=pushResult.error;
-            }
-
-          }
-          catch(e){
-
-            // Pode ter acontecido:
-            // servidor processou a etapa,
-            // mas o navegador perdeu a resposta.
-            if(row.type==='PULL_STEP'){
-
-              try{
-
-                if(
-                  await reconcilePullStepQueueRow(
-                    row
-                  )
-                ){
-
-                  success++;
-                  touchedPull=true;
-
-                  continue;
-                }
-
-              }
-              catch(reconcileError){
-
-                console.warn(
-                  '[PUXADA] falha ao reconciliar fila',
-                  reconcileError
-                );
-
-              }
-            }
-
-            row.status='ERROR';
-
-            row.last_error=
-              String(
-                e?.message
-                ||
-                e
-                ||
-                'Erro de sincronização'
-              );
-
-            offlineSyncLastError=
-              row.last_error;
-
-            await offlineQueueUpdate(row);
-
-            console.warn(
-              'Fila offline',
-              row.type,
-              row.id,
-              e
-            );
-
-            // Se realmente perdeu internet,
-            // nao adianta tentar os demais.
-            if(
-              offlineIsNetworkError(e)
-              ||
-              !navigator.onLine
-            ){
-              break;
-            }
-
-            // Um erro logico antigo nao pode
-            // bloquear outras viagens/modulos.
-            continue;
-          }
-        }
-
-        if(
-          touchedFefo
-          &&
-          hasPerm('FEFO_CREATE')
-        ){
-          await loadFefoCurrent(true);
-        }
-
-        if(
-          touchedPull
-          &&
-          isPullDriver()
-        ){
-          await withDeadline(loadPullActiveTrip(true),12000,'PULL_REFRESH_TIMEOUT');
-        }
-
-        if(
-          touchedDamage
-          &&
-          success
-          &&
-          !silent
-        ){
-
-          toast(
-            damagePushFailure
-              ?`Avaria sincronizada, mas o push falhou: ${damagePushFailure}`
-              :'Avaria sincronizada. Toque no status Online para abrir o comprovante.',
-            damagePushFailure?'error':'success'
-          );
-
-        }
-
-        if(
-          success
-          &&
-          !silent
-          &&
-          !touchedDamage
-        ){
-
-          toast(
-            `${success} registro${success===1?'':'s'} sincronizado${success===1?'':'s'}.`,
-            'success'
-          );
-
-        }
-
-        return !offlineSyncLastError;
-
-      }
-      finally{
-
-        offlineSyncRunning=false;
-
-        updateOnlineStatus();
-
-      }
-
-    })();
-
-  offlineSyncPromise=
-    current;
-
+// Duas vias independentes: ações da viagem não esperam fotos, FEFO ou GPS.
+async function runOfflineQueueLane(critical,silent){
+  const owner=authUser?.id;if(!owner||!navigator.onLine||!sb)return false;
+  pullSyncLaneCount++;offlineSyncRunning=true;updateOnlineStatus();
+  let touchedPull=false,touchedFefo=false,touchedDamage=false,success=0,failed=false;
+  const blockedTrips=new Set();
   try{
-
-    return await current;
-
-  }
-  finally{
-
-    if(
-      offlineSyncPromise===current
-    ){
-      offlineSyncPromise=null;
+    const pending=await offlineQueueRows();
+    const rows=critical?pending.filter(row=>pullCriticalTypes.has(row.type)):[
+      ...pending.filter(row=>!pullCriticalTypes.has(row.type)&&row.type!=='PULL_TRACK_POINT'),
+      ...pending.filter(row=>row.type==='PULL_TRACK_POINT').slice(0,25)
+    ];
+    for(const original of rows){
+      if(authUser?.id!==owner||!navigator.onLine)break;
+      const row=await offlineGet('queue',original.id);
+      if(authUser?.id!==owner)break;
+      if(!row||row.user_id!==owner)continue;
+      const tripId=row.payload?.p_trip_id;
+      if(tripId&&blockedTrips.has(tripId))continue;
+      try{
+        row.status='SYNCING';row.tries=Number(row.tries||0)+1;row.last_error='';
+        await offlineQueueUpdate(row);
+        if(authUser?.id!==owner)break;
+        // O prazo engloba também a espera do token, não só o fetch HTTP.
+        await withDeadline(processOfflineRecord(row),critical?18000:60000,critical?'PULL_SYNC_TIMEOUT':'OFFLINE_SYNC_TIMEOUT');
+        if(authUser?.id!==owner)break;
+        await offlineDelete('queue',row.id);success++;
+        touchedPull ||= critical;touchedFefo ||= row.type.startsWith('FEFO_');
+        touchedDamage ||= row.type==='DAMAGE_CREATE';
+      }catch(error){
+        if(authUser?.id!==owner)break;
+        if(row.type==='PULL_STEP'){
+          try{if(await reconcilePullStepQueueRow(row)){success++;touchedPull=true;continue;}}
+          catch(reconcileError){console.warn('[PUXADA] confirmação pendente',reconcileError);}
+        }
+        row.status='ERROR';row.last_error=String(error?.message||error||'Erro de sincronização');
+        offlineSyncLastError=row.last_error;failed=true;await offlineQueueUpdate(row);
+        if(tripId)blockedTrips.add(tripId);
+        console.warn('[FILA]',row.type,row.id,row.last_error);
+        if(offlineIsNetworkError(error)||!navigator.onLine)break;
+      }
     }
-
+    if(authUser?.id!==owner)return false;
+    if(touchedPull){
+      try{await withDeadline(loadPullActiveTrip(true),10000,'PULL_REFRESH_TIMEOUT');}
+      catch(error){console.warn('[PUXADA] confirmação salva; consulta pendente',error);}
+    }
+    if(touchedFefo&&hasPerm('FEFO_CREATE')){
+      try{await withDeadline(loadFefoCurrent(true),10000,'OFFLINE_REFRESH_TIMEOUT');}catch(error){console.warn(error);}
+    }
+    if(success&&!silent)toast(touchedDamage?'Avaria sincronizada. Toque no status Online para abrir o comprovante.':success+' registro(s) sincronizado(s).','success');
+    if(!failed)offlineSyncLastError='';
+    return !failed;
+  }finally{
+    pullSyncLaneCount--;offlineSyncRunning=pullSyncLaneCount>0;updateOnlineStatus();
   }
+}
+function syncPullCriticalQueue(silent){
+  if(pullCriticalSyncPromise){pullCriticalSyncAgain=true;return pullCriticalSyncPromise;}
+  const current=(async()=>{
+    let result=true;
+    do{
+      pullCriticalSyncAgain=false;
+      result=await runOfflineQueueLane(true,silent);
+    }while(result&&pullCriticalSyncAgain&&navigator.onLine);
+    return result;
+  })();
+  pullCriticalSyncPromise=current;
+  return current.finally(()=>{if(pullCriticalSyncPromise===current)pullCriticalSyncPromise=null;});
+}
+async function syncOfflineQueue({silent=false,pullOnly=false}={}){
+  if(!navigator.onLine||!sb||!authUser)return false;
+  const critical=await syncPullCriticalQueue(silent);
+  if(pullOnly)return critical;
+  // Chamadas simultâneas reutilizam o trabalho em curso; não criam uma cadeia infinita.
+  if(offlineSyncPromise)return offlineSyncPromise;
+  const current=runOfflineQueueLane(false,silent);
+  offlineSyncPromise=current;
+  try{return await current&&critical;}
+  finally{if(offlineSyncPromise===current)offlineSyncPromise=null;}
 }
 const startAppV151=startApp;
 startApp = async function(){await startAppV151();if(!offlinePillBound){$('syncPill')?.addEventListener('click',async()=>{if(navigator.onLine)await syncOfflineQueue({silent:false});if(await offlineOpenNextDamageReceipt())return;if(!navigator.onLine)toast('Sem internet. Os registros continuarão salvos no aparelho.','');else if(!(await offlinePendingCount()))toast('Tudo sincronizado.','success');});offlinePillBound=true;}updateOnlineStatus();if(navigator.onLine)syncOfflineQueue({silent:true});};
@@ -9310,6 +9135,7 @@ let pullNativeTrackingTripIdV170='';
 let pullNativeTrackingStartingV170=null;
 let pullNativeLastQueuedV170=null;
 let pullNativeTrackingHasUploadV170=false;
+let pullTrackingEpoch=0;
 let pullLiveMapTimerV170=null;
 
 function getBackgroundGeolocationV170(){
@@ -9466,6 +9292,8 @@ async function startPullNativeTrackingV170(){
   if(!isNativeCapacitor()||!trip||trip.status!=='IN_PROGRESS')return false;
 
   if(pullTrackWatch?.kind==='foreground-v170'&&pullTrackWatch.tripId!==String(trip.id))stopPullTracking();
+  const epoch=pullTrackingEpoch,owner=authUser?.id;
+  const current=()=>epoch===pullTrackingEpoch&&owner===authUser?.id&&trip.id===pullActiveTrip?.id;
 
   if(
     pullTrackWatch?.kind==='background-v170'
@@ -9480,8 +9308,10 @@ async function startPullNativeTrackingV170(){
   }
 
   let token=await getPullNativeTokenV170(trip.id);
+  if(!current())return false;
 
   try{await withDeadline(bg.stop(),5000,'PULL_TRACK_STOP_TIMEOUT');}catch(e){console.warn('[PUXADA GPS NATIVO] parada anterior',e);}
+  if(!current())return false;
 
   const url=token
     ?CFG.SUPABASE_URL+'/functions/v1/pull-track-ingest?trip_id='+encodeURIComponent(trip.id)
@@ -9512,7 +9342,7 @@ async function startPullNativeTrackingV170(){
   const startPromise=Promise.resolve(bg.start(
     options,
     (location,error)=>{
-      if(startAbandoned)return;
+      if(startAbandoned||!current())return;
       if(error){
         console.warn('[PUXADA GPS NATIVO]',error);
         return;
@@ -9542,6 +9372,12 @@ async function startPullNativeTrackingV170(){
     throw error;
   }
 
+  if(!current()){
+    startAbandoned=true;
+    try{await withDeadline(bg.stop(),5000,'PULL_TRACK_STOP_TIMEOUT');}catch(_e){}
+    return false;
+  }
+
   pullNativeTrackingTripIdV170=String(trip.id);
   pullNativeTrackingHasUploadV170=Boolean(url);
   pullTrackWatch={
@@ -9565,9 +9401,13 @@ async function startPullForegroundTrackingV170(){
   if(!trip||!geo?.watchPosition)return false;
   if(pullTrackWatch?.kind==='foreground-v170'&&pullTrackWatch.tripId===String(trip.id))return true;
   if(pullTrackWatch)stopPullTracking();
-  const id=await geo.watchPosition(
+  const epoch=pullTrackingEpoch,owner=authUser?.id;
+  let abandoned=false;
+  const current=()=>!abandoned&&epoch===pullTrackingEpoch&&owner===authUser?.id&&trip.id===pullActiveTrip?.id;
+  const started=Promise.resolve(geo.watchPosition(
     {enableHighAccuracy:true,timeout:30000,maximumAge:0,minimumUpdateInterval:5000},
     (position,error)=>{
+      if(!current())return;
       if(error){console.warn('[PUXADA GPS PRIMEIRO PLANO]',error);return;}
       if(!position)return;
       const point=gpsSample(position);
@@ -9575,7 +9415,15 @@ async function startPullForegroundTrackingV170(){
       if(point.accuracy<=300)void queuePullTrackPointV170(trip.id,point)
         .catch(e=>console.warn('[PUXADA GPS PRIMEIRO PLANO]',e));
     }
-  );
+  ));
+  let id;
+  try{id=await withDeadline(started,6000,'PULL_FOREGROUND_START_TIMEOUT');}
+  catch(error){
+    abandoned=true;
+    void started.then(id=>geo.clearWatch({id})).catch(()=>{});
+    throw error;
+  }
+  if(!current()){void Promise.resolve(geo.clearWatch({id})).catch(()=>{});return false;}
   pullTrackWatch={kind:'foreground-v170',id,tripId:String(trip.id)};
   return true;
 }
@@ -9583,6 +9431,7 @@ async function startPullForegroundTrackingV170(){
 const stopPullTrackingBeforeNativeV170=stopPullTracking;
 
 stopPullTracking=function(){
+  pullTrackingEpoch++;
   if(pullTrackWatch?.kind==='foreground-v170'){
     const id=pullTrackWatch.id;
     pullTrackWatch=null;
@@ -11185,7 +11034,7 @@ async function pushOnlineSessionV171(){
   if(result.error)throw result.error;
   let session=result.data?.session||null;
   if(!session?.access_token){
-    result=await sb.auth.refreshSession();
+    result=await withDeadline(sb.auth.refreshSession(),12000,'AUTH_REFRESH_TIMEOUT');
     if(result.error)throw result.error;
     session=result.data?.session||null;
   }
@@ -11395,7 +11244,7 @@ async function disbEnsureOnlineSupabaseSessionV172(){
       try{
 
         const refreshed=
-          await sb.auth.refreshSession();
+          await withDeadline(sb.auth.refreshSession(),12000,'AUTH_REFRESH_TIMEOUT');
 
         if(
           !refreshed.error
@@ -11440,7 +11289,7 @@ async function disbEnsureOnlineSupabaseSessionV172(){
     try{
 
       const refreshed=
-        await sb.auth.refreshSession();
+        await withDeadline(sb.auth.refreshSession(),12000,'AUTH_REFRESH_TIMEOUT');
 
       if(
         !refreshed.error
@@ -12328,7 +12177,7 @@ async function pullLoadChecklistState(){
 const loadPullActiveTripBeforeChecklist=loadPullActiveTrip;
 loadPullActiveTrip=async function(silent=false){
   const result=await loadPullActiveTripBeforeChecklist(silent);
-  if(pullActiveTrip){try{await pullLoadChecklistState();}catch(error){if(!silent)toast(`Checklist: ${humanError(error)}`,'error');}if(!navigator.onLine)await loadPullTripAttachments(pullActiveTrip.id,'pullAttachmentList',true);}
+  if(pullActiveTrip){try{if(pullChecklistEnabled())await pullLoadChecklistState();}catch(error){if(!silent)toast(`Checklist: ${humanError(error)}`,'error');}if(!navigator.onLine)await loadPullTripAttachments(pullActiveTrip.id,'pullAttachmentList',true);}
   else{pullChecklistQuestions=[];pullChecklistRequirements=[];pullChecklistRuns=[];pullChecklistLastKm=null;pullChecklistStateReady=false;}
   return result;
 };
@@ -12341,7 +12190,7 @@ function pullChecklistGatePending(){const next=pullNextStep();return next?pullCh
 const renderPullDriverBeforeChecklist=renderPullDriver;
 renderPullDriver=function(){
   renderPullDriverBeforeChecklist();
-  if(!pullChecklistEnabled()||!pullActiveTrip?.week_trip_type)return;
+  if(!pullChecklistEnabled()||!pullActiveTrip?.week_trip_type||pullStepActionPending)return;
   const next=pullChecklistPending()[0],button=$('btnPullNextStep');
   if(!pullChecklistStateReady){
     $('pullNextStepName').textContent='Carregar checklist da viagem';
@@ -12358,6 +12207,8 @@ renderPullDriver=function(){
 };
 const recordPullNextStepBeforeChecklist=recordPullNextStep;
 recordPullNextStep=async function(){
+  if(pullStepActionPending)return;
+  if(!pullChecklistEnabled())return recordPullNextStepBeforeChecklist();
   if(pullActiveTrip?.week_trip_type&&navigator.onLine)await refreshPullGpsTarget();
   if(pullChecklistEnabled()&&pullActiveTrip?.week_trip_type&&!pullChecklistStateReady)return toast('Conecte-se para carregar o checklist desta viagem.','error');
   const pending=pullChecklistPending()[0];
@@ -12542,7 +12393,7 @@ syncOfflineQueue=async function(...args){
   const hadChecklist=!!pullActiveTrip?.week_trip_type&&pendingBefore.some(row=>row.type==='PULL_CHECKLIST'&&row.payload?.p_trip_id===pullActiveTrip.id);
   const hadAttachment=!!pullActiveTrip&&pendingBefore.some(row=>row.type==='PULL_ATTACHMENT'&&row.payload?.trip_id===pullActiveTrip.id);
   const result=await syncOfflineQueueBeforeChecklist(...args);
-  if(hadChecklist&&pullActiveTrip?.week_trip_type&&navigator.onLine){
+  if(pullChecklistEnabled()&&hadChecklist&&pullActiveTrip?.week_trip_type&&navigator.onLine){
     try{await withDeadline(pullLoadChecklistState(),8000,'PULL_CHECKLIST_LOAD_TIMEOUT');}catch(error){console.warn('Checklist após sincronização',error);}
   }
   if(hadAttachment&&pullActiveTrip&&navigator.onLine){

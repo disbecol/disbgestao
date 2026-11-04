@@ -17,7 +17,7 @@ function checklistContext(overrides={}){
     'onPullAssignedPlanClick','loadPullActiveTrip','renderPullDriver','recordPullNextStep','processOfflineRecord',
     'syncOfflineQueue','humanPullError','humanPullPlanError','loadPullConfig',
     'renderPullTripDetailExtras'];
-  const context={document:{addEventListener(){},querySelector(){return null;}},navigator:{onLine:false},pullSettings:{checklist_enabled:true},
+  const context={document:{addEventListener(){},querySelector(){return null;}},navigator:{onLine:false},pullStepActionPending:false,pullSettings:{checklist_enabled:true},
     pullActiveTrip:{id:'trip-1',week_trip_type:'LAST'},pullDriverEvents:[],pullNextStep:()=>({action_code:'ARRIVE_UNIT'}),
     ...Object.fromEntries(stubs.map(name=>[name,()=>{}])),...overrides};
   vm.createContext(context);vm.runInContext(source,context);

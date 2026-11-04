@@ -18,7 +18,7 @@ test('etapa sem checklist fica no aparelho e avança para o próximo motorista s
   const events=[];
   const trip={id:'trip-1',driver1_id:'driver-1',driver2_id:'driver-2',driver2_name:'Motorista 2'};
   const context={
-    pullStepActionPending:false,
+    pullStepActionPending:false,pullFlowRevision:0,pullTripLoadGeneration:0,
     pullActiveTrip:trip,pullDriverEvents:events,pullDriverOccurrences:[],pullMainSteps:[step,next],
     pullNextStep:()=>step,pullCanExecuteStep:()=>true,$:id=>id==='btnPullNextStep'?button:hint,
     refreshPullGpsTarget:async()=>200,captureGps:async()=>gps,
@@ -50,7 +50,7 @@ test('falha de sincronização online preserva a etapa salva no aparelho',async(
   const trip={id:'trip-86',driver1_id:'driver-1',driver2_id:'driver-2',driver2_name:'Motorista 2'};
   let queued=null,loads=0,usedGpsLimit=null;
   const context={
-    pullStepActionPending:false,pullActiveTrip:trip,pullDriverEvents:events,pullDriverOccurrences:[],pullMainSteps:[step,next],
+    pullStepActionPending:false,pullFlowRevision:0,pullTripLoadGeneration:0,pullActiveTrip:trip,pullDriverEvents:events,pullDriverOccurrences:[],pullMainSteps:[step,next],
     pullNextStep:()=>step,pullCanExecuteStep:()=>true,$:id=>id==='btnPullNextStep'?button:hint,
     refreshPullGpsTarget:async()=>125,captureGps:async options=>{usedGpsLimit=options.maxAccuracy;return gps;},pendingPullStepOperation:async()=>null,
     offlineQueueAdd:async(type,payload)=>queued={id:'operation-86',type,payload},
@@ -72,7 +72,7 @@ test('falha de sincronização online preserva a etapa salva no aparelho',async(
 });
 
 test('recarga mantém etapas pendentes e não volta à etapa anterior',async()=>{
-  const from=app.indexOf('async function pullEventsWithPendingSteps(');
+  const from=app.indexOf('function pullProjectDriver(');
   const to=app.indexOf('const loadPullReferenceDataV151=',from);
   const step={id:'step-4',name:'Chegada à fábrica',action_code:'ARRIVE_FACTORY',sort_order:40,executor_driver:2};
   const next={id:'step-5',sort_order:50,executor_driver:2};
@@ -80,7 +80,7 @@ test('recarga mantém etapas pendentes e não volta à etapa anterior',async()=>
   const context={
     offlineQueueRows:async()=>[{id:'operation-86',type:'PULL_STEP',created_at:'2026-10-27T15:17:00Z',payload:{p_trip_id:'trip-86',p_step_id:'step-4',p_device_at:'2026-10-27T15:17:00Z',p_latitude:-6.4,p_longitude:-35.4,p_accuracy:75}}],
     pullActiveTrip:trip,pullDriverEvents:[],pullAllMainSteps:[step,next],
-    pullStepsForCycle:()=>[step,next],authUser:{id:'driver-2'},profile:{name:'Motorista 2'}
+    pullStepsForCycle:()=>[step,next],pullTripSolo:()=>false,authUser:{id:'driver-2'},profile:{name:'Motorista 2'}
   };
   vm.createContext(context);
   vm.runInContext(app.slice(from,to),context);
@@ -94,16 +94,14 @@ test('resposta antiga da viagem não substitui a recarga mais recente',async()=>
   const from=app.indexOf('loadPullActiveTrip = async function(silent=false){');
   const to=app.indexOf('async function pendingPullStepOperation(',from);
   const resolutions=[];
-  const tripQuery={select(){return this;},in(){return this;},eq(){return this;},or(){return this;},order(){return this;},limit(){return this;},maybeSingle(){return new Promise(resolve=>resolutions.push(resolve));}};
-  const childQuery={select(){return this;},eq(){return this;},order(){return Promise.resolve({data:[],error:null});}};
   let rendered=0;
   const context={
-    pullTripLoadGeneration:0,pullActiveTrip:null,pullMainSteps:[],pullDriverEvents:[],pullDriverOccurrences:[],pullTripAttachments:[],
+    pullTripLoadGeneration:0,pullFlowRevision:0,pullActiveTrip:null,pullMainSteps:[],pullDriverEvents:[],pullDriverOccurrences:[],pullTripAttachments:[],
     isPullDriver:()=>true,navigator:{onLine:true},loadPullReferenceData:async()=>{},
-    sb:{from:table=>table==='pull_trips'?tripQuery:childQuery},myUnits:['Matriz Caicó'],authUser:{id:'driver-1'},
-    pullEventsWithPendingSteps:async(_trip,events)=>events,pullStepsForCycle:()=>[],
+    fetchPullDriverState:()=>new Promise(resolve=>resolutions.push(resolve)),myUnits:['Matriz Caicó'],authUser:{id:'driver-1'},
+    pullEventsWithPendingSteps:async(_trip,events)=>events,pullOccurrencesWithPending:async(_trip,rows)=>rows,pullStepsForCycle:()=>[],
     renderPullDriver:()=>{rendered++;},syncPullTracking:()=>{},
-    $:()=>({dataset:{tripId:null}}),loadPullTripAttachments:async()=>{},cachePullOfflineSnapshot:async()=>{},
+    $:()=>({dataset:{tripId:null}}),loadPullTripAttachments:async()=>{},cachePullOfflineSnapshot:async()=>{},Promise,
     offlineIsNetworkError:()=>false,toast:()=>{},console,activeView:'puxada-viagem',loadAssignedPullPlans:async()=>{}
   };
   vm.createContext(context);
@@ -112,9 +110,9 @@ test('resposta antiga da viagem não substitui a recarga mais recente',async()=>
   const newer=context.loadPullActiveTrip(true);
   await new Promise(resolve=>setTimeout(resolve,0));
   assert.equal(resolutions.length,2);
-  resolutions[1]({data:{id:'trip-new',cycle_type:'PULL'},error:null});
+  resolutions[1]({trip:{id:'trip-new',cycle_type:'PULL'},events:[],occurrences:[],steps:[]});
   await newer;
-  resolutions[0]({data:{id:'trip-old',cycle_type:'PULL'},error:null});
+  resolutions[0]({trip:{id:'trip-old',cycle_type:'PULL'},events:[],occurrences:[],steps:[]});
   await older;
   assert.equal(context.pullActiveTrip.id,'trip-new');
   assert.equal(rendered,1);
@@ -129,7 +127,7 @@ test('ocorrência abre e encerra offline sem depender do servidor',async()=>{
   let local=0;
   const button={disabled:false,textContent:'Descanso',dataset:{occ:'occ-step'}};
   const context={
-    navigator:{onLine:false},pullActiveTrip:{id:'trip-1'},pullDriverOccurrences:occurrences,
+    navigator:{onLine:false},pullStepActionPending:false,pullFlowRevision:0,pullTripLoadGeneration:0,pullActiveTrip:{id:'trip-1'},pullDriverOccurrences:occurrences,
     pullOccurrenceTypes:[{id:'occ-step',name:'Descanso',duration_mode:'INTERVAL',action_code:'REST'}],
     pullNextStep:()=>({id:'next'}),pullIsActiveDriver:()=>true,
     prompt:()=>'',refreshPullGpsTarget:async()=>200,captureGps:async()=>gps,
