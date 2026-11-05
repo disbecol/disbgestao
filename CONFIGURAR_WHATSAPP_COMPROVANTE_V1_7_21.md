@@ -4,9 +4,133 @@ O botão **Enviar comprovante** chama a Edge Function `send-damage-receipt`. Ela
 WhatsApp Business Platform Cloud API para enviar um modelo de mensagem a partir
 do número corporativo **(84) 99801-6062**. O token da Meta fica apenas nos
 Secrets do Supabase. Após registrar o aceite do destinatário, o botão separado
-**Abrir envio manual pelo meu WhatsApp** mantém o procedimento anterior enquanto
-a integração é ativada. A API ainda não
-está ativa no número real; não exclua a conta do celular agora.
+**Abrir envio manual pelo meu WhatsApp** mantém o procedimento anterior. Em
+04/11/2026, o número foi conectado à Cloud API e o identificador foi salvo no
+Supabase. Após a correção de permissões da migração 83, o usuário confirmou a
+entrega do primeiro comprovante em 04/11/2026.
+
+### Atualização verificada em 04/11/2026
+
+- A conta de mensagens **Disbecol** (`940672352023940`) está **Aprovada**,
+  com cobrança em BRL e cartão final **0218** cadastrado.
+- O modelo **`comprovante_avaria_entrega`**, `pt_BR`, categoria **Utilidade**,
+  ID `994493586331706`, está **Ativo — Qualidade pendente**. A qualidade depende
+  do uso; esse status não indica análise de aprovação pendente.
+- O usuário confirmou a exclusão da conta do aplicativo WhatsApp Business do
+  celular para liberar **+55 (84) 99801-6062** para uso exclusivo na Cloud API.
+- A inclusão do número na conta de mensagens Disbecol foi aceita. O identificador
+  novo mostrado pela Meta é **`1357177764156790`**. O painel exibe o telefone sem
+  o nono dígito (`+55 84 9801-6062`), embora o cadastro tenha sido enviado como
+  `+55 84 99801-6062`. O ID antigo da conta do aplicativo não deve ser usado.
+- A linha **TIM estava cancelada por falta de recarga**, impedindo o recebimento
+  dos códigos. O usuário recuperou a linha e concluiu pessoalmente a autenticação
+  na Meta; nenhum código foi recebido ou digitado pelo agente.
+- Após a autenticação, o número aparecia **Pendente** no WhatsApp Manager e
+  **Não registrado** no painel do app. Foi executada a ação **Registrar**, em
+  **Etapa 2. Configuração da produção > Registre seu número de telefone do
+  WhatsApp**, para esse número. O painel passou a mostrar **Inscrito**, e o
+  WhatsApp Manager confirmou **Conectado**. Não houve solicitação de novo PIN.
+- O Secret **`WHATSAPP_PHONE_NUMBER_ID`** foi criado no Supabase com
+  **`1357177764156790`**, em 04/11/2026 às 20:06:52 UTC. A presença do registro
+  salvo foi confirmada no painel. **`WHATSAPP_ACCESS_TOKEN`** permanece cadastrado;
+  seu valor não foi consultado, alterado nem revelado.
+- A configuração do número está concluída. A função de envio não foi invocada
+  nesta ativação; a aceitação e a entrega de um comprovante real ainda não foram
+  testadas. A configuração de recebimento e de webhooks permanece fora desta etapa.
+- A tabela oficial em BRL, vigente desde 01/10/2026, foi consultada: mensagens de
+  utilidade entregues a destinatários brasileiros custam **R$ 0,035 (3,5 centavos)**
+  na tarifa inicial. A orientação fiscal da Meta não informa alíquota para o Brasil;
+  não há fatura nessa conta para confirmar um eventual acréscimo de tributos.
+- **Não enviar teste nem comprovantes a clientes nesta configuração.** O usuário
+  pediu expressamente para concluir o cadastro sem realizar envio de teste.
+
+### Primeiro teste pelo usuário em 04/11/2026 — permissão corrigida
+
+- O aceite do contato foi registrado pelo usuário. Ao enviar, o aplicativo
+  exibiu **Não foi possível registrar o envio. Tente novamente.**
+- O log da função confirmou `SEND_LOG_FAILED`, código SQL `42501`:
+  `permission denied for table damage_receipt_sends`. O erro ocorreu na criação
+  do registro de tentativa, antes da chamada à Meta.
+- A migração **`83_whatsapp_receipt_service_role_grants.sql`** foi aplicada:
+  permite `SELECT` e `INSERT` ao servidor (`service_role`) e `UPDATE` somente
+  nas quatro colunas de resultado do envio. Mantém a RLS e não concede escrita
+  direta a usuários autenticados ou anônimos. Não envia mensagens.
+- **9 testes passaram**, incluindo reprodução do erro de permissão em PostgreSQL,
+  gravação após a correção, restrições de edição, RLS e bloqueio de duplicidade.
+- **Aplicada no Supabase Disb Gestão após autorização específica do usuário.**
+  A consulta final, somente leitura, confirmou **10 verificações e todas aprovadas**:
+  leitura, inserção e atualização de resultados pelo servidor, escrita direta
+  bloqueada para usuários, consulta anônima bloqueada e RLS preservada. Uma falha
+  transitória de conexão do painel na conferência foi resolvida ao repetir apenas
+  a consulta de leitura. Não é necessário atualizar o APK para esta correção.
+- O agente não repetiu o envio nem invocou a função para testar um destinatário.
+
+### Entrega confirmada e consulta de custo em 04/11/2026
+
+- Após a migração 83, o usuário confirmou que enviou o comprovante pelo sistema
+  e que a mensagem chegou ao destinatário. O envio foi feito pelo usuário.
+- No WhatsApp Manager, em **Insights > Preços das mensagens**, a conta Disbecol
+  mostrou **1 mensagem enviada, 1 entregue e 1 recebida**, no intervalo de
+  29/10/2026 a 04/11/2026.
+- Na mesma consulta, o detalhamento de mensagens pagas e gratuitas ainda estava
+  zerado e a cobrança total aproximada mostrava **US$ 0,00**. O próprio painel
+  informa que seus dados são aproximados e podem divergir da fatura.
+- Em **Cobrança e pagamentos > Disbecol**, o saldo em BRL era **R$ 0,00**, com a
+  mensagem **Você não tem gastos recentes**. Nenhuma cobrança efetiva do primeiro
+  comprovante estava lançada na consulta. Não tratar esse saldo como confirmação
+  de gratuidade; o valor final e eventuais tributos dependem do lançamento.
+
+### Reconsulta do custo em 05/11/2026
+
+- **Insights > Preços das mensagens** passou a mostrar **1 mensagem paga de
+  utilidade entregue**, nenhuma mensagem gratuita e cobrança total aproximada de
+  **R$ 0,04 BRL**, no intervalo de 30/10/2026 a 05/11/2026.
+- Após atualizar **Cobrança e pagamentos > Disbecol**, o saldo atual também
+  passou a ser **R$ 0,04**, com a opção **Pagar agora**. A atividade de pagamento
+  ainda informa que não há gastos recentes; não foi identificado pagamento
+  registrado no cartão. O agente não acionou pagamento nem alterou a cobrança.
+- Esse é o valor exibido pelo painel com duas casas decimais. Não atribuir a
+  diferença em relação à referência de R$ 0,035 a tributos sem detalhamento de
+  fatura; o arredondamento é uma explicação possível.
+
+### Situação anterior verificada em 30/10/2026
+
+- Portfólio **Disbecol**: `28506563622370992`.
+- App **Disb Gestão Comprovantes**: `2199190057617572`.
+- Conta de mensagens **Disbecol**: `940672352023940`, ainda sem número da API.
+- Em 30/10/2026, o resumo da conta mostra **Aprovada**, moeda BRL e o cartão
+  Visa final **0218** como forma de pagamento. O cadastro do cartão está concluído;
+  a pendência de análise abaixo se refere ao modelo de mensagem.
+- O número do celular foi vinculado ao portfólio como **Logística Disbecol**
+  (conta `2500295133798666`, telefone `1237287429478979`). O painel identifica
+  **Aplicativo WhatsApp Business**. Esse vínculo, sozinho, não ativa a Cloud API.
+- Modelo `comprovante_avaria_entrega`, `pt_BR`, categoria Utilidade, enviado
+  para análise na conta de mensagens Disbecol. ID: `994493586331706`.
+  O status continuava **Em análise** na consulta de 30/10/2026.
+- O site oficial HTTPS consta no portfólio: <https://www.disbecol.com.br/>.
+- Função `send-damage-receipt` republicada no Supabase em 29/10/2026 com a
+  correção para listas de vários produtos. Os oito testes de envio passaram.
+- Usuário de serviço **Disb Gestão - Comprovantes** criado como Employee:
+  `61596185244197`. Tem acesso ao app de comprovantes e acesso total somente à
+  conta de mensagens Disbecol (`940672352023940`).
+- Token gerado somente com `whatsapp_business_messaging` e salvo como
+  `WHATSAPP_ACCESS_TOKEN` nos Secrets do Supabase. Validade selecionada: 60 dias
+  a partir de 29/10/2026; renovar antes de 28/12/2026. O token não está neste
+  repositório. `whatsapp_business_management` não foi concedida.
+- A permissão **Tudo** da conta de mensagens foi concedida após autorização
+  específica do administrador em 29/10/2026. Essa opção inclui envio, configurações,
+  atribuição de usuários e informações de pagamento. O token permanece restrito
+  ao escopo de envio `whatsapp_business_messaging`.
+- Ainda faltam cadastrar o número definitivamente na API
+  e obter a aprovação do modelo. `WHATSAPP_PHONE_NUMBER_ID` permanece
+  ausente, portanto a função ainda retorna `WHATSAPP_NOT_CONFIGURED`. Nenhum
+  envio real a cliente foi realizado.
+
+O novo modelo de contas da Meta separa a conta que possui o número da conta
+de mensagens. A mensagem de erro de migração não deve ser tratada como motivo
+para excluir ou desconectar contas. Antes de executar a etapa 5, confirmar o
+procedimento aplicável ao número, a aprovação do modelo e a preparação do envio.
+Veja as [alterações de integração da Meta](https://developers.facebook.com/documentation/business-messaging/whatsapp/account-model-evolution/onboarding/).
 
 Como os comprovantes podem citar cerveja e chope, a
 [Política de Mensagens do WhatsApp Business](https://whatsappbusiness.com/pt-br/policy/)
@@ -75,6 +199,8 @@ Precisa de mais informações? Entre em contato com nossa Central de Atendimento
 
 O aplicativo preenche as cinco variáveis com dados da avaria gravada no Supabase.
 O texto dos produtos é limitado a 700 caracteres para evitar mensagens extensas.
+Os produtos são separados por ponto e vírgula: variáveis de modelos aprovados
+não aceitam quebras de linha, conforme as [regras de variáveis do WhatsApp](https://www.twilio.com/docs/content/using-variables-with-content-api#whatsapp-variable-rules).
 A Meta precisa aprovar o modelo antes de usá-lo com clientes.
 
 ## 3. Criar histórico no Supabase

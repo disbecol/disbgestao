@@ -233,7 +233,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.66-forms',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.67-forms',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -626,10 +626,11 @@ function bindBaseEvents(){
   $('btnLimparAssinatura').addEventListener('click',clearSignature);
   $('btnLimparAvaria').addEventListener('click',clearAvariaRequest);
   $('formAvaria').addEventListener('submit',submitAvaria);
-  $('avAdminBusca').addEventListener('input',renderAdminAvarias);
+  $('avAdminBusca').addEventListener('input',searchAdminDamageReceipt);
   $('avAdminStatus').addEventListener('change',renderAdminAvarias);
   $('btnAtualizarAvarias').addEventListener('click',loadAdminAvarias);
   $('btnAvariasCsv')?.addEventListener('click',exportDeliveryDamageCsv);
+  $('btnVerifyDamageReceipt')?.addEventListener('click',()=>openDamageReceiptVerification());
   $('tbodyAvariasAdmin').addEventListener('click',onAdminAvariaClick);
   $('avMySearch')?.addEventListener('input',renderDeliveryDamageMy);
   $('avMyStatus')?.addEventListener('change',renderDeliveryDamageMy);
@@ -1889,7 +1890,7 @@ function itemEvidencePhotos(i){
   if(photos.length)return photos;
   return i.photo_path?[{photo_order:1,photo_path:i.photo_path,latitude:i.latitude,longitude:i.longitude,gps_accuracy:i.gps_accuracy,gps_captured_at:i.gps_captured_at}]:[];
 }
-function filteredAdminAvarias(){const q=norm($('avAdminBusca').value),s=$('avAdminStatus').value;return adminAvarias.filter(r=>(!s||r.status===s)&&(!q||norm([r.customer_code,r.customer_name,r.city,r.delivery_name,r.map_number,...(r.damage_items||[]).flatMap(i=>[i.product_text,i.lot,i.reason])].join(' ')).includes(q)));}
+function filteredAdminAvarias(){const raw=$('avAdminBusca').value,q=norm(raw),s=$('avAdminStatus').value;if(window.DisbReceiptValidation?.isCodeSearch(raw))return damageReceiptSearch?.unit===activeUnit&&damageReceiptSearch.code===window.DisbReceiptValidation.normalizeCode(raw)?adminAvarias.filter(r=>r.id===damageReceiptSearch.request_id&&(!s||r.status===s)):[];return adminAvarias.filter(r=>(!s||r.status===s)&&(!q||norm([r.customer_code,r.customer_name,r.city,r.delivery_name,r.map_number,...(r.damage_items||[]).flatMap(i=>[i.product_text,i.lot,i.reason])].join(' ')).includes(q)));}
 function renderAdminAvarias(){
   const arr=filteredAdminAvarias();
   $('tbodyAvariasAdmin').innerHTML=arr.length?arr.map(r=>{const items=r.damage_items||[],matches=items.filter(i=>lotNriMap.has(deliveryDamageLotKey(i))).length,photos=items.reduce((n,i)=>n+itemEvidencePhotos(i).length,0);return `<tr><td>${fmtDate(r.occurrence_date)}<strong>PDV ${esc(r.customer_code)} • ${esc(r.customer_name)}</strong><small>${esc(r.city)} • Mapa ${esc(r.map_number)}</small></td><td>${esc(r.delivery_name)}</td><td><strong>${items.length} produto(s)</strong><small>${photos} foto(s)</small></td><td>${matches===items.length&&items.length?'<span class="status ok">Todos compatíveis</span>':matches?'<span class="status partial">Parcial</span>':'<span class="status bad">Não encontrados</span>'}</td><td>${statusBadge(r.status)}</td><td><button class="mini-btn" data-id="${r.id}">Visualizar</button></td></tr>`;}).join(''):'<tr><td colspan="6">Nenhuma avaria.</td></tr>';
@@ -5783,7 +5784,7 @@ async function openWhatsappReceipt(phone,ctx){
 function damageReceiptSendError(e){
   const code=String(e?.code||e?.message||'');
   if(/FunctionsFetchError|Failed to send a request to the Edge Function|Function not found/i.test(code))return 'O serviço de envio da empresa ainda não está disponível. Solicite a ativação ao administrador.';
-  const map={WHATSAPP_NOT_CONFIGURED:'O WhatsApp da empresa ainda não foi configurado. Solicite a ativação ao administrador.',RECEIPT_NOT_FOUND:'Não foi possível localizar esta avaria. Atualize os dados e tente novamente.',RECEIPT_CANCELLED:'Esta avaria foi cancelada e não pode gerar comprovante.',CONTACT_NOT_FOUND:'Este contato não pertence ao cliente da avaria.',CONTACT_NOT_ELIGIBLE:'Este contato ainda não tem consentimento e maioridade confirmados para o envio pela empresa.',RECEIPT_TOO_LONG:'O comprovante excede o limite do modelo do WhatsApp. Solicite ajuda ao administrador.',SEND_IN_PROGRESS:'O envio já está em processamento. Aguarde e consulte o histórico.',SEND_STATUS_UNKNOWN:'Não foi possível confirmar o envio anterior. Solicite verificação antes de reenviar.',META_SEND_FAILED:'O WhatsApp da empresa recusou o envio. Solicite verificação ao administrador.',SEND_LOG_FAILED:'Não foi possível registrar o envio. Tente novamente.',UNAUTHORIZED:'Sua sessão expirou. Entre novamente.'};
+  const map={PDF_SIGNATURE_FAILED:'Não foi possível carregar a assinatura do cliente. Nenhuma mensagem foi enviada.',RECEIPT_SIGNATURE_MISSING:'A assinatura do cliente é obrigatória no comprovante.',RECEIPT_SIGNATURE_INVALID:'Não foi possível ler a assinatura registrada. Nenhuma mensagem foi enviada.',PDF_REGISTRY_FAILED:'Não foi possível registrar a validação do PDF. Nenhuma mensagem foi enviada.',RECEIPT_LAYOUT_TOO_LARGE:'Todos os itens não cabem em uma folha A4 legível com a assinatura. Nenhuma mensagem foi enviada. Solicite ajuda ao administrador.',WHATSAPP_NOT_CONFIGURED:'O WhatsApp da empresa ainda não foi configurado. Solicite a ativação ao administrador.',RECEIPT_NOT_FOUND:'Não foi possível localizar esta avaria. Atualize os dados e tente novamente.',RECEIPT_CANCELLED:'Esta avaria foi cancelada e não pode gerar comprovante.',CONTACT_NOT_FOUND:'Este contato não pertence ao cliente da avaria.',CONTACT_NOT_ELIGIBLE:'Este contato ainda não tem consentimento e maioridade confirmados para o envio pela empresa.',RECEIPT_TOO_LONG:'O comprovante excede o limite do modelo do WhatsApp. Solicite ajuda ao administrador.',SEND_IN_PROGRESS:'O envio já está em processamento. Aguarde e consulte o histórico.',SEND_STATUS_UNKNOWN:'Não foi possível confirmar o envio anterior. Solicite verificação antes de reenviar.',META_SEND_FAILED:'O WhatsApp da empresa recusou o envio. Solicite verificação ao administrador.',SEND_LOG_FAILED:'Não foi possível registrar o envio. Tente novamente.',UNAUTHORIZED:'Sua sessão expirou. Entre novamente.'};
   const key=Object.keys(map).find(k=>code.includes(k));return key?map[key]:humanError(e);
 }
 async function sendDeliveryDamageReceipt(contact,ctx,button){
@@ -5884,11 +5885,61 @@ async function loadAdminAvarias(silent=false){
     if(lots.length){for(const chunk of chunks(lots,100)){const q=await sb.from('nris').select('nri,lot,product_code,product_name,validity_date,unit').eq('unit',activeUnit).in('lot',chunk);if(q.error)throw q.error;(q.data||[]).forEach(n=>{const k=String(n.lot).toUpperCase();if(!lotNriMap.has(k))lotNriMap.set(k,[]);lotNriMap.get(k).push(n);});}}
     renderAdminAvarias();
     if($('badgeAvarias'))$('badgeAvarias').textContent=adminAvarias.filter(r=>(r.damage_items||[]).some(i=>['PENDENTE','APROVADO','LANCADO'].includes(i.status))).length;
+    if(window.DisbReceiptValidation?.isCodeSearch($('avAdminBusca')?.value))searchAdminDamageReceipt();
   }catch(e){if(!silent)toast(humanDeliveryDamageError(e),'error');}
 }
 function renderAdminAvarias(){
   const arr=filteredAdminAvarias();
   $('tbodyAvariasAdmin').innerHTML=arr.length?arr.map(r=>{const items=r.damage_items||[],matches=items.filter(i=>lotNriMap.has(deliveryDamageLotKey(i))).length,photos=items.reduce((n,i)=>n+itemEvidencePhotos(i).length,0);return `<tr><td>${fmtDate(r.occurrence_date)}<strong>PDV ${esc(r.customer_code)} • ${esc(r.customer_name)}</strong><small>${esc(r.city)} • Mapa ${esc(r.map_number)}</small></td><td>${esc(r.delivery_name)}</td><td><strong>${items.length} produto(s)</strong><small>${photos} foto(s)</small></td><td>${matches===items.length&&items.length?'<span class="status approved">Todos compatíveis</span>':matches?'<span class="status partial">Parcial</span>':'<span class="status rejected">Não encontrados</span>'}</td><td>${statusBadge(r.status)}</td><td><button class="mini-btn" data-id="${r.id}">Visualizar</button></td></tr>`;}).join(''):'<tr><td colspan="6">Nenhuma avaria.</td></tr>';
+}
+let damageReceiptSearch=null,damageReceiptSearchSequence=0,damageReceiptSearchTimer=null;
+function damageReceiptLookupError(error){return /damage_receipts|find_damage_receipt|PGRST202|42P01/.test(String(error?.message||error?.code||error))?'A consulta de comprovantes ainda precisa da atualização 84 no Supabase.':humanError(error);}
+async function findDamageReceipt(code,unit=activeUnit){
+  if(!navigator.onLine)throw new Error('Conecte-se à internet para validar no registro oficial.');
+  const normalized=window.DisbReceiptValidation.normalizeCode(code);if(!normalized)throw new Error('Informe o código completo do comprovante, iniciado por DGB.');
+  const {data,error}=await sb.rpc('find_damage_receipt',{p_code:normalized,p_unit:unit});if(error)throw error;return data?.[0]||null;
+}
+function searchAdminDamageReceipt(){
+  clearTimeout(damageReceiptSearchTimer);const sequence=++damageReceiptSearchSequence,raw=$('avAdminBusca').value,unit=activeUnit,code=window.DisbReceiptValidation.normalizeCode(raw),help=$('avReceiptSearchHint');
+  damageReceiptSearch=null;
+  if(!window.DisbReceiptValidation.isCodeSearch(raw)){if(help)help.textContent='';renderAdminAvarias();return;}
+  if(help)help.textContent=code?'Consultando o código no registro oficial…':'Cole o código completo do comprovante, iniciado por DGB.';
+  renderAdminAvarias();if(!code)return;
+  damageReceiptSearchTimer=setTimeout(async()=>{
+    try{
+      const record=await findDamageReceipt(code,unit);if(sequence!==damageReceiptSearchSequence||unit!==activeUnit)return;
+      if(!record){if(help)help.textContent='Código não localizado nesta unidade ou sem acesso. PDFs antigos sem código não são certificados por esta consulta.';return;}
+      if(!adminAvarias.some(r=>r.id===record.request_id)){
+        const {data,error}=await sb.from('damage_requests').select('*,damage_items(*,damage_item_photos(*))').eq('unit',unit).eq('id',record.request_id).maybeSingle();if(error)throw error;
+        if(sequence!==damageReceiptSearchSequence||unit!==activeUnit)return;
+        if(data)adminAvarias.push(data);
+      }
+      if(sequence!==damageReceiptSearchSequence||unit!==activeUnit)return;
+      damageReceiptSearch={...record,unit,code};renderAdminAvarias();
+      if(help)help.textContent=adminAvarias.some(r=>r.id===record.request_id)?`Comprovante ${code} localizado. Abra a avaria ou use “Validar comprovante” para comparar o PDF.`:'O comprovante foi registrado, mas a avaria de origem não está mais disponível. Use “Validar comprovante” para consultar a emissão preservada.';
+    }catch(e){if(sequence===damageReceiptSearchSequence&&unit===activeUnit&&help)help.textContent=damageReceiptLookupError(e);}
+  },300);
+}
+async function showDamageReceiptHistory(requestId){
+  try{
+    const {data,error}=await sb.from('damage_receipts').select('receipt_code,request_id,snapshot,pdf_sha256,generated_at').eq('request_id',requestId).not('pdf_sha256','is',null).order('generated_at',{ascending:false});if(error)throw error;
+    const rows=data||[];
+    openModal('Comprovantes emitidos','Códigos e dados preservados no momento de cada emissão',rows.length?`<div class="notice">Um código identifica uma emissão. Para confirmar que o arquivo recebido é o original, abra a validação e selecione o PDF.</div>${rows.map((r,i)=>`<div class="detail-card"><small>${fmtDateTime(r.generated_at)}</small><strong style="overflow-wrap:anywhere">${esc(r.receipt_code)}</strong><button type="button" class="btn secondary" data-receipt-verify="${i}">Validar PDF</button></div>`).join('')}`:'<div class="notice">Nenhum PDF com código foi emitido para esta avaria. Envios antigos de texto não recebem um código retroativo.</div>',[{label:'Voltar à avaria',class:'secondary',onClick:()=>showAvariaDetail(requestId)}]);
+    $('modalBody')?.querySelectorAll('[data-receipt-verify]').forEach(b=>b.addEventListener('click',()=>openDamageReceiptVerification(rows[Number(b.dataset.receiptVerify)].receipt_code)));
+  }catch(e){toast(damageReceiptLookupError(e),'error');}
+}
+function openDamageReceiptVerification(initialCode=''){
+  openModal('Validar comprovante de avaria',`Consulta oficial · ${activeUnit}`,`<div class="notice">Confira o cliente, a data e os produtos com a emissão original. O código sozinho pode ser copiado; selecione também o PDF para conferir se o arquivo é idêntico ao gerado pelo sistema.</div><div class="field"><label for="receiptVerifyCode">Código do comprovante</label><input id="receiptVerifyCode" maxlength="80" autocomplete="off" value="${esc(initialCode||window.DisbReceiptValidation.normalizeCode($('avAdminBusca')?.value))}" placeholder="DGB-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX"></div><div class="field"><label for="receiptVerifyFile">PDF recebido (opcional)</label><input id="receiptVerifyFile" type="file" accept="application/pdf,.pdf"><small>A comparação do arquivo é feita neste aparelho, sem enviar o PDF novamente.</small></div><div id="receiptVerifyResult" role="status"></div>`,[{label:'Fechar',class:'secondary',onClick:closeModal},{label:'Consultar e verificar',class:'primary',onClick:async()=>{
+    const result=$('receiptVerifyResult'),code=$('receiptVerifyCode')?.value,file=$('receiptVerifyFile')?.files?.[0],unit=activeUnit;if(!result)return;
+    result.textContent='Consultando…';
+    try{
+      const record=await findDamageReceipt(code,unit);if($('receiptVerifyResult')!==result||unit!==activeUnit)return;
+      if(!record){result.innerHTML='<div class="notice">Código não localizado nesta unidade ou sem acesso. Não confirme a autenticidade desse comprovante.</div>';return;}
+      const s=record.snapshot||{},check=file?await window.DisbReceiptValidation.verifyFile(file,record.pdf_sha256):null;
+      if($('receiptVerifyResult')!==result||unit!==activeUnit)return;
+      result.innerHTML=`<div class="notice"><strong>${check?check.matches?'Arquivo original confirmado: o PDF é idêntico ao registrado.':'Arquivo diferente do original: não confirme sua autenticidade.':'Código registrado. Selecione o PDF para confirmar o arquivo.'}</strong></div><div class="detail-grid"><div class="detail-card"><small>Comprovante</small><strong style="overflow-wrap:anywhere">${esc(record.receipt_code)}</strong></div><div class="detail-card"><small>Gerado em</small><strong>${fmtDateTime(record.generated_at)}</strong></div><div class="detail-card"><small>Cliente / PDV</small><strong>${esc(s.customer_code)} · ${esc(s.customer_name)}</strong></div><div class="detail-card"><small>Mapa / data da avaria</small><strong>${esc(s.map_number)} · ${fmtDate(s.occurrence_date)}</strong></div></div><div class="table-wrap"><table><thead><tr><th>Produto registrado</th><th>Quantidade</th></tr></thead><tbody>${(s.items||[]).map(i=>`<tr><td>${esc(i.product_text)}</td><td>${fmtNum(i.quantity)} ${esc(i.quantity_unit)}</td></tr>`).join('')}</tbody></table></div><p>${esc(s.note)}</p><small>Esta consulta confirma a emissão; a aprovação e a entrega da reposição devem ser conferidas no fluxo da avaria.</small>`;
+    }catch(e){if($('receiptVerifyResult')===result)result.textContent=damageReceiptLookupError(e);}
+  }}]);
 }
 let damageGeoMapInstance=null;
 function cleanupDamageGeoMap(){if(damageGeoMapInstance){try{damageGeoMapInstance.remove();}catch(_e){}damageGeoMapInstance=null;}}
@@ -5974,6 +6025,7 @@ async function showAvariaDetail(id){
   const pending=items.filter(i=>i.status==='PENDENTE').length,approved=items.filter(i=>i.status==='APROVADO').length,launched=items.filter(i=>i.status==='LANCADO').length,canDeliverCount=items.filter(i=>i.status==='LANCADO').length,selectableCount=(canReview?pending:0)+(canPost?approved+canDeliverCount:0);
   const body=`<div class="damage-request-hero"><div><small>OCORRÊNCIA</small><strong>PDV ${esc(r.customer_code)} · ${esc(r.customer_name)}</strong><span>${esc(r.city)} • Mapa ${esc(r.map_number)} • ${esc(r.delivery_name)}</span></div><div class="damage-counts"><b>${items.length}</b><span>produtos</span><b>${pending+approved+launched}</b><span>em fluxo</span></div></div><div class="detail-grid damage-request-grid"><div class="detail-card"><small>PDV</small><strong>${esc(r.customer_name)}</strong></div><div class="detail-card"><small>Código</small><strong>${esc(r.customer_code)}</strong></div><div class="detail-card"><small>Cidade</small><strong>${esc(r.city)}</strong></div><div class="detail-card"><small>Mapa</small><strong>${esc(r.map_number)}</strong></div><div class="detail-card"><small>Motorista</small><strong>${esc(r.delivery_name)}</strong></div></div>${selectableCount?`<div class="damage-selection-bar delivery-selection-bar"><label class="check delivery-select-all"><input id="deliveryDamageSelectAll" type="checkbox"> Selecionar tudo</label><span id="avariaSelectionSummary">0 selecionados</span><small>${pending&&canReview?'Pendentes: aprovação ou reprovação. ':''}${approved&&canPost?'Aprovados: prontos para lançamento. ':''}${canDeliverCount&&canPost?'Lançados: prontos para marcar como entregues.':''}</small></div>`:''}${productsHtml}<details class="signature-details"><summary>Ver assinatura do cliente</summary><img src="${esc(signatureUrl)}" alt="Assinatura"></details>`;
   const actions=[];
+  actions.push({label:'Comprovantes emitidos',class:'secondary',onClick:()=>showDamageReceiptHistory(r.id)});
   if(canReview&&pending)actions.push({label:'Reprovar selecionados',class:'danger damage-action-review',onClick:()=>reviewAvaria('REPROVADO',false)},{label:'Aprovar selecionados',class:'success damage-action-review',onClick:()=>reviewAvaria('APROVADO',false)});
   if(canPost&&approved)actions.push({label:'✓ Marcar como lançada',class:'success damage-action-launch',onClick:markDeliveryDamageLaunchedBulk});
   if(canPost&&canDeliverCount)actions.push({label:'✓ Marcar como entregue',class:'primary damage-action-deliver',onClick:markDeliveryDamageDeliveredBulk});
@@ -7634,7 +7686,8 @@ function renderDeliveryDamageMy(){
 }
 loadAdminAvarias = async function(silent=false){
   if(!hasAnyPerm('DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST'))return;
-  try{const {data,error}=await sb.from('damage_requests').select('*,damage_items(*,damage_item_photos(*))').eq('unit',activeUnit).order('created_at',{ascending:false}).limit(1000);if(error)throw error;adminAvarias=data||[];const codes=[...new Set(adminAvarias.flatMap(r=>r.damage_items||[]).map(deliveryDamageItemProductCode).filter(Boolean))];lotNriMap=new Map();for(const chunk of chunks(codes,100)){const q=await sb.from('nris').select('nri,lot,product_code,product_name,validity_date,unit').eq('unit',activeUnit).in('product_code',chunk);if(q.error)throw q.error;(q.data||[]).forEach(n=>{splitMultiLots(n.lot).forEach(lot=>{const k=`${normalizeCode(n.product_code)}|${sanitizeLot(lot)}`;if(!lotNriMap.has(k))lotNriMap.set(k,[]);lotNriMap.get(k).push(n);});});}renderAdminAvarias();if($('badgeAvarias'))$('badgeAvarias').textContent=adminAvarias.filter(r=>(r.damage_items||[]).some(i=>['PENDENTE','APROVADO','LANCADO'].includes(i.status))).length;}catch(e){if(!silent)toast(humanDeliveryDamageError(e),'error');}
+  try{const {data,error}=await sb.from('damage_requests').select('*,damage_items(*,damage_item_photos(*))').eq('unit',activeUnit).order('created_at',{ascending:false}).limit(1000);if(error)throw error;adminAvarias=data||[];const codes=[...new Set(adminAvarias.flatMap(r=>r.damage_items||[]).map(deliveryDamageItemProductCode).filter(Boolean))];lotNriMap=new Map();for(const chunk of chunks(codes,100)){const q=await sb.from('nris').select('nri,lot,product_code,product_name,validity_date,unit').eq('unit',activeUnit).in('product_code',chunk);if(q.error)throw q.error;(q.data||[]).forEach(n=>{splitMultiLots(n.lot).forEach(lot=>{const k=`${normalizeCode(n.product_code)}|${sanitizeLot(lot)}`;if(!lotNriMap.has(k))lotNriMap.set(k,[]);lotNriMap.get(k).push(n);});});}renderAdminAvarias();if($('badgeAvarias'))$('badgeAvarias').textContent=adminAvarias.filter(r=>(r.damage_items||[]).some(i=>['PENDENTE','APROVADO','LANCADO'].includes(i.status))).length;
+    if(window.DisbReceiptValidation?.isCodeSearch($('avAdminBusca')?.value))searchAdminDamageReceipt();}catch(e){if(!silent)toast(humanDeliveryDamageError(e),'error');}
 };
 
 addNriDraftItem = function(){

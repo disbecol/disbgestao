@@ -1,0 +1,14 @@
+{
+  "name": "comprovante_avaria_pdf",
+  "language": "pt_BR",
+  "category": "UTILITY",
+  "parameter_format": "POSITIONAL",
+  "components": [
+    { "type": "HEADER", "format": "DOCUMENT" },
+    {
+      "type": "BODY",
+      "text": "Olá, {{1}}! 👋\n\nSomos da equipe de logística da *Disbecol*. 🚚\n\n📄 Segue em anexo o comprovante de avaria referente ao dia *{{2}}*.\n\n🤖 Esta é uma mensagem automática. *Por favor, não responda.*\n\nDúvidas? Central de Atendimento: (84) 9 9609-9264.",
+      "example": { "body_text": [["bom dia", "05/11/2026"]] }
+    }
+  ]
+}

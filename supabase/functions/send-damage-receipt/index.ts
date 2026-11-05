@@ -1,4 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import * as PDFLib from 'https://esm.sh/pdf-lib@1.17.1';
+import { createDamageReceiptPdf, loadReceiptCatalogImages, receiptFileName, receiptGreeting, receiptTemplateComponents, receiptSha256, receiptSnapshot } from './receipt-pdf.mjs';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -16,12 +18,6 @@ const dateBR = (value: unknown) => {
   const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
   return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
 };
-const quantityText = (value: unknown) => {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return '';
-  return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 }).format(number);
-};
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json({ error: 'METHOD_NOT_ALLOWED' }, 405);
@@ -31,7 +27,7 @@ Deno.serve(async (req) => {
   const serviceKey = env('SUPABASE_SERVICE_ROLE_KEY');
   const token = env('WHATSAPP_ACCESS_TOKEN');
   const phoneId = env('WHATSAPP_PHONE_NUMBER_ID');
-  const templateName = env('WHATSAPP_TEMPLATE_NAME') || 'comprovante_avaria_entrega';
+  const templateName = env('WHATSAPP_TEMPLATE_NAME') || 'comprovante_avaria_pdf';
   const language = env('WHATSAPP_TEMPLATE_LANGUAGE') || 'pt_BR';
   const graphVersion = env('WHATSAPP_GRAPH_VERSION') || 'v26.0';
   if (!url || !anonKey || !serviceKey) return json({ error: 'SERVER_CONFIG_MISSING' }, 500);
@@ -57,7 +53,7 @@ Deno.serve(async (req) => {
 
   // RLS e a autoria da avaria limitam o motorista aos próprios comprovantes.
   const { data: damage, error: damageError } = await userDb.from('damage_requests')
-    .select('id,created_by,customer_code,customer_name,map_number,occurrence_date')
+    .select('id,created_by,created_at,unit,signature_path,customer_code,customer_name,map_number,occurrence_date')
     .eq('id', requestId).eq('created_by', userData.user.id).maybeSingle();
   if (damageError) { console.error('receipt request lookup', damageError); return json({ error: 'RECEIPT_LOOKUP_FAILED' }, 500); }
   if (!damage) return json({ error: 'RECEIPT_NOT_FOUND' }, 404);
@@ -89,16 +85,14 @@ Deno.serve(async (req) => {
   const activeItems = items.filter((item) => item.status !== 'CANCELADO');
   if (!activeItems.length) return json({ error: 'RECEIPT_CANCELLED' }, 409);
 
-  const itemLines = activeItems.map((item) => {
-    const qty = quantityText(item.quantity);
-    const unit = item.quantity_unit === 'CAIXA' ? (Number(item.quantity) === 1 ? 'caixa' : 'caixas')
-      : (Number(item.quantity) === 1 ? 'unidade' : 'unidades');
-    return `• ${cleanText(item.product_text)} — ${qty} ${unit}`;
-  }).join('\n');
-  if (!itemLines || itemLines.length > 700) return json({ error: 'RECEIPT_TOO_LONG' }, 422);
-  const variables = [cleanText(damage.customer_name), cleanText(damage.customer_code),
-    cleanText(damage.map_number), dateBR(damage.occurrence_date), itemLines];
-  if (variables.some((value) => !value)) return json({ error: 'RECEIPT_NOT_FOUND' }, 422);
+  if (activeItems.length > 200 || activeItems.some(item => String(item.product_text || '').length > 4000)) {
+    return json({ error: 'RECEIPT_TOO_LONG' }, 422);
+  }
+  if (![damage.customer_name, damage.customer_code, damage.map_number, dateBR(damage.occurrence_date)].every(cleanText)
+      || activeItems.some(item => !cleanText(item.product_text) || !Number.isFinite(Number(item.quantity)) || Number(item.quantity) < 0)) {
+    return json({ error: 'RECEIPT_NOT_FOUND' }, 422);
+  }
+  try { receiptGreeting(damage.created_at); } catch { return json({ error: 'RECEIPT_NOT_FOUND' }, 422); }
 
   const { data: attempt, error: logError } = await adminDb.from('damage_receipt_sends')
     .insert({ request_id: requestId, contact_id: contactId, recipient_phone: contact.phone_normalized,
@@ -118,13 +112,61 @@ Deno.serve(async (req) => {
   let status = 'UNKNOWN';
   let providerMessageId: string | null = null;
   let providerErrorCode: string | null = null;
+  let messageRequestStarted = false;
+  let preparationStage = 'PDF_SIGNATURE_FAILED';
+  let receiptCode: string | null = null;
   try {
+    // A assinatura é lida da avaria autenticada, nunca de URL ou arquivo do cliente.
+    const { data: signatureBlob, error: signatureError } = await userDb.storage.from('avarias').download(damage.signature_path || '');
+    if (signatureError || !signatureBlob || signatureBlob.size > 3000000
+        || !/^image\/(jpeg|png)(?:;|$)/i.test(signatureBlob.type)) throw new Error('PDF_SIGNATURE_FAILED');
+    const signature = new Uint8Array(await signatureBlob.arrayBuffer());
+    preparationStage = 'PDF_REGISTRY_FAILED';
+    const { data: registry, error: registryError } = await adminDb.from('damage_receipts')
+      .insert({ request_id: requestId, send_id: attempt.id, requested_by: userData.user.id, unit: damage.unit,
+        snapshot: receiptSnapshot(damage, activeItems, await receiptSha256(signature)) })
+      .select('id,receipt_code').single();
+    if (registryError || !registry) throw new Error('PDF_REGISTRY_FAILED');
+    receiptCode = registry.receipt_code;
+    preparationStage = 'PDF_CREATE_FAILED';
+    const verification = { code: receiptCode, signature, generatedAt: new Date().toISOString() };
+    const catalogImages = await loadReceiptCatalogImages(activeItems, fetch);
+    let pdfBytes = await createDamageReceiptPdf(damage, activeItems, PDFLib, catalogImages, verification);
+    // As imagens são opcionais. Nunca descartar produtos para caber no arquivo.
+    if (pdfBytes.length > 10000000) pdfBytes = await createDamageReceiptPdf(damage, activeItems, PDFLib, new Map(), verification);
+    if (pdfBytes.length > 10000000) throw new Error('PDF_TOO_LARGE');
+    // Congela a impressão digital do arquivo ANTES de transmitir mídia/mensagem.
+    preparationStage = 'PDF_REGISTRY_FAILED';
+    const { data: sealed, error: sealError } = await adminDb.from('damage_receipts')
+      .update({ pdf_sha256: await receiptSha256(pdfBytes), generated_at: verification.generatedAt })
+      .eq('id', registry.id).is('pdf_sha256', null).select('id').single();
+    if (sealError || !sealed) throw new Error('PDF_REGISTRY_FAILED');
+    const filename = receiptFileName(damage);
+    const form = new FormData();
+    form.set('messaging_product', 'whatsapp');
+    form.set('type', 'application/pdf');
+    form.set('file', new Blob([pdfBytes], { type: 'application/pdf' }), filename);
+    preparationStage = 'MEDIA_UPLOAD_FAILED';
+    const mediaResponse = await fetch(`https://graph.facebook.com/${graphVersion}/${phoneId}/media`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form,
+      signal: AbortSignal.timeout(20000),
+    });
+    const media = await mediaResponse.json().catch(() => ({}));
+    if (!mediaResponse.ok || !/^\d+$/.test(String(media?.id || ''))) {
+      preparationStage = `MEDIA_UPLOAD_${String(media?.error?.code || mediaResponse.status).slice(0, 30)}`;
+      throw new Error('MEDIA_UPLOAD_FAILED');
+    }
+    const components = receiptTemplateComponents(damage, String(media.id), filename);
+    // Um único modelo com cabeçalho PDF e texto de apresentação. Não envia
+    // mensagem de texto avulsa, que dependeria da janela de atendimento.
+    messageRequestStarted = true;
     const providerResponse = await fetch(`https://graph.facebook.com/${graphVersion}/${phoneId}/messages`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual',
         to: contact.phone_normalized, type: 'template', template: { name: templateName,
-          language: { code: language }, components: [{ type: 'body', parameters: variables.map((text) => ({ type: 'text', text })) }] } }),
+          language: { code: language }, components } }),
+      signal: AbortSignal.timeout(20000),
     });
     const provider = await providerResponse.json().catch(() => ({}));
     if (!providerResponse.ok) {
@@ -136,13 +178,22 @@ Deno.serve(async (req) => {
       if (providerMessageId) status = 'ACCEPTED';
     }
   } catch (error) {
-    console.error('WhatsApp receipt response unknown', error);
+    if (messageRequestStarted) {
+      console.error('WhatsApp receipt response unknown');
+    } else {
+      status = 'REJECTED';
+      const failure = typeof error === 'object' && error !== null && 'message' in error ? String(error.message) : '';
+      providerErrorCode = ['RECEIPT_LAYOUT_TOO_LARGE','RECEIPT_SIGNATURE_MISSING','RECEIPT_SIGNATURE_INVALID'].includes(failure)
+        ? failure : preparationStage;
+      console.error('WhatsApp receipt preparation failed', preparationStage);
+    }
   }
 
   const { error: updateError } = await adminDb.from('damage_receipt_sends')
     .update({ status, provider_message_id: providerMessageId, provider_error_code: providerErrorCode,
       updated_at: new Date().toISOString() }).eq('id', attempt.id);
   if (updateError) { console.error('receipt send status update', updateError); return json({ error: 'SEND_STATUS_UNKNOWN' }, 503); }
-  if (status === 'ACCEPTED') return json({ accepted: true, already_sent: false, message_id: providerMessageId });
-  return json({ error: status === 'REJECTED' ? 'META_SEND_FAILED' : 'SEND_STATUS_UNKNOWN' }, status === 'REJECTED' ? 502 : 503);
+  if (status === 'ACCEPTED') return json({ accepted: true, already_sent: false, message_id: providerMessageId, receipt_code: receiptCode });
+  const preparationError = ['PDF_SIGNATURE_FAILED','PDF_REGISTRY_FAILED','RECEIPT_LAYOUT_TOO_LARGE','RECEIPT_SIGNATURE_MISSING','RECEIPT_SIGNATURE_INVALID'].includes(String(providerErrorCode));
+  return json({ error: status === 'REJECTED' ? (preparationError ? providerErrorCode : 'META_SEND_FAILED') : 'SEND_STATUS_UNKNOWN' }, status === 'REJECTED' ? 502 : 503);
 });
