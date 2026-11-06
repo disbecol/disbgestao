@@ -233,7 +233,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.68-forms',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.69-forms',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -12041,9 +12041,19 @@ clearNriRequest=function(...args){nriInvoiceLoadId++;nriInvoiceContext=null;retu
 const invoiceOriginalRenderNri=renderNriDraftItems;
 function invoiceRowsForProduct(item){return nriDraftItems.filter(row=>String(row.product_code)===String(item.product_code));}
 function invoiceAllocationGroups(rows){const groups=new Map();for(const row of rows){const key=row.invoice_allocation_id||row.id;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(row);}return [...groups.entries()];}
-function invoiceLotFields(lot='',validity='',pallets=1,max=1,noValidity=false){return `<div class="grid grid-3"><div class="field"><label for="invoiceLot">Lote *</label><input id="invoiceLot" value="${esc(lot)}" maxlength="80" autocapitalize="characters" autocomplete="off" placeholder="Ex.: L2408"></div><div class="field"><label for="invoiceValidity">Validade *</label><input id="invoiceValidity" type="date" value="${esc(validity)}"><label class="check compact-check"><input id="invoiceNoValidity" type="checkbox" ${noValidity?'checked':''}> Sem validade</label></div><div class="field"><label for="invoicePallets">Qtd. de paletes *</label><input id="invoicePallets" type="number" min="1" max="${max}" step="1" value="${pallets}"></div></div>`;}
-function invoiceLotValues(){const lot=sanitizeLot($('invoiceLot')?.value),withoutValidity=!!$('invoiceNoValidity')?.checked,validity=withoutValidity?null:String($('invoiceValidity')?.value||'').trim(),pallets=Number($('invoicePallets')?.value);if(!lot)throw new Error('Informe o lote usando letras e números.');if(!withoutValidity&&(!/^\d{4}-\d{2}-\d{2}$/.test(validity)||parseShortDate(formatShortDate(validity))!==validity))throw new Error('Informe uma validade válida.');return {lot,validity,pallets};}
+function invoiceLotFields(lot='',validity='',pallets='',max=1,noValidity=false,key=0){return `<section class="invoice-lot-entry" data-invoice-lot-row><div class="invoice-lot-entry-head"><strong data-invoice-lot-title>Lote 1</strong>${key?'<button type="button" class="mini-btn danger" data-invoice-remove-lot>Remover</button>':''}</div><div class="grid grid-3"><div class="field"><label for="invoiceLot${key}">Lote *</label><input id="invoiceLot${key}" data-invoice-lot value="${esc(lot)}" maxlength="80" autocapitalize="characters" autocomplete="off" placeholder="Ex.: L2408"></div><div class="field"><label for="invoiceValidity${key}">Validade *</label><input id="invoiceValidity${key}" data-invoice-validity type="text" inputmode="numeric" maxlength="10" placeholder="DD/MM/AAAA" autocomplete="off" value="${esc(formatFefoDateInput(validity))}" ${noValidity?'disabled':''}><label class="check compact-check"><input data-invoice-no-validity type="checkbox" ${noValidity?'checked':''}> Sem validade</label></div><div class="field"><label for="invoicePallets${key}">Qtd. de paletes *</label><input id="invoicePallets${key}" data-invoice-pallets type="number" inputmode="numeric" min="1" max="${max}" step="1" value="${esc(pallets)}"></div></div></section>`;}
+function invoiceLotValues(row){const lot=sanitizeLot(row.querySelector('[data-invoice-lot]').value),withoutValidity=row.querySelector('[data-invoice-no-validity]').checked,validity=withoutValidity?null:parseFefoDate(row.querySelector('[data-invoice-validity]').value),pallets=Number(row.querySelector('[data-invoice-pallets]').value);if(!lot)throw new Error('Informe o lote usando letras e números.');if(!withoutValidity&&!validity)throw new Error('Informe uma validade válida no formato DD/MM/AAAA.');return {lot,validity,pallets};}
 function invoiceDraftRow(item,groupId,lot,validity,part){return {id:uuid(),invoice_allocation_id:groupId,product_code:item.product_code,product_name:item.product_name,validity_date:validity,lot,lots:[lot],quantity:part.quantity,pallets:part.pallets,block_date:validity?addDaysIso(validity,-30):null,pallet_damaged:false,damaged_pallets:0,damage_reason:'',invoice_number:item.invoice_numbers?.length===1?item.invoice_numbers[0]:'',damagePhotos:[],invoice_pending:false};}
+function invoiceBatchDraftRows(item,otherRows,lots,group=[],groupId=null){
+  const replacement=[],count=group.reduce((sum,row)=>sum+Number(row.pallets),0);
+  for(const [lotIndex,{lot,validity,pallets}] of lots.entries()){
+    const parts=window.DISB_INVOICE_NOTE.planPalletAllocation(item,[...otherRows,...replacement],pallets);
+    if(!lotIndex&&group.some(row=>row.pallet_damaged)&&(pallets!==count||parts.length!==group.length||parts.some((part,index)=>part.quantity!==group[index].quantity||part.pallets!==group[index].pallets)))throw new Error('Remova a avaria deste lote antes de alterar os paletes.');
+    const id=!lotIndex&&groupId?groupId:uuid();
+    replacement.push(...parts.map((part,index)=>{const previous=!lotIndex?group[index]:null;return {...invoiceDraftRow(item,id,lot,validity,part),...(previous&&previous.quantity===part.quantity&&previous.pallets===part.pallets?{...previous,lot,lots:[lot],validity_date:validity,block_date:validity?addDaysIso(validity,-30):null}:{}),invoice_allocation_id:id};}));
+  }
+  return replacement;
+}
 function openInvoiceAllocation(item,groupId=null){
   if(!nriInvoiceContext)return;
   const group=groupId?nriDraftItems.filter(row=>row.invoice_allocation_id===groupId||row.id===groupId):[];
@@ -12051,18 +12061,34 @@ function openInvoiceAllocation(item,groupId=null){
   const state=window.DISB_INVOICE_NOTE.palletAllocationState(item,otherRows),count=group.reduce((sum,row)=>sum+Number(row.pallets),0);
   if(!state.remainingPallets)return toast('Todos os paletes deste produto já foram atribuídos.','error');
   const partialHint=state.partialUnits?` O palete incompleto (${fmtNum(state.partialUnits)} ${esc(item.commercial_unit)}) será atribuído depois dos paletes completos.`:'';
-  const body=`<p class="muted-text">${esc(item.product_code)} • ${esc(item.product_name)}<br>${fmtNum(state.remainingPallets)} de ${fmtNum(state.totalPallets)} palete(s) disponíveis.${partialHint}</p>${invoiceLotFields(group[0]?.lot||'',group[0]?.validity_date||'',count||state.remainingPallets,state.remainingPallets,!!group.length&&!group[0]?.validity_date)}`;
-  openModal(group.length?'Editar lote da nota':'Atribuir paletes ao lote',`${nriInvoiceContext.notes.length} ${nriInvoiceContext.notes.length===1?'nota anexada':'notas anexadas'}`,body,[{label:group.length?'Salvar lote':'Adicionar lote',class:'primary',onClick:()=>{
-    try{const {lot,validity,pallets}=invoiceLotValues(),parts=window.DISB_INVOICE_NOTE.planPalletAllocation(item,otherRows,pallets);
-      if(group.some(row=>row.pallet_damaged)&&(pallets!==count||parts.length!==group.length||parts.some((part,index)=>part.quantity!==group[index].quantity||part.pallets!==group[index].pallets)))throw new Error('Remova a avaria deste lote antes de alterar os paletes.');
-      const id=groupId||uuid(),replacement=parts.map((part,index)=>{const previous=group[index];return {...invoiceDraftRow(item,id,lot,validity,part),...(previous&&previous.quantity===part.quantity&&previous.pallets===part.pallets?{...previous,lot,lots:[lot],validity_date:validity,block_date:validity?addDaysIso(validity,-30):null}:{}),invoice_allocation_id:id};});
+  const body=`<p class="muted-text">${esc(item.product_code)} • ${esc(item.product_name)}<br>${fmtNum(state.remainingPallets)} de ${fmtNum(state.totalPallets)} palete(s) disponíveis.${partialHint}</p><form id="invoiceLotsForm" novalidate><div id="invoiceLotsRows">${invoiceLotFields(group[0]?.lot||'',group[0]?.validity_date||'',group.length?count:'',state.remainingPallets,!!group.length&&!group[0]?.validity_date)}</div><button type="button" class="btn secondary invoice-add-lot" id="invoiceAddLot">+ Adicionar mais um lote</button><small class="field-help">A validade do lote anterior será copiada. Você pode alterá-la em cada lote.</small><div id="invoiceLotsSummary" class="invoice-lots-summary" role="status" aria-live="polite"></div></form>`;
+  openModal(group.length?'Editar lote da nota':'Atribuir lotes e paletes',`${nriInvoiceContext.notes.length} ${nriInvoiceContext.notes.length===1?'nota anexada':'notas anexadas'}`,body,[{label:'Salvar lotes',class:'primary',onClick:()=>$('invoiceLotsForm').requestSubmit()},{label:'Cancelar',class:'secondary',onClick:closeModal}]);
+  const form=$('invoiceLotsForm'),list=$('invoiceLotsRows'),add=$('invoiceAddLot');let nextKey=1;
+  const rows=()=>[...list.querySelectorAll('[data-invoice-lot-row]')];
+  const refresh=()=>{
+    const entries=rows(),total=entries.reduce((sum,row)=>sum+(Number(row.querySelector('[data-invoice-pallets]').value)||0),0),remaining=state.remainingPallets-total,summary=$('invoiceLotsSummary');
+    entries.forEach((row,index)=>{row.querySelector('[data-invoice-lot-title]').textContent=`Lote ${index+1}`;});
+    summary.textContent=`${fmtNum(total)} de ${fmtNum(state.remainingPallets)} palete(s) nesta janela • ${remaining<0?`Excede o disponível em ${fmtNum(-remaining)}.`:remaining?`Faltam ${fmtNum(remaining)} para completar o produto.`:'Todos os paletes distribuídos.'}`;
+    summary.classList.toggle('over-limit',remaining<0);add.disabled=entries.length>=state.remainingPallets;
+  };
+  add.addEventListener('click',()=>{
+    const entries=rows();if(entries.length>=state.remainingPallets)return;
+    const previous=entries[entries.length-1],date=previous.querySelector('[data-invoice-validity]').value,withoutValidity=previous.querySelector('[data-invoice-no-validity]').checked;
+    list.insertAdjacentHTML('beforeend',invoiceLotFields('','','',state.remainingPallets,withoutValidity,nextKey++));
+    const row=list.lastElementChild;row.querySelector('[data-invoice-validity]').value=date;
+    refresh();row.querySelector('[data-invoice-lot]').focus();
+  });
+  form.addEventListener('click',event=>{const button=event.target.closest('[data-invoice-remove-lot]');if(button){button.closest('[data-invoice-lot-row]').remove();refresh();}});
+  form.addEventListener('input',event=>{if(event.target.matches('[data-invoice-validity]'))event.target.value=maskFefoDate(event.target.value);refresh();});
+  form.addEventListener('change',event=>{if(event.target.matches('[data-invoice-no-validity]')){const date=event.target.closest('[data-invoice-lot-row]').querySelector('[data-invoice-validity]');date.disabled=event.target.checked;if(event.target.checked)date.value='';}});
+  form.addEventListener('submit',event=>{
+    event.preventDefault();
+    try{const lots=rows().map((row,index)=>{try{return invoiceLotValues(row);}catch(error){row.querySelector(error.message.includes('validade')?'[data-invoice-validity]':'[data-invoice-lot]').focus();throw new Error(`Lote ${index+1}: ${error.message}`);}}),replacement=invoiceBatchDraftRows(item,otherRows,lots,group,groupId);
       if(group.length){const at=nriDraftItems.indexOf(group[0]);nriDraftItems=nriDraftItems.filter(row=>!group.includes(row));nriDraftItems.splice(at,0,...replacement);}else nriDraftItems.push(...replacement);
       renderNriDraftItems();closeModal();
     }catch(error){toast(humanError(error),'error');}
-  }},{label:'Cancelar',class:'secondary',onClick:closeModal}]);
-  $('invoiceNoValidity')?.addEventListener('change',event=>{$('invoiceValidity').disabled=event.target.checked;if(event.target.checked)$('invoiceValidity').value='';});
-  if($('invoiceNoValidity')?.checked)$('invoiceValidity').disabled=true;
-  $('invoiceLot')?.focus();
+  });
+  refresh();list.querySelector('[data-invoice-lot]').focus();
 }
 renderNriDraftItems=function(...args){
   const block=$('nriProductEntryBlock');
