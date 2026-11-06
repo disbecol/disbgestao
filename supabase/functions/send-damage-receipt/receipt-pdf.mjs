@@ -147,7 +147,7 @@ export async function createDamageReceiptPdf(damage, items, PDFLib, images = new
   const customer=wrap(damage.customer_name,cw-24,11,bold);
   const headerHeight=80+(customer.length-1)*13;
   const note=wrap(RECEIPT_NOTE,cw-24,9), noteHeight=27+note.length*12;
-  const productTop=672-headerHeight-22, productsBottom=68+60+85+noteHeight+27;
+  const productTop=672-headerHeight-22, productsBottom=68+85+noteHeight+27;
   let layout;
   for(const size of [10,9,8]) {
     const withImages=size===10&&items.length<=5;
@@ -187,10 +187,11 @@ export async function createDamageReceiptPdf(damage, items, PDFLib, images = new
   box(y,85,colors.white);text('ASSINATURA DO CLIENTE',left+12,y-9,7,bold,colors.muted);
   const ss=Math.min(270/signature.width,53/signature.height),sw=signature.width*ss,sh=signature.height*ss;
   page.drawImage(signature,{x:left+(cw-sw)/2,y:y-25-sh,width:sw,height:sh});
-  y-=99;box(y,60);text('CÓDIGO ÚNICO DO COMPROVANTE',left+12,y-9,7,bold,colors.muted);
-  text(code,left+12,y-23,10,bold,colors.blue);text('Valide o código, os dados e o PDF original com a Logística da Disbecol.',left+12,y-41,8);
   text(`Central de Atendimento: ${RECEIPT_PHONE}`,left,54,9,regular,colors.blue);
   page.drawLine({start:{x:left,y:36},end:{x:width-left,y:36},thickness:.6,color:colors.line});
-  text('Comprovante emitido pelo Disb Gestão. Não substitui documento fiscal.',left,29,7,regular,colors.muted);text('1 / 1',width-left-22,29,7,regular,colors.muted);
+  const footerSize=7, pageLabel='1 / 1', pageX=width-left-regular.widthOfTextAtSize(pageLabel,footerSize);
+  text('Comprovante emitido pelo Disb Gestão. Não substitui documento fiscal.',left,29,footerSize,regular,colors.muted);
+  text(code,pageX-12-regular.widthOfTextAtSize(code,footerSize),29,footerSize,regular,colors.muted);
+  text(pageLabel,pageX,29,footerSize,regular,colors.muted);
   return pdf.save();
 }

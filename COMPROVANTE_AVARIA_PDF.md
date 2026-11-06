@@ -20,7 +20,7 @@ arquivos locais e coincidiram. O resumo da função confirmou a implantação re
 e zero invocações desde a publicação. Fontes canônicos:
 
 - `supabase/functions/send-damage-receipt/index.ts`: SHA-256 `a3a4e003ff6463ff8de2d99d2d60120dccc50c14a0833c4c90d6f65eb5a98a2f`.
-- `supabase/functions/send-damage-receipt/receipt-pdf.mjs`: SHA-256 `8cee2ef25b3f7e77b0b44976eee2f8564eaec83b39f270d9d885f100712cf72d`.
+- `supabase/functions/send-damage-receipt/receipt-pdf.mjs`: SHA-256 `944d03c843baeae8c8ea208a05ae7bf640227ea2aef60cbd7b622bd25c8597b4` (rodapé discreto, ajuste de 06/11/2026).
 - `supabase/84_damage_receipt_verification.sql`: SHA-256 `91a6f00eb17adf33ed412d7fa52f5e642af2f46797005406756e2100bedb72b7`.
 
 Os Secrets de token e identificador do telefone já existem. `WHATSAPP_TEMPLATE_NAME`
@@ -52,6 +52,12 @@ observação de reposição, assinatura que o cliente fez na avaria, código ún
 central. Usa somente imagens do catálogo. Fotos de evidência, GPS, motivo e
 pareceres internos permanecem excluídos. A assinatura é baixada do bucket privado
 pelo usuário autenticado e só entra no PDF do cliente correspondente.
+
+O código DGB aparece em maiúsculas no rodapé, imediatamente à esquerda de `1 / 1`,
+na mesma fonte Helvetica de 7 pontos e cor discreta do aviso fiscal. Não há quadro,
+título ou instrução de validação em destaque no corpo do documento. A consulta,
+unicidade, registro imutável e comparação por SHA-256 permanecem iguais. A mudança
+altera apenas o PDF gerado; o texto e o contrato do modelo aprovado não mudaram.
 
 O layout adapta fonte entre 10 e 8 pontos e retira imagens opcionais na versão
 compacta. Se todos os produtos não couberem com leitura adequada, retorna
@@ -93,6 +99,13 @@ e as permissões não foram alterados. Evidências locais em
 O editor exibiu duas entradas de `receipt-pdf.mjs` após publicar; ambas apresentaram
 o mesmo SHA-256 canônico. O arquivo principal também foi conferido após recarga.
 O acompanhamento automático fica pausado após a ativação verificada.
+
+O ajuste de rodapé de 06/11/2026 também foi publicado na mesma função, sem
+invocá-la e sem alterar o modelo da Meta. Em nova aba do editor, as duas entradas
+do gerador coincidiram com o SHA-256 atualizado acima. Evidência:
+`tmp/supabase-rodape-discreto-publicado-20261106.jpg`. A amostra foi renderizada
+novamente e confirmou uma folha A4, código em maiúsculas com 7 pontos na mesma
+linha do aviso fiscal e a 12 pontos da paginação. Os 25 testes passaram novamente.
 
 1. Conferir o modelo ativo/aprovado e categoria Utilidade na Meta.
 2. Publicar os DOIS arquivos canônicos da função existente `send-damage-receipt`
