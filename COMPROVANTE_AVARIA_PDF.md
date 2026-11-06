@@ -1,20 +1,23 @@
 # Comprovante de avaria em PDF
 
-## Situação em 05/11/2026
+## Situação em 06/11/2026
 
 A migração 84 foi autorizada pelo usuário, aplicada no Supabase Disb Gestão e
 verificada: sete controles de privilégio/RLS verdadeiros e zero emissões de teste.
 A migração 83 já estava aplicada. Nenhuma mensagem foi enviada pelo agente.
 
 O modelo `comprovante_avaria_pdf`, `pt_BR`, ID `4700204463550408`, conta Disbecol
-`940672352023940`, continua **Em análise**, categoria **Utilidade**. O envio atual
-permanece no modelo antigo de texto. NÃO publicar a função enquanto o modelo
-estiver pendente/rejeitado ou em categoria diferente de Utilidade. O usuário já
-aprovou ativar após aprovação, sem envio de teste. Não repetir essa autorização.
+`940672352023940`, foi confirmado como **Ativo — Qualidade pendente**, categoria
+**Utilidade**. A função `send-damage-receipt` foi publicada em produção após essa
+confirmação, conforme autorização do usuário. Os próximos envios utilizam o PDF
+com assinatura e código único. Nenhum teste real ou mensagem foi enviado pelo
+agente; o fluxo de envio completo ainda depende da primeira utilização pelo usuário.
 
-A versão web 1.7.67 inclui consulta por código e comparação do arquivo. O gerador
-com assinatura, identificador e uma folha está preparado localmente e no rascunho
-da função, sem clicar em Deploy updates. Fontes canônicos:
+A versão web 1.7.67 inclui consulta por código e comparação do arquivo; a versão
+web atual é 1.7.68. Os dois fontes canônicos abaixo foram publicados juntos pelo
+editor do Supabase. Após recarregar o editor, seus hashes foram conferidos com os
+arquivos locais e coincidiram. O resumo da função confirmou a implantação recente
+e zero invocações desde a publicação. Fontes canônicos:
 
 - `supabase/functions/send-damage-receipt/index.ts`: SHA-256 `a3a4e003ff6463ff8de2d99d2d60120dccc50c14a0833c4c90d6f65eb5a98a2f`.
 - `supabase/functions/send-damage-receipt/receipt-pdf.mjs`: SHA-256 `8cee2ef25b3f7e77b0b44976eee2f8564eaec83b39f270d9d885f100712cf72d`.
@@ -82,6 +85,14 @@ avaria antes de atender a cobrança. PDFs antigos/textos não recebem certifica�
 retroativa. Um PDF alterado ou reexportado deixa de coincidir com o hash original.
 
 ## Ativação após aprovação
+
+Procedimento concluído em 06/11/2026. A migração 84 não foi reaplicada, os Secrets
+e as permissões não foram alterados. Evidências locais em
+`tmp/meta-pdf-aprovado-20261106.jpg` e
+`tmp/supabase-comprovante-pdf-ativado-20261106.jpg`.
+O editor exibiu duas entradas de `receipt-pdf.mjs` após publicar; ambas apresentaram
+o mesmo SHA-256 canônico. O arquivo principal também foi conferido após recarga.
+O acompanhamento automático fica pausado após a ativação verificada.
 
 1. Conferir o modelo ativo/aprovado e categoria Utilidade na Meta.
 2. Publicar os DOIS arquivos canônicos da função existente `send-damage-receipt`
