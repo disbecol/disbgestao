@@ -14,13 +14,13 @@ com assinatura e código único. Nenhum teste real ou mensagem foi enviado pelo
 agente; o fluxo de envio completo ainda depende da primeira utilização pelo usuário.
 
 A versão web 1.7.67 inclui consulta por código e comparação do arquivo; a versão
-web atual é 1.7.68. Os dois fontes canônicos abaixo foram publicados juntos pelo
+web atual é 1.7.70. Os dois fontes canônicos abaixo foram publicados juntos pelo
 editor do Supabase. Após recarregar o editor, seus hashes foram conferidos com os
 arquivos locais e coincidiram. O resumo da função confirmou a implantação recente
 e zero invocações desde a publicação. Fontes canônicos:
 
 - `supabase/functions/send-damage-receipt/index.ts`: SHA-256 `a3a4e003ff6463ff8de2d99d2d60120dccc50c14a0833c4c90d6f65eb5a98a2f`.
-- `supabase/functions/send-damage-receipt/receipt-pdf.mjs`: SHA-256 `944d03c843baeae8c8ea208a05ae7bf640227ea2aef60cbd7b622bd25c8597b4` (rodapé discreto, ajuste de 06/11/2026).
+- `supabase/functions/send-damage-receipt/receipt-pdf.mjs`: SHA-256 `542d74deb174b0e2e982984dfce3642af336dca8b691fb37931821a14c91cf3e` (rodapé discreto e orientação de contato sem telefone, ajuste de 06/11/2026).
 - `supabase/84_damage_receipt_verification.sql`: SHA-256 `91a6f00eb17adf33ed412d7fa52f5e642af2f46797005406756e2100bedb72b7`.
 
 Os Secrets de token e identificador do telefone já existem. `WHATSAPP_TEMPLATE_NAME`
@@ -28,6 +28,31 @@ estava ausente, portanto o novo padrão usa `comprovante_avaria_pdf`. Não é pr
 ler ou alterar token. A mudança de PDF é no servidor: APK antigo também receberá
 PDF após ativação. A nova busca/validação exige o frontend 1.7.67; atualizar a web
 ou o APK conforme a plataforma usada.
+
+## Atualização 1.7.70 — descrição curta e central sem telefone
+
+A migração 85 foi aplicada em produção e oito verificações retornaram verdadeiro.
+Os campos de evidência aceitam descrições curtas como RG e CNH, sem mínimo de
+caracteres além do preenchimento obrigatório. Mantêm os limites máximos, nome,
+consentimento, maioridade, país, autoria e controles de acesso anteriores.
+Nenhum contato foi modificado para testar a aplicação.
+
+O gerador do PDF foi publicado e os três arquivos exibidos no editor recarregado
+(index e as duas entradas do helper) coincidiram com os fontes canônicos. O PDF
+continua em uma folha com assinatura e código; o telefone foi retirado. Os PDFs
+já emitidos mantêm seus dados e hashes imutáveis. O texto do envio manual também
+usa a orientação sem telefone e o aviso automático ao final.
+
+O corpo novo do modelo `comprovante_avaria_pdf` foi enviado para análise em
+06/11/2026, mantendo Utilidade, pt_BR, ID e duas variáveis. O último estado
+observado foi **Em análise**. A nova redação depende da aprovação da Meta.
+Não foram enviados testes a clientes, lidos/alterados tokens nem reativado o
+agendamento de acompanhamento.
+
+28 testes passaram, incluindo RG/CNH, campo em branco, consentimentos, autoria,
+negação a anônimos, histórico imutável e folha única. A amostra foi renderizada
+e inspecionada sem telefone. Evidências: `tmp/meta-texto-sem-telefone-em-analise.png`,
+`tmp/supabase-validacao-documento-curto.png`.
 
 ## Documento enviado
 
@@ -39,9 +64,9 @@ Uma única mensagem de modelo reúne o documento e a apresentação com emojis:
 >
 > 📄 Segue em anexo o comprovante de avaria referente ao dia *{{2}}*.
 >
-> 🤖 Esta é uma mensagem automática. *Por favor, não responda.*
+> Em caso de dúvidas, entre em contato com nossa central de atendimento.
 >
-> Dúvidas? Central de Atendimento: (84) 9 9609-9264.
+> 🤖 Essa é uma mensagem automática, *por favor não responder.*
 
 A saudação usa `damage_requests.created_at` em America/Sao_Paulo: bom dia antes
 12h, boa tarde antes 18h, boa noite nos demais horários. A segunda variável usa
@@ -49,7 +74,7 @@ A saudação usa `damage_requests.created_at` em America/Sao_Paulo: bom dia ante
 
 O PDF é exatamente uma folha A4 com cliente, PDV, mapa, data, produtos, quantidade,
 observação de reposição, assinatura que o cliente fez na avaria, código único e
-central. Usa somente imagens do catálogo. Fotos de evidência, GPS, motivo e
+orientação de contato com a central, sem número de telefone. Usa somente imagens do catálogo. Fotos de evidência, GPS, motivo e
 pareceres internos permanecem excluídos. A assinatura é baixada do bucket privado
 pelo usuário autenticado e só entra no PDF do cliente correspondente.
 
@@ -57,7 +82,8 @@ O código DGB aparece em maiúsculas no rodapé, imediatamente à esquerda de `1
 na mesma fonte Helvetica de 7 pontos e cor discreta do aviso fiscal. Não há quadro,
 título ou instrução de validação em destaque no corpo do documento. A consulta,
 unicidade, registro imutável e comparação por SHA-256 permanecem iguais. A mudança
-altera apenas o PDF gerado; o texto e o contrato do modelo aprovado não mudaram.
+do rodapé alterou apenas o PDF gerado. A revisão seguinte retirou o telefone do
+texto do modelo, mantendo o cabeçalho DOCUMENT e as duas variáveis originais.
 
 O layout adapta fonte entre 10 e 8 pontos e retira imagens opcionais na versão
 compacta. Se todos os produtos não couberem com leitura adequada, retorna
@@ -114,7 +140,7 @@ linha do aviso fiscal e a 12 pontos da paginação. Os 25 testes passaram novame
    mensagem. Nenhum teste real está autorizado nesta tarefa.
 4. Atualizar este documento com o resultado, informar o usuário e pausar o
    acompanhamento `ativar-comprovante-pdf-ap-s-aprova-o-da-meta`.
-5. Se rejeitado ou reclassificado, manter produção de texto e informar o motivo.
+5. Se rejeitado ou reclassificado, não forçar envio nem usar alternativa de texto; informar o motivo.
 
 O modelo possui cabeçalho DOCUMENT e duas variáveis no corpo. `template-pdf.json`
 registra o contrato; o handle de amostra foi enviado pela interface da Meta.

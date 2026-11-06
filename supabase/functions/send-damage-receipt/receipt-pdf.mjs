@@ -1,7 +1,7 @@
 // O PDF inclui os dados do comprovante e a assinatura já registrada pelo cliente.
 // Fotos de evidência, localização, motivo e decisões internas são excluídos.
 export const RECEIPT_NOTE = 'O produto avariado será enviado junto ao próximo pedido realizado pelo cliente.';
-export const RECEIPT_PHONE = '(84) 9 9609-9264';
+export const RECEIPT_SUPPORT = 'Em caso de dúvidas, entre em contato com nossa central de atendimento.';
 export const CATALOG_IMAGE_BASE = 'https://disbecol.github.io/disbgestao/imagens_produtos/';
 
 export const cleanReceiptText = value => String(value ?? '').normalize('NFC')
@@ -187,7 +187,7 @@ export async function createDamageReceiptPdf(damage, items, PDFLib, images = new
   box(y,85,colors.white);text('ASSINATURA DO CLIENTE',left+12,y-9,7,bold,colors.muted);
   const ss=Math.min(270/signature.width,53/signature.height),sw=signature.width*ss,sh=signature.height*ss;
   page.drawImage(signature,{x:left+(cw-sw)/2,y:y-25-sh,width:sw,height:sh});
-  text(`Central de Atendimento: ${RECEIPT_PHONE}`,left,54,9,regular,colors.blue);
+  text(RECEIPT_SUPPORT,left,54,9,regular,colors.blue);
   page.drawLine({start:{x:left,y:36},end:{x:width-left,y:36},thickness:.6,color:colors.line});
   const footerSize=7, pageLabel='1 / 1', pageX=width-left-regular.widthOfTextAtSize(pageLabel,footerSize);
   text('Comprovante emitido pelo Disb Gestão. Não substitui documento fiscal.',left,29,footerSize,regular,colors.muted);
