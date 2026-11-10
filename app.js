@@ -111,6 +111,10 @@ let historyNris = [];
 let avariaItems = [];
 let avariaEditingId = null;
 let avPhotos = [];
+let avariaStep = 1;
+let avariaNavigationPending = false;
+let avariaEditorVersion = 0;
+let avariaPhotoPending = false;
 let deliveryDamageSelectedProduct = null;
 let deliveryDamageProductActiveIndex = -1;
 let deliveryDamageProductSearchTimer = null;
@@ -233,7 +237,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.70-forms',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.71-forms',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -605,9 +609,9 @@ function bindBaseEvents(){
   $('marketSupplierRows')?.addEventListener('click',onMarketplaceSupplierRowsClick);
 
   // Avarias
-  $('avData').addEventListener('change',()=>{});
+  $('avData').addEventListener('change',()=>{clearSignature();renderAvariaContext();});
   $('avPdv').addEventListener('input',onPdvInput);
-  $('avMapa').addEventListener('input',()=>{$('avMapaResumo').textContent=$('avMapa').value.trim()||'—';});
+  $('avMapa').addEventListener('input',()=>{clearSignature();$('avMapaResumo').textContent=$('avMapa').value.trim()||'—';});
   $('avClienteEscolha').addEventListener('change',onCustomerChoiceChange);
   $('avProduto').addEventListener('input',onDeliveryDamageProductInput);
   $('avProduto').addEventListener('focus',()=>renderDeliveryDamageProductOptions($('avProduto').value||''));
@@ -620,9 +624,19 @@ function bindBaseEvents(){
   $('btnAvCamera').addEventListener('click',()=>$('avFotoCamera').click());
   $('avFotoCamera').addEventListener('change',onAvariaPhoto);
   $('avPhotoGallery').addEventListener('click',onAvariaPhotoGalleryClick);
-  $('btnAdicionarAvItem').addEventListener('click',addAvariaItem);
-  $('btnCancelarAvItem').addEventListener('click',clearAvariaItemEditor);
+  $('btnAdicionarAvItem').addEventListener('click',()=>{if(addAvariaItem())$('avProduto').focus();});
+  $('btnCancelarAvItem').addEventListener('click',()=>clearAvariaItemEditor());
   $('avItemList').addEventListener('click',onAvariaItemListClick);
+  $('avReviewItems').addEventListener('click',onAvariaItemListClick);
+  $('btnAvNextCustomer').addEventListener('click',advanceAvariaCustomer);
+  $('btnAvNextProducts').addEventListener('click',advanceAvariaProducts);
+  $('btnAvBackCustomer').addEventListener('click',()=>setAvariaStep(1));
+  $('btnAvBackProducts').addEventListener('click',()=>setAvariaStep(2));
+  $('btnAvEditDelivery').addEventListener('click',()=>setAvariaStep(1));
+  document.querySelectorAll('[data-av-step]').forEach(b=>b.addEventListener('click',()=>{if(Number(b.dataset.avStep)<avariaStep)setAvariaStep(Number(b.dataset.avStep));}));
+  document.querySelectorAll('[data-av-unit]').forEach(b=>b.addEventListener('click',()=>{if(avariaPhotoPending)return;$('avUnidade').value=b.dataset.avUnit;renderAvariaUnit();}));
+  $('avUnidade').addEventListener('change',renderAvariaUnit);
+  setAvariaStep(1,false);
   $('btnLimparAssinatura').addEventListener('click',clearSignature);
   $('btnLimparAvaria').addEventListener('click',clearAvariaRequest);
   $('formAvaria').addEventListener('submit',submitAvaria);
@@ -1025,6 +1039,8 @@ async function onModuleSettingsClick(event){
 }
 
 async function logout(){
+  if(submitAvaria._pending)return toast('Aguarde o registro da avaria ser salvo no aparelho.','');
+  clearAvariaRequest();
   formsModule?.stop();
 
   offlineClearIdentityV171();
@@ -1713,6 +1729,7 @@ function renderDeliveryCustomerMatches(matches){
   sel.innerHTML='<option value="">Selecione o cliente</option>'+matches.map(c=>`<option value="${esc(customerKey(c))}">${esc(c.name)} • ${esc(c.city||'—')} • ${esc(c.branch||'Sem filial')}</option>`).join('');wrap.classList.remove('hidden');
 }
 function onPdvInput(){
+  clearSignature();
   selectedCustomerKey='';clearTimeout(deliveryCustomerLookupTimer);
   const code=normalizeCode($('avPdv').value),matches=currentCustomerMatches();
   renderDeliveryCustomerMatches(matches);
@@ -1724,18 +1741,23 @@ function onPdvInput(){
   },300);
 }
 function onCustomerChoiceChange(){
+  clearSignature();
   selectedCustomerKey=$('avClienteEscolha').value||'';
   showCustomer(selectedCustomer());
 }
 async function onAvariaPhoto(e){
   const files=[...(e.target.files||[])];
   e.target.value='';
-  if(!files.length)return;
+  if(!files.length||avariaPhotoPending)return;
   const remaining=5-avPhotos.length;
   if(remaining<=0)return toast('Cada produto aceita no máximo 5 fotos.','error');
   const chosen=files.slice(0,remaining);
   if(files.length>remaining)toast(`Somente ${remaining} foto(s) foram adicionadas. O limite é 5.`,'');
+  const version=avariaEditorVersion;
+  setAvariaPhotoBusy(true);
+  try{
   for(const file of chosen){
+    if(version!==avariaEditorVersion)break;
     const sourceKey=`${file.name}|${file.size}|${file.lastModified}`;
     if(avPhotos.some(p=>p.sourceKey===sourceKey)){toast('Esta foto já foi adicionada.','error');continue;}
     let previewUrl='';
@@ -1743,17 +1765,22 @@ async function onAvariaPhoto(e){
       $('avGpsStatus').className='gps-status';
       $('avGpsStatus').textContent=`Preparando foto ${avPhotos.length+1} e obtendo localização…`;
       const blob=await compressImage(file,1280,.76);
+      if(version!==avariaEditorVersion)break;
       previewUrl=URL.createObjectURL(blob);
       const gps=await captureGps();
-      avPhotos.push({id:uuid(),blob,previewUrl,gps,sourceKey});
+      if(version!==avariaEditorVersion){URL.revokeObjectURL(previewUrl);break;}
       await refreshCustomerGeoForCapture(selectedCustomer());
+      if(version!==avariaEditorVersion){URL.revokeObjectURL(previewUrl);break;}
+      avPhotos.push({id:uuid(),blob,previewUrl,gps,sourceKey});
       renderAvariaPhotoGallery();
     }catch(err){
       if(previewUrl)URL.revokeObjectURL(previewUrl);
+      if(version!==avariaEditorVersion)break;
       $('avGpsStatus').className='gps-status error';
       $('avGpsStatus').textContent=`Foto não adicionada: ${humanGpsError(err)}`;
     }
   }
+  }finally{if(version===avariaEditorVersion)setAvariaPhotoBusy(false);}
 }
 function renderAvariaPhotoGallery(){
   const el=$('avPhotoGallery');
@@ -1771,7 +1798,7 @@ function renderAvariaPhotoGallery(){
 function onAvariaPhotoGalleryClick(e){
   const b=e.target.closest('[data-remove-photo]');if(!b)return;
   const id=b.dataset.removePhoto;const photo=avPhotos.find(p=>p.id===id);
-  if(photo?.previewUrl&&!avariaEditingId)URL.revokeObjectURL(photo.previewUrl);
+  if(photo?.previewUrl&&!avariaItems.some(item=>(item.photos||[]).some(p=>p.previewUrl===photo.previewUrl)))URL.revokeObjectURL(photo.previewUrl);
   avPhotos=avPhotos.filter(p=>p.id!==id);renderAvariaPhotoGallery();
 }
 function deliveryDamageProductLabel(p){return p?`${p.code} - ${p.name}`:'';}
@@ -1813,41 +1840,103 @@ function onDeliveryDamageProductKeydown(e){
   else if(e.key==='Enter'&&!$('avProductOptions')?.classList.contains('hidden')){const rows=[...$('avProductOptions').querySelectorAll('.sales-product-option')],b=rows[deliveryDamageProductActiveIndex>=0?deliveryDamageProductActiveIndex:0];if(b){e.preventDefault();selectDeliveryDamageProduct(productsByCode.get(String(b.dataset.deliveryProductCode)));}}
   else if(e.key==='Escape')hideDeliveryDamageProductOptions();
 }
+function avariaFieldError(message,id){toast(message,'error');$(id)?.focus();return false;}
+function validAvariaDate(value){
+  const match=/^(\d{4})-(\d{2})-(\d{2})$/.exec(value||'');if(!match)return false;
+  const [,y,m,d]=match.map(Number),date=new Date(Date.UTC(y,m-1,d));
+  return y>=1900&&y<=9999&&date.getUTCFullYear()===y&&date.getUTCMonth()===m-1&&date.getUTCDate()===d;
+}
+async function validateAvariaDelivery(){
+  if(!validAvariaDate($('avData').value))return avariaFieldError('Informe uma data válida para a avaria.','avData');
+  if(!normalizeCode($('avPdv').value))return avariaFieldError('Informe o código completo do cliente.','avPdv');
+  if(!$('avMapa').value.trim())return avariaFieldError('Informe o número do mapa.','avMapa');
+  let customer=selectedCustomer();
+  if(!customer){
+    const code=normalizeCode($('avPdv').value),unit=activeUnit,version=avariaEditorVersion;
+    try{const found=await fetchCustomersByCode(code);if(unit!==activeUnit||version!==avariaEditorVersion||code!==normalizeCode($('avPdv').value))return false;renderDeliveryCustomerMatches(found);customer=selectedCustomer();}
+    catch(error){console.warn('Busca PDV na avaria',error);}
+  }
+  if(!customer)return avariaFieldError(currentCustomerMatches().length>1?'Selecione qual cliente corresponde ao PDV informado.':'Cliente não localizado. Confira o código ou conecte-se para atualizar a base.',currentCustomerMatches().length>1?'avClienteEscolha':'avPdv');
+  return true;
+}
+function renderAvariaUnit(){document.querySelectorAll('[data-av-unit]').forEach(b=>{const selected=b.dataset.avUnit===$('avUnidade').value;b.classList.toggle('active',selected);b.setAttribute('aria-pressed',String(selected));});}
+function renderAvariaContext(){
+  const customer=selectedCustomer(),name=customer?.name||'Cliente não selecionado';if($('avContextCustomer'))$('avContextCustomer').textContent=name;
+  const meta=[`PDV ${customer?.code||$('avPdv').value||'—'}`,customer?.city,`Mapa ${$('avMapa').value||'—'}`,validAvariaDate($('avData').value)?fmtDate($('avData').value):'',profile?.name||$('avEntregador').value].filter(Boolean).join(' • ');
+  if($('avContextMeta'))$('avContextMeta').textContent=meta;
+  if($('avReviewCustomer'))$('avReviewCustomer').innerHTML=`<small>CLIENTE E ENTREGA</small><strong>${esc(name)}</strong><span>${esc(meta)}</span><span>${esc(activeUnit)}</span>`;
+}
+function setAvariaPhotoBusy(busy){
+  avariaPhotoPending=busy;$('avProductEditor')?.querySelectorAll('input,select,button').forEach(el=>{el.disabled=busy;});
+  ['btnAvNextProducts','btnAvBackCustomer','btnAvBackProducts','btnAvEditDelivery'].forEach(id=>{if($(id))$(id).disabled=busy;});
+  document.querySelectorAll('[data-av-step]').forEach(b=>{b.disabled=busy||Number(b.dataset.avStep)>avariaStep;});
+  if($('btnAvCamera'))$('btnAvCamera').innerHTML=busy?'<strong>Obtendo foto e localização…</strong>':'<span aria-hidden="true">▣</span><strong>Tirar foto</strong><small>Fotografe o produto avariado</small>';
+}
+function setAvariaStep(step,focus=true){
+  if(avariaPhotoPending)return false;const previous=avariaStep;avariaStep=Math.max(1,Math.min(3,Number(step)||1));
+  if(avariaStep===2&&previous===3&&!avariaHasEditorData()&&avariaItems.length)editAvariaItem(avariaItems[avariaItems.length-1],false);
+  for(let n=1;n<=3;n++)$('avStep'+n)?.classList.toggle('hidden',n!==avariaStep);
+  document.querySelectorAll('[data-av-step]').forEach(b=>{const n=Number(b.dataset.avStep);b.classList.toggle('active',n===avariaStep);b.classList.toggle('completed',n<avariaStep);b.disabled=n>avariaStep;b.setAttribute('aria-current',n===avariaStep?'step':'false');});
+  if($('avStepProgress')){$('avStepProgress').textContent=`Etapa ${avariaStep} de 3`;$('avStepProgress').setAttribute('aria-label',`Etapa ${avariaStep} de 3`);}
+  $('avDeliveryContext')?.classList.toggle('hidden',avariaStep!==2);renderAvariaContext();renderAvariaUnit();
+  if(focus){$('view-avaria-cadastro')?.scrollIntoView({block:'start',behavior:'smooth'});(avariaStep===1?$('avPdv'):avariaStep===2?$('avProduto'):$('avReviewTitle'))?.focus({preventScroll:true});}return true;
+}
+async function advanceAvariaCustomer(){
+  if(avariaNavigationPending||avariaPhotoPending)return false;const version=avariaEditorVersion;avariaNavigationPending=true;const button=$('btnAvNextCustomer');if(button){button.disabled=true;button.textContent='Conferindo cliente…';}
+  try{if(!await validateAvariaDelivery()||version!==avariaEditorVersion)return false;return setAvariaStep(2);}
+  finally{avariaNavigationPending=false;if(button){button.disabled=false;button.textContent='Continuar para produtos →';}}
+}
+function avariaHasEditorData(){return !!(avariaEditingId||deliveryDamageSelectedProduct||$('avProduto').value.trim()||$('avLote').value.trim()||$('avQuantidade').value.trim()||$('avMotivo').value||avPhotos.length);}
+function advanceAvariaProducts(){
+  if(avariaPhotoPending)return avariaFieldError('Aguarde a foto e a localização terminarem.','btnAvCamera');
+  if(avariaHasEditorData()&&!addAvariaItem())return false;
+  if(!avariaItems.length)return avariaFieldError('Informe ao menos um produto avariado.','avProduto');
+  renderAvariaItems();return setAvariaStep(3);
+}
 function addAvariaItem(){
+  if(avariaPhotoPending)return avariaFieldError('Aguarde a foto e a localização terminarem.','btnAvCamera');
   const selected=deliveryDamageSelectedProduct,product=deliveryDamageProductLabel(selected),lot=sanitizeLot($('avLote').value),quantity=num($('avQuantidade').value),unit=$('avUnidade').value,reason=$('avMotivo').value;
-  if(!selected)return toast('Selecione um produto valido da base.','error');
-  if(!lot||quantity<=0||!unit||!reason)return toast('Preencha lote, quantidade, unidade e motivo.','error');
-  if(!avPhotos.length&&reason!=='Não foi no caminhão')return toast('Adicione ao menos uma foto da avaria.','error');
-  if(avPhotos.some(p=>!p.gps))return toast('Todas as fotos precisam ter localização GPS.','error');
-  const id=avariaEditingId||uuid();
-  const item={id,product,product_code:selected.code,product_name:selected.name,lot,quantity,unit,reason,photos:avPhotos.map(p=>({...p}))};
-  const idx=avariaItems.findIndex(x=>x.id===id);
-  if(idx>=0){
-    const keep=new Set(item.photos.map(p=>p.previewUrl));
-    (avariaItems[idx].photos||[]).forEach(p=>{if(p.previewUrl&&!keep.has(p.previewUrl))URL.revokeObjectURL(p.previewUrl);});
-    avariaItems[idx]=item;
-  }else avariaItems.push(item);
-  renderAvariaItems();clearAvariaItemEditor(false);
+  if(!selected)return avariaFieldError('Selecione um produto válido da base.','avProduto');
+  if(!lot)return avariaFieldError('Informe o lote do produto.','avLote');
+  if(!Number.isSafeInteger(quantity)||quantity<=0)return avariaFieldError('Informe uma quantidade inteira maior que zero.','avQuantidade');
+  if(!['UNIDADE','CAIXA'].includes(unit))return avariaFieldError('Selecione unidades ou caixas.','avUnidade');
+  if(!['Quebrado','Embalagem amassada/rasgada','Faltando na Grade','Não foi no caminhão','Furada','Sem Tampa','Mal cheia'].includes(reason))return avariaFieldError('Selecione o motivo da avaria.','avMotivo');
+  if(!avPhotos.length&&reason!=='Não foi no caminhão')return avariaFieldError('Tire ao menos uma foto da avaria.','btnAvCamera');
+  if(avPhotos.some(p=>!p.gps))return avariaFieldError('Todas as fotos precisam ter localização GPS.','btnAvCamera');
+  const id=avariaEditingId||uuid(),item={id,product,product_code:selected.code,product_name:selected.name,lot,quantity,unit,reason,photos:avPhotos.map(p=>({...p}))},idx=avariaItems.findIndex(x=>x.id===id);
+  const previous=idx>=0?avariaItems[idx]:null;
+  if(idx>=0){const keep=new Set(item.photos.map(p=>p.previewUrl));(avariaItems[idx].photos||[]).forEach(p=>{if(p.previewUrl&&!keep.has(p.previewUrl))URL.revokeObjectURL(p.previewUrl);});avariaItems[idx]=item;}else avariaItems.push(item);
+  // Signature remains valid on Back/Next; changes to the reviewed contents require signing again.
+  if(!previous||avariaItemFingerprint(previous)!==avariaItemFingerprint(item))clearSignature();
+  renderAvariaItems();clearAvariaItemEditor(false);return true;
+}
+function avariaItemFingerprint(item){return JSON.stringify([item.product_code,item.product_name,item.lot,item.quantity,item.unit,item.reason,(item.photos||[]).map(p=>p.id)]);}
+function avariaItemCard(item,review=false){
+  const photoCount=(item.photos||[]).length,quantity=`${fmtNum(item.quantity)} ${item.unit==='CAIXA'?(item.quantity===1?'caixa':'caixas'):(item.quantity===1?'unidade':'unidades')}`;
+  return `<article class="av-product-card${review?' av-product-review':''}" data-id="${esc(item.id)}"><div class="av-product-card-top"><div><small>CÓDIGO ${esc(item.product_code||'—')}</small><strong>${esc(item.product_name||item.product)}</strong></div><span class="av-product-quantity">${esc(quantity)}</span></div><div class="av-product-card-meta"><span>Lote <b>${esc(item.lot)}</b></span>${review?`<span>${esc(item.reason)}</span>`:''}<span>${photoCount?`${photoCount} foto${photoCount===1?'':'s'} • GPS ✓`:'Foto dispensada pelo motivo'}</span></div><div class="av-product-card-actions"><button type="button" class="mini-btn" data-act="edit">Editar</button><button type="button" class="mini-btn danger" data-act="del" aria-label="Remover ${esc(item.product_name||item.product)}">Remover</button></div></article>`;
 }
 function renderAvariaItems(){
-  $('avItemCounter').textContent=`${avariaItems.length} produto(s)`;const el=$('avItemList');
-  if(!avariaItems.length){el.className='item-list empty-state';el.textContent='Nenhum produto adicionado.';return;}
-  el.className='item-list';
-  el.innerHTML=avariaItems.map(x=>`<div class="item-row" data-id="${x.id}"><div class="info"><small>Produto • Código ${esc(x.product_code||'—')}</small><strong>${esc(x.product_name||x.product)}</strong></div><div class="info"><small>Lote(s)</small><strong>${esc(x.lot)}</strong></div><div class="info"><small>Quantidade</small><strong>${fmtNum(x.quantity)} ${esc(x.unit)}</strong></div><div class="info"><small>Motivo</small><strong>${esc(x.reason)}</strong></div><div class="info"><small>Evidências</small><strong>${x.photos.length?`${x.photos.length} foto(s) • GPS ✓`:'Foto dispensada pelo motivo'}</strong></div><div class="mini-actions"><button type="button" class="mini-btn" data-act="edit">Editar</button><button type="button" class="mini-btn danger" data-act="del">Excluir</button></div></div>`).join('');
+  $('avItemCounter').textContent=`${avariaItems.length} produto${avariaItems.length===1?'':'s'}`;const el=$('avItemList');el.className=avariaItems.length?'av-product-list':'av-product-list empty-state';el.innerHTML=avariaItems.length?avariaItems.map(x=>avariaItemCard(x)).join(''):'Os produtos adicionados aparecerão aqui.';
+  if($('avReviewItems'))$('avReviewItems').innerHTML=avariaItems.map(x=>avariaItemCard(x,true)).join('');
+  if($('avEditorTitle'))$('avEditorTitle').textContent=avariaEditingId?'Editar produto':`Produto ${avariaItems.length+1}`;
+}
+function editAvariaItem(item,navigate=true){
+  if(avariaPhotoPending)return false;clearAvariaItemEditor();avariaEditingId=item.id;
+  const picked=item.product_code?productsByCode.get(String(item.product_code)):refs.products.find(p=>norm(p.name)===norm(item.product_name||item.product));deliveryDamageSelectedProduct=picked?{code:String(picked.code),name:picked.name}:item.product_code?{code:String(item.product_code),name:item.product_name||item.product}:null;
+  $('avProduto').value=deliveryDamageSelectedProduct?deliveryDamageProductLabel(deliveryDamageSelectedProduct):(item.product_name||item.product||'');renderDeliveryDamageProductSelection();hideDeliveryDamageProductOptions();$('avLote').value=sanitizeLot(item.lot);$('avQuantidade').value=item.quantity;$('avUnidade').value=item.unit;$('avMotivo').value=item.reason;
+  avPhotos=(item.photos||[]).map(p=>({...p}));renderAvariaPhotoGallery();renderAvariaUnit();$('btnAdicionarAvItem').textContent='Salvar alteração';$('btnCancelarAvItem').classList.remove('hidden');if($('avEditorTitle'))$('avEditorTitle').textContent='Editar produto';if(navigate)setAvariaStep(2);return true;
 }
 function onAvariaItemListClick(e){
-  const b=e.target.closest('button[data-act]');if(!b)return;const item=avariaItems.find(x=>x.id===b.closest('[data-id]').dataset.id);if(!item)return;
-  if(b.dataset.act==='del'){(item.photos||[]).forEach(p=>{if(p.previewUrl)URL.revokeObjectURL(p.previewUrl);});avariaItems=avariaItems.filter(x=>x.id!==item.id);renderAvariaItems();return;}
-  avariaEditingId=item.id;const picked=item.product_code?productsByCode.get(String(item.product_code)):refs.products.find(p=>norm(p.name)===norm(item.product_name||item.product));deliveryDamageSelectedProduct=picked?{code:String(picked.code),name:picked.name}:item.product_code?{code:String(item.product_code),name:item.product_name||item.product}:null;$('avProduto').value=deliveryDamageSelectedProduct?deliveryDamageProductLabel(deliveryDamageSelectedProduct):(item.product_name||item.product||'');renderDeliveryDamageProductSelection();hideDeliveryDamageProductOptions();$('avLote').value=sanitizeLot(item.lot);$('avQuantidade').value=item.quantity;$('avUnidade').value=item.unit;$('avMotivo').value=item.reason;
-  avPhotos=(item.photos||[]).map(p=>({...p}));renderAvariaPhotoGallery();$('btnAdicionarAvItem').textContent='Salvar alteração';$('btnCancelarAvItem').classList.remove('hidden');
+  const b=e.target.closest('button[data-act]');if(!b)return;e.preventDefault();if(avariaPhotoPending)return;const item=avariaItems.find(x=>x.id===b.closest('[data-id]')?.dataset.id);if(!item)return;
+  if(b.dataset.act==='del'){if(avariaEditingId===item.id)clearAvariaItemEditor();(item.photos||[]).forEach(p=>{if(p.previewUrl)URL.revokeObjectURL(p.previewUrl);});avariaItems=avariaItems.filter(x=>x.id!==item.id);clearSignature();renderAvariaItems();if(avariaStep===3&&!avariaItems.length)setAvariaStep(2);return;}
+  if(avariaHasEditorData()&&avariaEditingId!==item.id&&!addAvariaItem())return;editAvariaItem(item);
 }
 function clearAvariaItemEditor(revoke=true){
-  avariaEditingId=null;
-  if(revoke){const used=new Set(avariaItems.flatMap(x=>(x.photos||[]).map(p=>p.previewUrl)));avPhotos.forEach(p=>{if(p.previewUrl&&!used.has(p.previewUrl))URL.revokeObjectURL(p.previewUrl);});}
-  avPhotos=[];['avLote','avQuantidade','avMotivo'].forEach(id=>$(id).value='');clearDeliveryDamageProductSelection(false);$('avUnidade').value='UNIDADE';$('avFotoCamera').value='';renderAvariaPhotoGallery();$('btnAdicionarAvItem').textContent='+ Adicionar produto';$('btnCancelarAvItem').classList.add('hidden');
+  avariaEditorVersion++;setAvariaPhotoBusy(false);avariaEditingId=null;if(revoke){const used=new Set(avariaItems.flatMap(x=>(x.photos||[]).map(p=>p.previewUrl)));avPhotos.forEach(p=>{if(p.previewUrl&&!used.has(p.previewUrl))URL.revokeObjectURL(p.previewUrl);});}
+  avPhotos=[];['avLote','avQuantidade','avMotivo'].forEach(id=>$(id).value='');clearDeliveryDamageProductSelection(false);$('avUnidade').value='UNIDADE';$('avFotoCamera').value='';renderAvariaPhotoGallery();renderAvariaUnit();$('btnAdicionarAvItem').textContent='+ Adicionar outro produto';$('btnCancelarAvItem').classList.add('hidden');if($('avEditorTitle'))$('avEditorTitle').textContent=`Produto ${avariaItems.length+1}`;
 }
 function clearAvariaRequest(){
-  avariaItems.forEach(x=>(x.photos||[]).forEach(p=>{if(p.previewUrl)URL.revokeObjectURL(p.previewUrl);}));avariaItems=[];renderAvariaItems();clearAvariaItemEditor(false);$('avData').value=localIsoDate(new Date());$('avEntregador').value=profile?.name||'';['avPdv','avMapa'].forEach(id=>$(id).value='');$('avClienteNome').textContent='Digite um código';$('avClienteCodigo').textContent='—';$('avCidade').textContent='—';$('avMapaResumo').textContent='—';selectedCustomerKey='';$('avClienteEscolha').innerHTML='';$('avClienteDuplicado').classList.add('hidden');clearSignature();
+  const previews=new Set([...avariaItems.flatMap(x=>x.photos||[]),...avPhotos].map(p=>p.previewUrl).filter(Boolean));previews.forEach(url=>URL.revokeObjectURL(url));avariaItems=[];clearAvariaItemEditor(false);renderAvariaItems();$('avData').value=localIsoDate(new Date());$('avEntregador').value=profile?.name||'';['avPdv','avMapa'].forEach(id=>$(id).value='');deliveryCustomerLookupSeq++;clearTimeout(deliveryCustomerLookupTimer);$('avClienteNome').textContent='Digite um código';$('avClienteCodigo').textContent='—';$('avCidade').textContent='—';$('avMapaResumo').textContent='—';selectedCustomerKey='';$('avClienteEscolha').innerHTML='';$('avClienteDuplicado').classList.add('hidden');clearSignature();setAvariaStep(1,false);
 }
 async function submitAvaria(e){
   e.preventDefault();
@@ -7611,20 +7700,31 @@ async function offlineUploadDamageStorage(path,blob){const {error}=await sb.stor
 const damagePushResultsV174=new Map();
 
 submitAvaria = async function(e){
-  e.preventDefault();if(submitAvaria._pending)return;submitAvaria._pending=true;
-  try{return await submitAvariaOnce();}finally{submitAvaria._pending=false;}
+  e.preventDefault();if(submitAvaria._pending)return;
+  if(avariaStep===1)return advanceAvariaCustomer();
+  if(avariaStep===2)return advanceAvariaProducts();
+  if(avariaPhotoPending||avariaNavigationPending)return;
+  submitAvaria._pending=true;
+  const controls=[...$('formAvaria').querySelectorAll('input,select,button')].map(el=>[el,el.disabled]);controls.forEach(([el])=>{el.disabled=true;});$('btnLimparAvaria').disabled=true;$('signatureCanvas').style.pointerEvents='none';
+  try{return await submitAvariaOnce();}finally{submitAvaria._pending=false;controls.forEach(([el,disabled])=>{el.disabled=disabled;});$('btnLimparAvaria').disabled=false;$('signatureCanvas').style.pointerEvents='';setAvariaStep(avariaStep,false);}
 };
 async function submitAvariaOnce(){
-  let customer=selectedCustomer();if(!customer){const code=normalizeCode($('avPdv').value);if(code){try{const found=await fetchCustomersByCode(code);renderDeliveryCustomerMatches(found);customer=selectedCustomer();}catch(err){console.warn('Busca PDV ao salvar avaria',err);}}}if(!customer)return toast(currentCustomerMatches().length>1?'Selecione qual cliente corresponde ao PDV informado.':'Informe um PDV válido.','error');if(!$('avMapa').value.trim())return toast('Informe o mapa.','error');if(!avariaItems.length)return toast('Adicione ao menos um produto avariado.','error');if(!signatureDirty)return toast('A assinatura do cliente é obrigatória.','error');
+  if(!validAvariaDate($('avData').value)){setAvariaStep(1);return avariaFieldError('Informe uma data válida para a avaria.','avData');}
+  const owner=authUser?.id,unit=activeUnit,version=avariaEditorVersion;
+  let customer=selectedCustomer();if(!customer){const code=normalizeCode($('avPdv').value);if(code){try{const found=await fetchCustomersByCode(code);renderDeliveryCustomerMatches(found);customer=selectedCustomer();}catch(err){console.warn('Busca PDV ao salvar avaria',err);}}}if(owner!==authUser?.id||unit!==activeUnit||version!==avariaEditorVersion)return;
+  if(!customer)return toast(currentCustomerMatches().length>1?'Selecione qual cliente corresponde ao PDV informado.':'Informe um PDV válido.','error');if(!$('avMapa').value.trim())return toast('Informe o mapa.','error');if(!avariaItems.length)return toast('Adicione ao menos um produto avariado.','error');if(!signatureDirty)return toast('A assinatura do cliente é obrigatória.','error');
+  const snapshot={customer:{...customer},unit,date:$('avData').value,map_number:$('avMapa').value.trim(),items:avariaItems.map(x=>({...x,photos:(x.photos||[]).map(p=>({...p,gps:{...p.gps}}))}))};
   const btn=$('btnSalvarAvaria');btn.disabled=true;btn.textContent='Salvando…';
   try{
+    const sigBlob=await canvasBlob($('signatureCanvas'),.82);
     let captureLocation=null;
-    if(avariaItems.some(x=>!(x.photos||[]).length)){
+    if(snapshot.items.some(x=>!(x.photos||[]).length)){
       try{const gps=await captureGps({useRecent:false});captureLocation={latitude:gps.latitude,longitude:gps.longitude,accuracy:gps.accuracy,capturedAt:gps.capturedAt};}
       catch(e){console.warn('GPS da avaria sem foto indisponível',e);toast('A avaria será salva sem comparação de distância: não foi possível capturar o GPS.','');}
     }
-    const opId=uuid(),sigBlob=await canvasBlob($('signatureCanvas'),.82),receiptCtx={offline_operation_id:opId,unit:activeUnit,customer:{...customer},date:$('avData').value,map_number:$('avMapa').value.trim(),items:avariaItems.map(x=>({product:x.product,product_code:x.product_code,product_name:x.product_name,quantity:x.quantity,unit:x.unit,reason:x.reason}))};
-    const payload={receiptCtx,signature_blob:sigBlob,unit:activeUnit,date:receiptCtx.date,customer:{...customer},map_number:receiptCtx.map_number,captureLocation,items:avariaItems.map(x=>({product:x.product,product_code:x.product_code,product_name:x.product_name,lot:x.lot,quantity:x.quantity,unit:x.unit,reason:x.reason,photos:(x.photos||[]).map(p=>({blob:p.blob,gps:{...p.gps}}))}))};
+    const opId=uuid(),receiptCtx={offline_operation_id:opId,unit:snapshot.unit,customer:snapshot.customer,date:snapshot.date,map_number:snapshot.map_number,items:snapshot.items.map(x=>({product:x.product,product_code:x.product_code,product_name:x.product_name,quantity:x.quantity,unit:x.unit,reason:x.reason}))};
+    const payload={receiptCtx,signature_blob:sigBlob,unit:snapshot.unit,date:receiptCtx.date,customer:snapshot.customer,map_number:receiptCtx.map_number,captureLocation,items:snapshot.items.map(x=>({product:x.product,product_code:x.product_code,product_name:x.product_name,lot:x.lot,quantity:x.quantity,unit:x.unit,reason:x.reason,photos:(x.photos||[]).map(p=>({blob:p.blob,gps:{...p.gps}}))}))};
+    if(owner!==authUser?.id||unit!==activeUnit||version!==avariaEditorVersion)throw new Error('O usuário ou a unidade mudou. Confira os dados antes de salvar novamente.');
     await offlineQueueAdd('DAMAGE_CREATE',payload,opId);clearAvariaRequest();
     if(navigator.onLine){
       await syncOfflineQueue({silent:true});
@@ -7639,7 +7739,7 @@ async function submitAvariaOnce(){
     }
     if(!navigator.onLine)toast('Sem sinal: avaria salva no aparelho. Ela será enviada automaticamente quando a internet voltar.','success');
   }catch(err){toast(`Não foi possível salvar a avaria no aparelho: ${humanDeliveryDamageError(err)}`,'error');}
-  finally{btn.disabled=false;btn.textContent='Registrar requisição';}
+  finally{btn.disabled=false;btn.textContent='Registrar avaria';}
 }
 
 function deliveryDamageItemProductCode(item){const direct=normalizeCode(item?.product_code||'');if(direct)return direct;const text=String(item?.product_text||item?.product||'');return normalizeCode(text.split(/\s+-\s+|\s+•\s+/)[0]||'');}
@@ -8093,6 +8193,7 @@ async function loadUnitAccess(){
 }
 
 function resetUnitScopedState(){
+  clearAvariaRequest();
   pendingNris=[];historyNris=[];selectedNris.clear();adminAvarias=[];deliveryDamageMyRequests=[];salesDamageMyRequests=[];salesDamageManageRequests=[];
   stockValidityRows=[];stockValidityLoadedUnit='';stockValidityPreview=null;stockValidityLoadId++;
   salesPricingProducts=[];salesPricingLoaded=false;salesPricingError='';
@@ -8103,6 +8204,7 @@ function resetUnitScopedState(){
 }
 async function changeActiveUnit(next){
   next=String(next||'').trim();if(!myUnits.includes(next)||next===activeUnit)return;
+  if(submitAvaria._pending){renderActiveUnitSelector();return toast('Aguarde o registro da avaria ser salvo no aparelho.','');}
   if(formsModule&&!formsModule.canChangeUnit()){renderActiveUnitSelector();return;}
   formsModule?.stop();
   activeUnit=next;try{localStorage.setItem(unitAccessKey(),activeUnit);}catch(_e){}

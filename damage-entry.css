@@ -1,0 +1,173 @@
+/* Cadastro de avaria: apresentação isolada das demais telas do sistema. */
+#view-avaria-cadastro{--av-navy:#182c42;--av-accent:#be6244;--av-soft:#fcf3ee;--av-line:#e1e7ed;--av-muted:#6d7e90;color:var(--av-navy);max-width:1420px;margin-inline:auto}
+#view-avaria-cadastro *{box-sizing:border-box}
+#view-avaria-cadastro .av-entry-heading{display:flex;align-items:center;justify-content:space-between;gap:20px;margin:4px 0 22px}
+#view-avaria-cadastro .av-eyebrow{display:block;font-size:10px;letter-spacing:.1em;font-weight:800;color:var(--av-accent)}
+#view-avaria-cadastro .av-entry-heading h1{font-size:29px;line-height:1.2;margin:7px 0 6px;letter-spacing:-.04em;color:var(--av-navy)}
+#view-avaria-cadastro p{color:var(--av-muted);font-size:13px;line-height:1.55}
+#view-avaria-cadastro .av-entry-heading p{margin:0}
+#view-avaria-cadastro #formAvaria{display:block;min-width:0}
+#view-avaria-cadastro .av-stepper{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:9px;border:1px solid var(--av-line);background:#fff;border-radius:17px;box-shadow:0 4px 18px #182c4204}
+#view-avaria-cadastro .av-step-button{display:flex;align-items:center;gap:12px;min-height:75px;min-width:0;border:1px solid transparent;border-radius:11px;background:transparent;color:var(--av-muted);text-align:left;padding:12px 16px;cursor:pointer}
+#view-avaria-cadastro .av-step-button strong{display:block;font-size:13px;line-height:1.35}
+#view-avaria-cadastro .av-step-button small{display:block;font-size:11px;margin-top:4px;font-weight:400}
+#view-avaria-cadastro .av-step-button:disabled{cursor:default;opacity:.67}
+#view-avaria-cadastro .av-step-number{display:grid;place-items:center;flex:none;width:33px;height:33px;border-radius:50%;border:1px solid #dce3e9;background:#f7f9fb;font-weight:800;font-size:13px}
+#view-avaria-cadastro .av-step-button.active,#view-avaria-cadastro .av-step-button[aria-current="step"]{color:var(--av-navy);background:var(--av-soft);border-color:#edd7cb}
+#view-avaria-cadastro .av-step-button.active .av-step-number,#view-avaria-cadastro .av-step-button[aria-current="step"] .av-step-number{background:var(--av-accent);color:#fff;border-color:var(--av-accent)}
+#view-avaria-cadastro .av-step-button.complete .av-step-number,#view-avaria-cadastro .av-step-button.completed .av-step-number{background:#e9f5ee;border-color:#cfe5d7;color:#23724d}
+#view-avaria-cadastro .av-step-progress{margin:10px 3px 18px;font-size:11px;color:var(--av-muted)}
+#view-avaria-cadastro .av-step-panel{background:#fff;border:1px solid var(--av-line);border-radius:18px;padding:27px;min-width:0;box-shadow:0 7px 24px #182c4204}
+#view-avaria-cadastro .av-panel-head{display:flex;align-items:center;gap:13px;margin-bottom:25px}
+#view-avaria-cadastro .av-section-icon{display:grid;place-items:center;width:43px;height:43px;flex:none;border-radius:13px;color:var(--av-accent);background:var(--av-soft);font-size:24px}
+#view-avaria-cadastro h2{margin:0;font-size:20px;line-height:1.3;letter-spacing:-.025em;color:var(--av-navy)}
+#view-avaria-cadastro .av-panel-head p{margin:5px 0 0}
+#view-avaria-cadastro .field{min-width:0;margin:0;display:flex;flex-direction:column;gap:7px}
+#view-avaria-cadastro .field label{font-size:12px;font-weight:700;color:var(--av-navy);line-height:1.4}
+#view-avaria-cadastro .field input,#view-avaria-cadastro .field select{height:49px;min-width:0;width:100%;font-size:14px;padding:11px 13px;border-color:#dce3eb!important;border-radius:10px!important}
+#view-avaria-cadastro .field input:focus,#view-avaria-cadastro .field select:focus{border-color:#be6244!important;box-shadow:0 0 0 3px #be624419!important}
+#view-avaria-cadastro .field-help,#view-avaria-cadastro .field>small{color:var(--av-muted);font-size:11px;line-height:1.5}
+#view-avaria-cadastro .avaria-customer-layout{display:flex;flex-direction:column;gap:18px}
+#view-avaria-cadastro .av-customer-inputs{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+#view-avaria-cadastro .avaria-client-summary{display:grid;grid-template-columns:minmax(180px,2fr) .6fr 1fr .6fr;gap:18px;margin:0;padding:19px 21px;background:#f7f9fc;border:1px solid #e3e9f0;border-radius:12px;order:initial}
+#view-avaria-cadastro .avaria-client-summary>div{min-width:0;display:flex;flex-direction:column;gap:5px;padding:0;border:0}
+#view-avaria-cadastro .avaria-client-summary small{color:#7a8b9c;font-size:9px;font-weight:800;letter-spacing:.06em}
+#view-avaria-cadastro .avaria-client-summary strong{font-size:12px;line-height:1.5;overflow-wrap:anywhere;color:var(--av-navy)}
+#view-avaria-cadastro .avaria-client-summary .av-client-name strong{font-size:14px}
+#view-avaria-cadastro .avaria-customer-choice{order:initial;margin:0!important}
+#view-avaria-cadastro .av-delivery-metadata{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:24px;padding-top:22px;border-top:1px solid #edf0f4}
+#view-avaria-cadastro .av-delivery-metadata input{height:44px;background:#f8fafc!important;font-size:13px}
+#view-avaria-cadastro .av-delivery-context{display:flex;align-items:center;gap:12px;background:#f2f6fa;border:1px solid #e0e8ef;padding:14px 18px;border-radius:13px;margin-bottom:16px}
+#view-avaria-cadastro .av-context-icon{font-size:24px;color:#8495a6}
+#view-avaria-cadastro .av-delivery-context>div{min-width:0;flex:1}
+#view-avaria-cadastro .av-delivery-context strong{display:block;font-size:13px;line-height:1.4;overflow-wrap:anywhere}
+#view-avaria-cadastro .av-delivery-context small{display:block;margin-top:4px;font-size:11px;color:var(--av-muted);line-height:1.5}
+#view-avaria-cadastro .btn{min-height:48px;border-radius:10px;font-size:12px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;gap:10px;line-height:1.35;padding:13px 20px;white-space:normal}
+#view-avaria-cadastro .btn.primary{background:var(--av-accent);border:1px solid var(--av-accent);color:#fff;box-shadow:0 5px 12px #be62441c}
+#view-avaria-cadastro .btn.primary:hover{background:#a95137;border-color:#a95137}
+#view-avaria-cadastro .btn.secondary{background:#fff;border:1px solid #d9e1e9;color:var(--av-navy);box-shadow:none}
+#view-avaria-cadastro .av-text-button{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:8px 11px;border:0;background:transparent;color:#64768b;font-size:12px;font-weight:700;cursor:pointer;border-radius:8px;line-height:1.4}
+#view-avaria-cadastro .av-text-button:hover{background:#f0f4f7;color:var(--av-navy)}
+#view-avaria-cadastro :is(button,input,select):focus-visible{outline:3px solid #be62445c;outline-offset:3px}
+#view-avaria-cadastro .av-step-actions{position:sticky;bottom:0;z-index:8;display:flex;align-items:center;justify-content:space-between;gap:14px;margin:25px -27px -27px;padding:17px 27px max(17px,env(safe-area-inset-bottom));border-top:1px solid #e8edf2;background:#fffffffa;border-radius:0 0 18px 18px;backdrop-filter:blur(10px)}
+#view-avaria-cadastro .av-action-hint{color:#8390a0;font-size:11px;line-height:1.5}
+#view-avaria-cadastro .av-products-layout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(270px,.85fr);gap:30px;align-items:start}
+#view-avaria-cadastro .av-product-editor{min-width:0}
+#view-avaria-cadastro .av-product-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:19px 16px}
+#view-avaria-cadastro .av-full,#view-avaria-cadastro .av-reason-field{grid-column:1/-1}
+#view-avaria-cadastro .av-unit-field{grid-column:1/-1}
+#view-avaria-cadastro .av-unit-toggle{display:inline-flex;align-self:start;border:1px solid #dce3eb;border-radius:10px;overflow:hidden;background:#f8fafc;padding:3px;gap:3px}
+#view-avaria-cadastro .av-unit-toggle button{min-height:41px;min-width:115px;border:1px solid transparent;border-radius:7px;background:transparent;color:#77879a;font-size:12px;font-weight:700;padding:8px 18px;cursor:pointer}
+#view-avaria-cadastro .av-unit-toggle button.active,#view-avaria-cadastro .av-unit-toggle button[aria-pressed="true"]{background:#fff;border-color:#e3d5ce;color:var(--av-accent);box-shadow:0 1px 4px #182c4208}
+#view-avaria-cadastro .av-sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0!important}
+#view-avaria-cadastro .sales-product-picker{min-width:0}
+#view-avaria-cadastro .sales-product-options{z-index:25;max-width:100%}
+#view-avaria-cadastro .sales-product-options :is(button,strong,span){overflow-wrap:anywhere}
+#view-avaria-cadastro .sales-product-selected{font-size:11px;margin-top:0;color:var(--av-muted);line-height:1.5}
+#view-avaria-cadastro .sales-product-clear{min-width:36px;min-height:36px;right:6px}
+#view-avaria-cadastro .av-evidence{margin-top:23px;padding:17px;border:1px solid #e2e8ef;border-radius:12px;background:#fff}
+#view-avaria-cadastro .evidence-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:16px}
+#view-avaria-cadastro .evidence-card-head strong{display:block;font-size:13px;color:var(--av-navy)}
+#view-avaria-cadastro .evidence-card-head small{display:block;margin-top:5px;max-width:340px;color:var(--av-muted);font-size:11px;line-height:1.5}
+#view-avaria-cadastro .counter{font-size:10px;font-weight:700;background:#f0f4f8;color:#63778d;white-space:nowrap;padding:6px 9px;border-radius:8px}
+#view-avaria-cadastro .av-camera-button{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:5px;width:100%;min-height:110px;border:1px dashed #d9b5a6;border-radius:10px;background:#fffbf8;color:var(--av-accent);cursor:pointer}
+#view-avaria-cadastro .av-camera-button>span{font-size:28px;line-height:1}
+#view-avaria-cadastro .av-camera-button strong{font-size:13px}
+#view-avaria-cadastro .av-camera-button small{font-size:10px;font-weight:400;color:#a0867c}
+#view-avaria-cadastro .av-camera-button:hover{background:var(--av-soft);border-color:var(--av-accent)}
+#view-avaria-cadastro .photo-gallery{margin-top:12px;min-width:0}
+#view-avaria-cadastro .photo-gallery.empty{display:none}
+#view-avaria-cadastro .photo-thumb{min-width:0}
+#view-avaria-cadastro .photo-thumb img{max-width:100%}
+#view-avaria-cadastro .photo-thumb button{min-height:38px}
+#view-avaria-cadastro .gps-status{margin-top:11px;padding:9px 11px;border-radius:8px;background:#f7f9fb;font-size:10px;line-height:1.6;color:#8191a3}
+#view-avaria-cadastro .gps-status.ok{background:#edf7f1;color:#347651}
+#view-avaria-cadastro .gps-status.error{background:#fff2ed;color:#a65a3e}
+#view-avaria-cadastro .av-editor-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px;flex-wrap:wrap;margin-top:18px}
+#view-avaria-cadastro .av-request-summary{padding:21px;background:#f7f9fb;border:1px solid #e5ebf1;border-radius:13px;min-width:0}
+#view-avaria-cadastro .av-summary-head{display:flex;align-items:center;justify-content:space-between;gap:9px}
+#view-avaria-cadastro .av-summary-head h2{font-size:17px;margin-top:5px}
+#view-avaria-cadastro .av-summary-head .av-eyebrow{font-size:9px;color:#8998a7}
+#view-avaria-cadastro .av-request-summary>p{font-size:11px;margin:12px 0 18px}
+#view-avaria-cadastro #avItemList.empty-state{padding:29px 17px;border:1px dashed #dce3eb;border-radius:10px;background:#fff;color:#91a0af;font-size:12px;line-height:1.65;text-align:center}
+#view-avaria-cadastro :is(#avItemList,#avReviewItems){display:grid;gap:11px;min-width:0}
+#view-avaria-cadastro :is(.av-product-card,.item-row){display:block;min-width:0;padding:16px;background:#fff;border:1px solid #e1e7ed;border-radius:12px;box-shadow:0 2px 7px #182c4203}
+#view-avaria-cadastro :is(.av-product-card,.item-row) strong{font-size:12px;line-height:1.5;color:var(--av-navy);overflow-wrap:anywhere}
+#view-avaria-cadastro :is(.av-product-card,.item-row) small{display:block;color:var(--av-muted);font-size:10px;line-height:1.6}
+#view-avaria-cadastro .av-product-card-top{display:flex;align-items:flex-start;gap:12px;min-width:0}
+#view-avaria-cadastro .av-product-card-top>div{min-width:0;flex:1}
+#view-avaria-cadastro .av-product-quantity{display:inline-flex;flex:none;align-items:center;justify-content:center;max-width:110px;padding:6px 8px;border-radius:7px;background:#f9eee8;color:var(--av-accent);font-size:10px;font-weight:800;line-height:1.4;text-align:center}
+#view-avaria-cadastro .av-product-card-top img{width:40px;height:48px;object-fit:contain;flex:none}
+#view-avaria-cadastro .av-product-card-meta{display:flex;flex-wrap:wrap;gap:6px 15px;margin-top:10px;color:var(--av-muted);font-size:11px;line-height:1.5}
+#view-avaria-cadastro .av-product-card-actions,#view-avaria-cadastro .mini-actions{display:flex;gap:7px;margin-top:12px;border-top:1px solid #edf1f5;padding-top:9px;justify-content:flex-end}
+#view-avaria-cadastro .mini-btn{min-height:38px;border:1px solid #e0e6ed;padding:7px 11px;color:#51677e;font-size:10px;font-weight:700;border-radius:8px;background:#fff;cursor:pointer}
+#view-avaria-cadastro .mini-btn.danger{color:#b75d49;border-color:#f0dcd5}
+#view-avaria-cadastro .item-row .info{margin-bottom:9px}
+#view-avaria-cadastro .av-review-customer{padding:16px 18px;border:1px solid #e1e8ef;border-radius:11px;background:#f7f9fc;margin-bottom:19px;font-size:13px;line-height:1.6}
+#view-avaria-cadastro .av-review-customer strong{display:block;font-size:14px}
+#view-avaria-cadastro .av-review-customer small{display:block;color:var(--av-muted);font-size:11px}
+#view-avaria-cadastro .av-review-items{grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:25px}
+#view-avaria-cadastro .av-signature-heading{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:27px;padding-top:24px;border-top:1px solid #edf1f5}
+#view-avaria-cadastro .av-signature-heading h3{margin:0;font-size:16px;line-height:1.4;color:var(--av-navy)}
+#view-avaria-cadastro .av-signature-heading p{font-size:11px;margin:5px 0 13px}
+#view-avaria-cadastro .av-signature{position:relative;background:#fcfdfe;padding:10px 16px 30px;border:1px solid #dce5ee;border-radius:12px;overflow:hidden}
+#view-avaria-cadastro .av-signature canvas{display:block;width:100%;height:210px;background:#fff;border:0;border-radius:7px;touch-action:none}
+#view-avaria-cadastro .av-signature-label{position:absolute;left:20%;right:20%;bottom:13px;border-top:1px solid #d7e0e9;padding-top:7px;text-align:center;font-size:10px;color:#a0acb8;pointer-events:none}
+@media(min-width:1500px){#view-avaria-cadastro .av-products-layout{grid-template-columns:minmax(0,1.6fr) minmax(330px,.85fr);gap:38px}}
+@media(max-width:1100px){#view-avaria-cadastro .av-products-layout{grid-template-columns:minmax(0,1.2fr) minmax(250px,.8fr);gap:20px}#view-avaria-cadastro .av-step-button{padding:10px;gap:9px}#view-avaria-cadastro .av-step-button small{font-size:10px}#view-avaria-cadastro .av-request-summary{padding:16px}}
+@media(max-width:850px){#view-avaria-cadastro .av-products-layout{grid-template-columns:1fr}#view-avaria-cadastro .av-request-summary{margin-top:7px}#view-avaria-cadastro .avaria-client-summary{grid-template-columns:1fr 1fr}#view-avaria-cadastro .av-client-name{grid-column:1/-1}#view-avaria-cadastro .av-review-items{grid-template-columns:1fr}#view-avaria-cadastro .av-step-button{flex-direction:column;align-items:flex-start;gap:8px}#view-avaria-cadastro .av-step-button strong{font-size:12px}#view-avaria-cadastro .av-step-button small{display:none}}
+@media(max-width:600px){
+  #view-avaria-cadastro{max-width:100%;width:100%;padding-bottom:0}
+  #view-avaria-cadastro .av-entry-heading{gap:8px;margin:1px 0 17px;align-items:flex-start}
+  #view-avaria-cadastro .av-entry-heading h1{font-size:24px;margin:5px 0}
+  #view-avaria-cadastro .av-entry-heading p{font-size:11px;max-width:230px}
+  #view-avaria-cadastro .av-entry-heading>.av-text-button{font-size:10px;padding-inline:5px;margin-top:11px}
+  #view-avaria-cadastro .av-eyebrow{font-size:9px}
+  #view-avaria-cadastro .av-stepper{padding:5px;gap:3px;border-radius:13px}
+  #view-avaria-cadastro .av-step-button{min-height:94px;padding:10px 8px;gap:8px;border-radius:9px}
+  #view-avaria-cadastro .av-step-button strong{font-size:10px;line-height:1.4;max-width:96px}
+  #view-avaria-cadastro .av-step-number{width:27px;height:27px;font-size:11px}
+  #view-avaria-cadastro .av-step-progress{font-size:10px;margin:9px 2px 14px}
+  #view-avaria-cadastro .av-step-panel{padding:19px 15px;border-radius:14px}
+  #view-avaria-cadastro .av-panel-head{gap:10px;margin-bottom:21px;align-items:flex-start}
+  #view-avaria-cadastro .av-section-icon{width:36px;height:36px;border-radius:10px;font-size:21px}
+  #view-avaria-cadastro h2{font-size:17px}
+  #view-avaria-cadastro .av-panel-head p{font-size:11px;margin-top:4px}
+  #view-avaria-cadastro .av-customer-inputs{grid-template-columns:1fr;gap:17px}
+  #view-avaria-cadastro .avaria-client-summary{display:grid;gap:15px;padding:16px;grid-template-columns:1fr 1fr;margin:0}
+  #view-avaria-cadastro .avaria-client-summary>div{order:initial}
+  #view-avaria-cadastro .av-delivery-metadata{gap:11px;margin-top:21px;padding-top:19px}
+  #view-avaria-cadastro .av-delivery-metadata label{font-size:10px}
+  #view-avaria-cadastro .av-delivery-metadata input{font-size:11px;padding-inline:9px}
+  #view-avaria-cadastro .av-delivery-context{padding:12px;gap:9px}
+  #view-avaria-cadastro .av-delivery-context strong{font-size:12px}
+  #view-avaria-cadastro .av-delivery-context small{font-size:10px}
+  #view-avaria-cadastro .av-context-icon{display:none}
+  #view-avaria-cadastro .av-product-fields{gap:17px 12px}
+  #view-avaria-cadastro .field input,#view-avaria-cadastro .field select{font-size:16px;min-height:49px}
+  #view-avaria-cadastro .field label{font-size:11px}
+  #view-avaria-cadastro .sales-product-selected{font-size:10px}
+  #view-avaria-cadastro .av-evidence{padding:14px;margin-top:21px}
+  #view-avaria-cadastro .evidence-card-head{gap:8px}
+  #view-avaria-cadastro .evidence-card-head small{font-size:10px}
+  #view-avaria-cadastro .av-editor-actions .btn{width:100%}
+  #view-avaria-cadastro .av-step-actions{margin:23px -15px -19px;padding:13px 15px max(13px,env(safe-area-inset-bottom));gap:10px;border-radius:0 0 14px 14px}
+  #view-avaria-cadastro .av-step-actions .btn{padding:12px 15px;min-height:50px;flex:1;font-size:11px}
+  #view-avaria-cadastro .av-step-actions .av-text-button{padding:8px 4px;font-size:10px;flex:0 1 auto}
+  #view-avaria-cadastro .av-action-hint{display:none}
+  #view-avaria-cadastro .av-signature-heading{display:block;margin-top:22px;padding-top:21px}
+  #view-avaria-cadastro .av-signature-heading h3{font-size:15px}
+  #view-avaria-cadastro .av-signature-heading .av-text-button{padding:0 0 9px;min-height:30px;font-size:10px}
+  #view-avaria-cadastro .av-signature{padding:7px 7px 30px}
+  #view-avaria-cadastro .av-signature canvas{height:180px}
+  #view-avaria-cadastro .av-request-summary{padding:16px 13px}
+}
+
+#view-avaria-cadastro{scroll-margin-top:100px}
+#view-avaria-cadastro .av-review-customer>span{display:block;color:var(--av-muted);font-size:12px}
+#view-avaria-cadastro .av-offline-hint{text-align:center;font-size:11px;margin:14px 0 0}
+#view-avaria-cadastro .av-product-list.empty-state{padding:24px 16px;border:1px dashed var(--av-line);border-radius:10px;font-size:12px;color:var(--av-muted);background:#fff}
+
+
+@media(max-width:600px){#view-avaria-cadastro .av-step-actions .btn{font-size:13px}#view-avaria-cadastro .av-step-actions .av-text-button{font-size:12px}#view-avaria-cadastro .field label{font-size:12px}#view-avaria-cadastro .av-product-card strong{font-size:13px}#view-avaria-cadastro .av-product-card-meta{font-size:12px}}
+
