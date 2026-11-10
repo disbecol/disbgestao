@@ -237,7 +237,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.71-forms',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.72-forms',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -1783,6 +1783,7 @@ async function onAvariaPhoto(e){
   }finally{if(version===avariaEditorVersion)setAvariaPhotoBusy(false);}
 }
 function renderAvariaPhotoGallery(){
+  renderAvariaLotRequirement();
   const el=$('avPhotoGallery');
   const optional=$('avMotivo')?.value==='Não foi no caminhão';
   $('avFotoCounter').textContent=`${avPhotos.length}/5 fotos${optional?' • opcional':''}`;
@@ -1893,11 +1894,18 @@ function advanceAvariaProducts(){
   if(!avariaItems.length)return avariaFieldError('Informe ao menos um produto avariado.','avProduto');
   renderAvariaItems();return setAvariaStep(3);
 }
+function avariaLotOptional(reason){return reason==='Faltando na Grade'||reason==='Não foi no caminhão';}
+function renderAvariaLotRequirement(){
+  const optional=avariaLotOptional($('avMotivo').value),input=$('avLote');
+  input.required=!optional;input.setAttribute('aria-required',String(!optional));
+  input.placeholder=optional?'Opcional para este motivo':'Ex.: L2408';
+  if($('avLotLabel'))$('avLotLabel').textContent=optional?'Lote (opcional)':'Lote *';
+}
 function addAvariaItem(){
   if(avariaPhotoPending)return avariaFieldError('Aguarde a foto e a localização terminarem.','btnAvCamera');
   const selected=deliveryDamageSelectedProduct,product=deliveryDamageProductLabel(selected),lot=sanitizeLot($('avLote').value),quantity=num($('avQuantidade').value),unit=$('avUnidade').value,reason=$('avMotivo').value;
   if(!selected)return avariaFieldError('Selecione um produto válido da base.','avProduto');
-  if(!lot)return avariaFieldError('Informe o lote do produto.','avLote');
+  if(!lot&&!avariaLotOptional(reason))return avariaFieldError('Informe o lote do produto.','avLote');
   if(!Number.isSafeInteger(quantity)||quantity<=0)return avariaFieldError('Informe uma quantidade inteira maior que zero.','avQuantidade');
   if(!['UNIDADE','CAIXA'].includes(unit))return avariaFieldError('Selecione unidades ou caixas.','avUnidade');
   if(!['Quebrado','Embalagem amassada/rasgada','Faltando na Grade','Não foi no caminhão','Furada','Sem Tampa','Mal cheia'].includes(reason))return avariaFieldError('Selecione o motivo da avaria.','avMotivo');
@@ -1913,7 +1921,7 @@ function addAvariaItem(){
 function avariaItemFingerprint(item){return JSON.stringify([item.product_code,item.product_name,item.lot,item.quantity,item.unit,item.reason,(item.photos||[]).map(p=>p.id)]);}
 function avariaItemCard(item,review=false){
   const photoCount=(item.photos||[]).length,quantity=`${fmtNum(item.quantity)} ${item.unit==='CAIXA'?(item.quantity===1?'caixa':'caixas'):(item.quantity===1?'unidade':'unidades')}`;
-  return `<article class="av-product-card${review?' av-product-review':''}" data-id="${esc(item.id)}"><div class="av-product-card-top"><div><small>CÓDIGO ${esc(item.product_code||'—')}</small><strong>${esc(item.product_name||item.product)}</strong></div><span class="av-product-quantity">${esc(quantity)}</span></div><div class="av-product-card-meta"><span>Lote <b>${esc(item.lot)}</b></span>${review?`<span>${esc(item.reason)}</span>`:''}<span>${photoCount?`${photoCount} foto${photoCount===1?'':'s'} • GPS ✓`:'Foto dispensada pelo motivo'}</span></div><div class="av-product-card-actions"><button type="button" class="mini-btn" data-act="edit">Editar</button><button type="button" class="mini-btn danger" data-act="del" aria-label="Remover ${esc(item.product_name||item.product)}">Remover</button></div></article>`;
+  return `<article class="av-product-card${review?' av-product-review':''}" data-id="${esc(item.id)}"><div class="av-product-card-top"><div><small>CÓDIGO ${esc(item.product_code||'—')}</small><strong>${esc(item.product_name||item.product)}</strong></div><span class="av-product-quantity">${esc(quantity)}</span></div><div class="av-product-card-meta"><span>Lote <b>${esc(item.lot||'Não informado')}</b></span>${review?`<span>${esc(item.reason)}</span>`:''}<span>${photoCount?`${photoCount} foto${photoCount===1?'':'s'} • GPS ✓`:'Foto dispensada pelo motivo'}</span></div><div class="av-product-card-actions"><button type="button" class="mini-btn" data-act="edit">Editar</button><button type="button" class="mini-btn danger" data-act="del" aria-label="Remover ${esc(item.product_name||item.product)}">Remover</button></div></article>`;
 }
 function renderAvariaItems(){
   $('avItemCounter').textContent=`${avariaItems.length} produto${avariaItems.length===1?'':'s'}`;const el=$('avItemList');el.className=avariaItems.length?'av-product-list':'av-product-list empty-state';el.innerHTML=avariaItems.length?avariaItems.map(x=>avariaItemCard(x)).join(''):'Os produtos adicionados aparecerão aqui.';

@@ -32,7 +32,7 @@ const source=app.replace(/\}\)\(\);\s*$/,`window.damageEntryTest={
     if('step'in s)avariaStep=s.step;if('editing'in s)avariaEditingId=s.editing;
     if('unit'in s)activeUnit=s.unit;if('owner'in s)authUser={id:s.owner};
   },
-  validDate:validAvariaDate,add:addAvariaItem,nextProducts:advanceAvariaProducts,
+  validDate:validAvariaDate,lotRequirement:renderAvariaLotRequirement,add:addAvariaItem,nextProducts:advanceAvariaProducts,
   edit:editAvariaItem,clearEditor:clearAvariaItemEditor,clearRequest:clearAvariaRequest,
   step:setAvariaStep,photo:onAvariaPhoto,itemClick:onAvariaItemListClick,submit:e=>submitAvaria(e)
 };})();`);
@@ -198,4 +198,19 @@ test('local storage failure preserves products, photos, signature, and retry ava
   assert.equal(h.api.state().items[0].photos[0].blob,saved.photos[0].blob);assert.equal(h.api.state().signature,true);assert.equal(h.api.state().step,3);
   assert.equal(h.api.state().pending,false);assert.equal(h.el('btnSalvarAvaria').disabled,false);assert.deepEqual(h.revoked,[]);
   assert.match(h.hooks.toasts.at(-1).message,/Não foi possível salvar/);assert.equal(h.hooks.toasts.at(-1).type,'error');
+});
+
+
+test('lot is optional only for missing-on-rack and not-on-truck, without relaxing photo/GPS rules',async()=>{
+  for(const reason of ['Faltando na Grade','Não foi no caminhão']){
+    const h=harness();h.fill({avLote:'',avMotivo:reason,photos:reason==='Não foi no caminhão'?[]:[photo()]});h.api.lotRequirement();
+    assert.equal(h.el('avLote').required,false);assert.equal(h.el('avLote').attributes['aria-required'],'false');assert.equal(h.el('avLotLabel').textContent,'Lote (opcional)');
+    assert.equal(h.api.nextProducts(),true);assert.equal(h.api.state().items[0].lot,'');assert.match(h.el('avReviewItems').innerHTML,/Não informado/);
+    h.api.seed({signature:true});await h.api.submit(h.event());assert.equal(h.hooks.queueCalls.length,1);assert.equal(h.hooks.queueCalls[0][1].items[0].lot,'');
+  }
+  for(const reason of ['Quebrado','Embalagem amassada/rasgada','Furada','Sem Tampa','Mal cheia','']){
+    const h=harness();h.fill({avLote:'',avMotivo:reason});h.api.lotRequirement();assert.equal(h.el('avLote').required,true);assert.equal(h.el('avLotLabel').textContent,'Lote *');assert.equal(h.api.add(),false);assert.equal(h.api.state().items.length,0);
+  }
+  const missing=harness();missing.fill({avLote:'',avMotivo:'Faltando na Grade',photos:[]});assert.equal(missing.api.add(),false);assert.match(missing.hooks.toasts.at(-1).message,/foto/i);
+  const retained=harness();retained.fill({avLote:'L123',avMotivo:'Não foi no caminhão'});retained.api.lotRequirement();retained.el('avMotivo').value='Quebrado';retained.api.lotRequirement();assert.equal(retained.el('avLote').required,true);assert.equal(retained.el('avLote').value,'L123');assert.equal(retained.api.add(),true);
 });
