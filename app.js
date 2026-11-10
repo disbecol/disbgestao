@@ -237,7 +237,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.72-forms',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.73-forms',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -649,6 +649,7 @@ function bindBaseEvents(){
   $('avMySearch')?.addEventListener('input',renderDeliveryDamageMy);
   $('avMyStatus')?.addEventListener('change',renderDeliveryDamageMy);
   $('btnAvMyRefresh')?.addEventListener('click',()=>loadDeliveryDamageMy());
+  $('avMyCards')?.addEventListener('click',onDeliveryDamageMyReceipt);
   setupSignatureCanvas();
 
   // Avarias de Vendas
@@ -5881,23 +5882,45 @@ async function openWhatsappReceipt(phone,ctx){
 function damageReceiptSendError(e){
   const code=String(e?.code||e?.message||'');
   if(/FunctionsFetchError|Failed to send a request to the Edge Function|Function not found/i.test(code))return 'O serviço de envio da empresa ainda não está disponível. Solicite a ativação ao administrador.';
-  const map={PDF_SIGNATURE_FAILED:'Não foi possível carregar a assinatura do cliente. Nenhuma mensagem foi enviada.',RECEIPT_SIGNATURE_MISSING:'A assinatura do cliente é obrigatória no comprovante.',RECEIPT_SIGNATURE_INVALID:'Não foi possível ler a assinatura registrada. Nenhuma mensagem foi enviada.',PDF_REGISTRY_FAILED:'Não foi possível registrar a validação do PDF. Nenhuma mensagem foi enviada.',RECEIPT_LAYOUT_TOO_LARGE:'Todos os itens não cabem em uma folha A4 legível com a assinatura. Nenhuma mensagem foi enviada. Solicite ajuda ao administrador.',WHATSAPP_NOT_CONFIGURED:'O WhatsApp da empresa ainda não foi configurado. Solicite a ativação ao administrador.',RECEIPT_NOT_FOUND:'Não foi possível localizar esta avaria. Atualize os dados e tente novamente.',RECEIPT_CANCELLED:'Esta avaria foi cancelada e não pode gerar comprovante.',CONTACT_NOT_FOUND:'Este contato não pertence ao cliente da avaria.',CONTACT_NOT_ELIGIBLE:'Este contato ainda não tem consentimento e maioridade confirmados para o envio pela empresa.',RECEIPT_TOO_LONG:'O comprovante excede o limite do modelo do WhatsApp. Solicite ajuda ao administrador.',SEND_IN_PROGRESS:'O envio já está em processamento. Aguarde e consulte o histórico.',SEND_STATUS_UNKNOWN:'Não foi possível confirmar o envio anterior. Solicite verificação antes de reenviar.',META_SEND_FAILED:'O WhatsApp da empresa recusou o envio. Solicite verificação ao administrador.',SEND_LOG_FAILED:'Não foi possível registrar o envio. Tente novamente.',UNAUTHORIZED:'Sua sessão expirou. Entre novamente.'};
+  const map={RECEIPT_CONTEXT_CHANGED:'A conta ou a unidade mudou. Abra o comprovante novamente.',OPERATION_ID_CONFLICT:'Esta tentativa de envio não corresponde ao comprovante. Abra-o novamente.',RESEND_NOT_AVAILABLE:'O envio anterior não está disponível para reenvio. Atualize os dados.',CONTACT_CHANGED:'O contato foi alterado. Confira o destinatário e tente novamente.',PDF_SIGNATURE_FAILED:'Não foi possível carregar a assinatura do cliente. Nenhuma mensagem foi enviada.',RECEIPT_SIGNATURE_MISSING:'A assinatura do cliente é obrigatória no comprovante.',RECEIPT_SIGNATURE_INVALID:'Não foi possível ler a assinatura registrada. Nenhuma mensagem foi enviada.',PDF_REGISTRY_FAILED:'Não foi possível registrar a validação do PDF. Nenhuma mensagem foi enviada.',RECEIPT_LAYOUT_TOO_LARGE:'Todos os itens não cabem em uma folha A4 legível com a assinatura. Nenhuma mensagem foi enviada. Solicite ajuda ao administrador.',WHATSAPP_NOT_CONFIGURED:'O WhatsApp da empresa ainda não foi configurado. Solicite a ativação ao administrador.',RECEIPT_NOT_FOUND:'Não foi possível localizar esta avaria. Atualize os dados e tente novamente.',RECEIPT_CANCELLED:'Esta avaria foi cancelada e não pode gerar comprovante.',CONTACT_NOT_FOUND:'Este contato não pertence ao cliente da avaria.',CONTACT_NOT_ELIGIBLE:'Este contato ainda não tem consentimento e maioridade confirmados para o envio pela empresa.',RECEIPT_TOO_LONG:'O comprovante excede o limite do modelo do WhatsApp. Solicite ajuda ao administrador.',SEND_IN_PROGRESS:'O envio já está em processamento. Aguarde e consulte o histórico.',SEND_STATUS_UNKNOWN:'Não foi possível confirmar o envio anterior. Solicite verificação antes de reenviar.',META_SEND_FAILED:'O WhatsApp da empresa recusou o envio. Solicite verificação ao administrador.',SEND_LOG_FAILED:'Não foi possível registrar o envio. Tente novamente.',UNAUTHORIZED:'Sua sessão expirou. Entre novamente.'};
   const key=Object.keys(map).find(k=>code.includes(k));return key?map[key]:humanError(e);
 }
 async function sendDeliveryDamageReceipt(contact,ctx,button){
   if(!ctx.request_id)throw new Error('A avaria ainda não foi sincronizada. Aguarde a conexão.');
   if(!navigator.onLine)throw new Error('Conecte-se à internet para enviar pelo WhatsApp da empresa.');
+  const owner=authUser?.id,unit=activeUnit;
+  const assertScope=()=>{if(owner!==authUser?.id||unit!==activeUnit||(ctx.unit&&ctx.unit!==unit))throw new Error('RECEIPT_CONTEXT_CHANGED');};
+  assertScope();
+  const pending=ctx.receiptSendingContacts||(ctx.receiptSendingContacts=new Set());
+  if(pending.has(contact.id))throw new Error('SEND_IN_PROGRESS');pending.add(contact.id);
   if(button){button.disabled=true;button.textContent='Enviando…';}
   try{
     const {data:{session},error:sessionError}=await sb.auth.getSession();
     if(sessionError||!session?.access_token)throw new Error('UNAUTHORIZED');
-    const {data,error}=await sb.functions.invoke('send-damage-receipt',{body:{request_id:ctx.request_id,contact_id:contact.id},headers:{Authorization:`Bearer ${session.access_token}`}});
-    if(error){let detail=null;try{detail=await error.context?.json();}catch(_e){}throw new Error(detail?.error||error.message||'META_SEND_FAILED');}
-    if(data?.error)throw new Error(data.error);
-    if(!data?.accepted)throw new Error('META_SEND_FAILED');
+    assertScope();
+    const operations=ctx.receiptResendOperations||(ctx.receiptResendOperations={});
+    const invoke=async operationId=>{
+      assertScope();
+      const body={request_id:ctx.request_id,contact_id:contact.id};
+      if(operationId){body.resend=true;body.operation_id=operationId;}
+      const {data,error}=await sb.functions.invoke('send-damage-receipt',{body,headers:{Authorization:`Bearer ${session.access_token}`}});
+      if(error){let detail=null;try{detail=await error.context?.json();}catch(_e){}throw new Error(detail?.error||error.message||'META_SEND_FAILED');}
+      if(data?.error)throw new Error(data.error);if(!data?.accepted)throw new Error('META_SEND_FAILED');return data;
+    };
+    let operationId=operations[contact.id],data=await invoke(operationId);
+    if(data.already_sent&&ctx.allow_resend&&!operationId){
+      if(!confirm(`Este contato já teve um comprovante aceito pelo WhatsApp.\n\nReenviar para ${contact.label||formatWhatsappPhone(contact.phone_normalized)}? Um novo envio pode gerar uma nova cobrança de mensagem.`)){
+        if(button){button.disabled=false;button.textContent='Reenviar comprovante';}return {...data,resend_cancelled:true};
+      }
+      operationId=operations[contact.id]=uuid();data=await invoke(operationId);
+    }
+    delete operations[contact.id];
     if(button){button.textContent=data.already_sent?'Aceito anteriormente':'Aceito pelo WhatsApp';button.dataset.receiptAccepted='1';}
     return data;
-  }catch(e){if(button){button.disabled=false;button.textContent='Enviar comprovante';}throw e;}
+  }catch(e){
+    if(/META_SEND_FAILED|SEND_OPERATION_REJECTED/.test(String(e?.message)))delete ctx.receiptResendOperations?.[contact.id];
+    if(button){button.disabled=false;button.textContent='Enviar comprovante';}throw e;
+  }finally{pending.delete(contact.id);}
 }
 async function sendAllDeliveryDamageReceipts(contacts,ctx,button){
   if(button){button.disabled=true;button.textContent='Enviando…';}
@@ -5920,10 +5943,15 @@ async function saveCustomerContactForReceipt(ctx,phone,label=''){
   }catch(e){toast(humanCustomerContactError(e),'error');}
 }
 async function openDeliveryDamageReceipt(ctx){
-  try{ctx=await currentDeliveryDamageReceiptContext(ctx);}catch(error){toast(damageReceiptSendError(error),'error');return;}
-  deliveryDamageReceiptContext=ctx;
+  const owner=authUser?.id,unit=activeUnit;
+  const current=()=>owner===authUser?.id&&unit===activeUnit&&(!ctx.unit||ctx.unit===unit);
+  if(!current())return;
+  try{ctx=await currentDeliveryDamageReceiptContext(ctx);}catch(error){if(current())toast(damageReceiptSendError(error),'error');return;}
+  if(!current())return;
   let contacts=[];let contactError='';
   try{contacts=await getCustomerContacts(ctx.customer.id,ctx.customer.code);}catch(e){contactError=humanCustomerContactError(e);}
+  if(!current())return;
+  deliveryDamageReceiptContext=ctx;
   const last=contacts.reduce((max,x)=>!max||String(x.updated_at)>String(max)?x.updated_at:max,'');
   const eligibleContacts=contacts.filter(c=>c.whatsapp_receipt_eligible===true&&c.whatsapp_receipt_verified_at);
   const contactHtml=contacts.length?contacts.map((c,i)=>{const eligible=eligibleContacts.some(x=>x.id===c.id),pendingDb=c.whatsapp_receipt_schema_missing===true;return `<div class="receipt-contact-row"><div><strong>${esc(c.label||`Contato ${i+1}`)}</strong><span>${esc(formatWhatsappPhone(c.phone_normalized))}</span>${eligible?'':`<small>${pendingDb?'Atualização do envio pela empresa pendente.':'Peça o aceite à pessoa que usa este número antes do envio pela empresa.'}</small>`}</div>${eligible?`<button type="button" class="btn whatsapp-btn" data-send-receipt-contact="${esc(c.id)}">Enviar comprovante</button><button type="button" class="btn secondary" data-manual-receipt-phone="${esc(c.phone_normalized)}">Abrir envio manual pelo meu WhatsApp</button>`:pendingDb?`<button type="button" class="btn secondary" data-manual-receipt-phone="${esc(c.phone_normalized)}">Abrir envio manual pelo meu WhatsApp</button>`:`<button type="button" class="btn whatsapp-btn" data-capture-receipt-optin="${esc(c.id)}">Registrar aceite na entrega</button>`}</div>`;}).join(''):`<div class="empty-state">Nenhum WhatsApp cadastrado para este cliente.</div>`;
@@ -5931,7 +5959,7 @@ async function openDeliveryDamageReceipt(ctx){
   const body=`<div class="receipt-proof-card"><div class="receipt-proof-head"><div><small>COMPROVANTE DE AVARIA</small><strong>PDV ${esc(ctx.customer.code)} • ${esc(ctx.customer.name)}</strong><span>Mapa ${esc(ctx.map_number)} • ${fmtDate(ctx.date)}</span></div><span class="status approved">REGISTRADA</span></div><div class="receipt-products">${(ctx.items||[]).map(x=>`<div><strong>${esc(x.product_name||x.product||'Produto')}</strong><span>${fmtNum(x.quantity)} ${x.unit==='CAIXA'?'Caixa':'Unidade'}${num(x.quantity)===1?'':'s'}</span></div>`).join('')}</div><p class="receipt-observation"><strong>Observação:</strong> O produto avariado será enviado junto ao próximo pedido realizado pelo cliente.</p></div><div class="section-title">WhatsApp do cliente</div>${contactError?`<div class="notice error">${esc(contactError)}</div>`:''}${sendAll}<div class="receipt-contact-list">${contactHtml}</div><div class="contact-last-update">${last?`Atualizado por último em ${fmtDate(last)}`:'Ainda sem atualização de contato.'}</div><div class="manual-contact-card"><strong>Novo contato</strong><small>Se o número não estiver na lista, digite abaixo. Ele será salvo automaticamente para este cliente.</small><div class="grid grid-3"><div class="field span-2"><label>WhatsApp</label><input id="deliveryReceiptNewPhone" inputmode="tel" placeholder="Ex.: (84) 99999-9999"></div><div class="field"><label>Identificação</label><input id="deliveryReceiptNewLabel" placeholder="Ex.: Recebedor"></div></div><div class="actions right"><button type="button" id="btnDeliveryReceiptAddPhone" class="btn secondary">Salvar novo contato</button></div></div>`;
   openModal('Avaria registrada',`Comprovante para ${ctx.customer.name}`,body,[{label:'Fechar',class:'secondary',onClick:closeModal}]);
   $('btnDeliveryReceiptSendAll')?.addEventListener('click',e=>sendAllDeliveryDamageReceipts(eligibleContacts,ctx,e.currentTarget));
-  $('modalBody')?.querySelectorAll('[data-send-receipt-contact]').forEach(b=>b.addEventListener('click',async()=>{try{const result=await sendDeliveryDamageReceipt(contacts.find(c=>c.id===b.dataset.sendReceiptContact),ctx,b);toast(result.already_sent?'Comprovante já aceito anteriormente.':'Comprovante aceito pelo WhatsApp da empresa.','success');}catch(e){toast(damageReceiptSendError(e),'error');}}));
+  $('modalBody')?.querySelectorAll('[data-send-receipt-contact]').forEach(b=>b.addEventListener('click',async()=>{try{const result=await sendDeliveryDamageReceipt(contacts.find(c=>c.id===b.dataset.sendReceiptContact),ctx,b);toast(result.resend_cancelled?'Reenvio cancelado.':result.already_sent?'Comprovante já aceito anteriormente.':'Comprovante aceito pelo WhatsApp da empresa.',result.resend_cancelled?'':'success');}catch(e){toast(damageReceiptSendError(e),'error');}}));
   $('modalBody')?.querySelectorAll('[data-capture-receipt-optin]').forEach(b=>b.addEventListener('click',()=>openDeliveryDamageReceiptOptin(contacts.find(c=>c.id===b.dataset.captureReceiptOptin),ctx)));
   $('modalBody')?.querySelectorAll('[data-manual-receipt-phone]').forEach(b=>b.addEventListener('click',()=>openWhatsappReceipt(b.dataset.manualReceiptPhone,ctx)));
   $('btnDeliveryReceiptAddPhone')?.addEventListener('click',()=>saveCustomerContactForReceipt(ctx,$('deliveryReceiptNewPhone')?.value||'',$('deliveryReceiptNewLabel')?.value||''));
@@ -5939,12 +5967,33 @@ async function openDeliveryDamageReceipt(ctx){
 function openDeliveryDamageReceiptOptin(contact,ctx){
   if(!contact||!ctx.request_id)return toast('A avaria ainda não foi sincronizada. Aguarde a conexão.','error');
   const body=`<div class="notice"><strong>Leia para a pessoa que usa este número:</strong> “Você autoriza a Disbecol a enviar comprovantes de avaria para o seu WhatsApp ${esc(formatWhatsappPhone(contact.phone_normalized))}? Você pode cancelar esse recebimento quando quiser.”</div><div class="field"><label for="receiptOptinRecipient">Nome de quem respondeu</label><input id="receiptOptinRecipient" maxlength="120" autocomplete="name" placeholder="Nome do destinatário"></div><div class="field"><label class="compact-check"><input type="checkbox" id="receiptOptinConsent"> A pessoa confirmou que usa este número e aceitou receber comprovantes da Disbecol.</label></div><div class="field"><label class="compact-check"><input type="checkbox" id="receiptOptinAdult"> Confirmei que essa pessoa tem 18 anos ou mais.</label></div><div class="field"><label class="compact-check"><input type="checkbox" id="receiptOptinBrazil"> Confirmei que essa pessoa está no Brasil.</label></div><div class="field"><label for="receiptOptinAgeEvidence">Como a maioridade foi confirmada</label><input id="receiptOptinAgeEvidence" maxlength="120" placeholder="Ex.: documento conferido ou titular adulto do cadastro"></div><small>O sistema registra o usuário e a data desta confirmação. Não informe CPF nem data de nascimento.</small>`;
-  openModal('Aceite para comprovantes',formatWhatsappPhone(contact.phone_normalized),body,[{label:'Voltar',class:'secondary',onClick:()=>openDeliveryDamageReceipt(ctx)},{label:'Registrar aceite',class:'primary',onClick:async()=>{
-    const name=String($('receiptOptinRecipient')?.value||'').trim(),ageEvidence=String($('receiptOptinAgeEvidence')?.value||'').trim();
-    if(name.length<2||!ageEvidence)return toast('Informe o nome de quem respondeu e como a maioridade foi confirmada.','error');
-    if(!$('receiptOptinConsent')?.checked||!$('receiptOptinAdult')?.checked||!$('receiptOptinBrazil')?.checked)return toast('Confirme o aceite, a maioridade e o país da pessoa.','error');
-    try{const {error}=await sb.rpc('capture_customer_contact_receipt_optin',{p_request_id:ctx.request_id,p_contact_id:contact.id,p_recipient_name:name,p_age_evidence:ageEvidence,p_consent_confirmed:true,p_adult_confirmed:true,p_brazil_confirmed:true});if(error)throw error;toast('Aceite registrado para este número.','success');await openDeliveryDamageReceipt(ctx);}catch(e){toast(humanCustomerContactError(e),'error');}
-  }}]);
+  openModal('Aceite para comprovantes',formatWhatsappPhone(contact.phone_normalized),body,[{label:'Voltar',class:'secondary',onClick:()=>openDeliveryDamageReceipt(ctx)},{label:'Aceitar termos e enviar comprovante',class:'primary',onClick:event=>captureDeliveryReceiptOptinAndSend(contact,ctx,event?.currentTarget)}]);
+}
+
+async function captureDeliveryReceiptOptinAndSend(contact,ctx,button){
+  if(button?.disabled)return;
+  const name=String($('receiptOptinRecipient')?.value||'').trim(),ageEvidence=String($('receiptOptinAgeEvidence')?.value||'').trim();
+  if(name.length<2||!ageEvidence)return toast('Informe o nome de quem respondeu e como a maioridade foi confirmada.','error');
+  if(!$('receiptOptinConsent')?.checked||!$('receiptOptinAdult')?.checked||!$('receiptOptinBrazil')?.checked)return toast('Confirme o aceite, a maioridade e o país da pessoa.','error');
+  if(!navigator.onLine)return toast('Conecte-se à internet para registrar o aceite e enviar o comprovante.','error');
+  const owner=authUser?.id,unit=activeUnit;let saved=false;
+  if(button){button.disabled=true;button.textContent='Registrando aceite e enviando…';}
+  try{
+    const {error}=await sb.rpc('capture_customer_contact_receipt_optin',{p_request_id:ctx.request_id,p_contact_id:contact.id,p_recipient_name:name,p_age_evidence:ageEvidence,p_consent_confirmed:true,p_adult_confirmed:true,p_brazil_confirmed:true});if(error)throw error;saved=true;
+    const contacts=await getCustomerContacts(ctx.customer.id,ctx.customer.code),fresh=contacts.find(c=>c.id===contact.id);
+    if(owner!==authUser?.id||unit!==activeUnit)return;
+    if(!fresh?.whatsapp_receipt_eligible||!fresh.whatsapp_receipt_verified_at)throw new Error('CONTACT_NOT_ELIGIBLE');
+    const result=await sendDeliveryDamageReceipt(fresh,ctx,button);
+    if(owner!==authUser?.id||unit!==activeUnit)return;
+    await openDeliveryDamageReceipt(ctx);
+    const sentButton=$('modalBody')?.querySelector(`[data-send-receipt-contact="${contact.id}"]`);
+    if(sentButton&&!result.resend_cancelled){sentButton.disabled=true;sentButton.textContent=result.already_sent?'Aceito anteriormente':'Aceito pelo WhatsApp';sentButton.dataset.receiptAccepted='1';}
+    toast(result.resend_cancelled?'Aceite registrado. Reenvio cancelado.':'Aceite registrado e comprovante aceito pelo WhatsApp da empresa.',result.resend_cancelled?'':'success');
+  }catch(error){
+    if(owner!==authUser?.id||unit!==activeUnit)return;
+    if(saved){await openDeliveryDamageReceipt(ctx);toast(`Aceite registrado, mas o comprovante não foi enviado. ${damageReceiptSendError(error)}`,'error');}
+    else toast(humanCustomerContactError(error),'error');
+  }finally{if(button){button.disabled=false;button.textContent='Aceitar termos e enviar comprovante';}}
 }
 
 async function submitAvaria(e){
@@ -7788,9 +7837,27 @@ function renderDeliveryDamageMy(){
   box.innerHTML=rows.length?rows.map(r=>{
     const items=[...(r.damage_items||[])].sort((a,b)=>Number(a.item_order||0)-Number(b.item_order||0));
     const products=items.map((i,index)=>`<section class="delivery-my-product"><div class="delivery-my-product-main">${damageReviewProductIdentity(i,index)}<div class="delivery-my-product-meta"><span><small>QUANTIDADE</small><strong>${fmtNum(i.quantity)} ${esc(i.quantity_unit||'')}</strong></span><span><small>LOTE</small><strong>${esc(i.lot||'—')}</strong></span><span><small>MOTIVO</small><strong>${esc(i.reason||'—')}</strong></span></div></div><div class="delivery-my-product-status"><small>STATUS DO PRODUTO</small>${statusBadge(i.status)}</div></section>`).join('');
-    return `<article class="delivery-my-card"><header class="delivery-my-card-head"><div><small>${fmtDate(r.occurrence_date)}</small><h2>PDV ${esc(r.customer_code||'—')} · ${esc(r.customer_name||'—')}</h2><span>${esc(r.city||'—')} · Registrada em ${fmtDateTime(r.created_at)}</span></div><span class="delivery-my-map">Mapa ${esc(r.map_number||'—')}</span></header><div class="delivery-my-card-body"><div class="delivery-my-card-label">${items.length} produto${items.length===1?'':'s'} nesta avaria</div><div class="delivery-my-products">${products||'<div class="empty-state">Nenhum produto disponível.</div>'}</div></div></article>`;
+    return `<article class="delivery-my-card"><header class="delivery-my-card-head"><div><small>${fmtDate(r.occurrence_date)}</small><h2>PDV ${esc(r.customer_code||'—')} · ${esc(r.customer_name||'—')}</h2><span>${esc(r.city||'—')} · Registrada em ${fmtDateTime(r.created_at)}</span></div><span class="delivery-my-map">Mapa ${esc(r.map_number||'—')}</span></header><div class="delivery-my-card-body"><div class="delivery-my-card-label">${items.length} produto${items.length===1?'':'s'} nesta avaria</div><div class="delivery-my-products">${products||'<div class="empty-state">Nenhum produto disponível.</div>'}</div><div class="delivery-my-card-actions"><button type="button" class="btn secondary" data-my-damage-receipt="${esc(r.id)}">Reenviar comprovante de avaria</button></div></div></article>`;
   }).join(''):'<div class="empty-state">Nenhuma avaria encontrada para os filtros selecionados.</div>';
   hydrateSalesDamageProductImages(box);
+}
+async function onDeliveryDamageMyReceipt(event){
+  const button=event.target.closest('[data-my-damage-receipt]');if(!button)return;event.preventDefault();
+  if(button.disabled)return;
+  if(!navigator.onLine)return toast('Conecte-se à internet para enviar o comprovante.','error');
+  if(!hasPerm('DELIVERY_DAMAGE_CREATE'))return toast('Seu usuário não possui acesso a este envio.','error');
+  const owner=authUser?.id,unit=activeUnit,request=deliveryDamageMyRequests.find(r=>r.id===button.dataset.myDamageReceipt&&r.unit===unit&&r.created_by===owner);
+  if(!request)return toast('Atualize Minhas avarias para localizar este registro.','error');
+  button.disabled=true;button.textContent='Abrindo comprovante…';
+  try{
+    const customers=await fetchCustomersByCode(request.customer_code);
+    let matches=customers.filter(c=>norm(c.name)===norm(request.customer_name));
+    if(matches.length>1&&request.city)matches=matches.filter(c=>norm(c.city)===norm(request.city));
+    if(owner!==authUser?.id||unit!==activeUnit)return;
+    if(matches.length!==1||!matches[0].id)throw new Error('Não foi possível identificar o cadastro exato deste cliente. Atualize a base ou peça à administração para conferir o PDV.');
+    await openDeliveryDamageReceipt({request_id:request.id,unit,allow_resend:true,customer:{...matches[0]},date:request.occurrence_date,map_number:request.map_number});
+  }catch(error){toast(damageReceiptSendError(error),'error');}
+  finally{button.disabled=false;button.textContent='Reenviar comprovante de avaria';}
 }
 loadAdminAvarias = async function(silent=false){
   if(!hasAnyPerm('DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST'))return;

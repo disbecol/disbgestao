@@ -8,18 +8,21 @@ import {PGlite} from '@electric-sql/pglite';
 test('o formulário aceita RG e CNH e continua exigindo descrição e confirmações',async()=>{
   const app=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
   const source=app.replace(/\}\)\(\);\s*$/,`window.consentTest={
-    setup(client,modal){sb=client;openModal=modal;toast=()=>{};openDeliveryDamageReceipt=async()=>{};},
+    setup(client,modal){sb=client;openModal=modal;toast=()=>{};openDeliveryDamageReceipt=async()=>{};
+      authUser={id:'driver'};activeUnit='Matriz Caicó';
+      getCustomerContacts=async()=>[{id:'contact',whatsapp_receipt_eligible:true,whatsapp_receipt_verified_at:'2026-11-10'}];
+      sendDeliveryDamageReceipt=async()=>({accepted:true});},
     open:openDeliveryDamageReceiptOptin
   };})();`);
   assert.notEqual(source,app);
   const elements=new Map(),calls=[];let actions;
   const window={addEventListener(){}};
-  vm.runInNewContext(source,{window,document:{addEventListener(){},getElementById:id=>elements.get(id)},navigator:{},setInterval(){},setTimeout(){}},{timeout:3000});
+  vm.runInNewContext(source,{window,document:{addEventListener(){},getElementById:id=>elements.get(id)},navigator:{onLine:true},setInterval(){},setTimeout(){}},{timeout:3000});
   window.consentTest.setup({rpc:async(name,args)=>{calls.push({name,args});return {error:null};}},(_t,_s,_b,a)=>{actions=a;});
   elements.set('receiptOptinRecipient',{value:'Cliente Exemplo'});
   for(const id of ['receiptOptinConsent','receiptOptinAdult','receiptOptinBrazil'])elements.set(id,{checked:true});
-  window.consentTest.open({id:'contact',phone_normalized:'5584999999999'},{request_id:'damage'});
-  const save=actions.find(x=>x.label==='Registrar aceite').onClick;
+  window.consentTest.open({id:'contact',phone_normalized:'5584999999999'},{request_id:'damage',customer:{id:'customer',code:'371'}});
+  const save=actions.find(x=>x.label==='Aceitar termos e enviar comprovante').onClick;
   for(const value of ['RG','CNH','A']){
     elements.set('receiptOptinAgeEvidence',{value});await save();
     assert.equal(calls.at(-1).args.p_age_evidence,value);

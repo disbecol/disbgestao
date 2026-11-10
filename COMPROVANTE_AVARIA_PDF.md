@@ -168,3 +168,43 @@ O histórico de tentativas e a trava de duplicidade permanecem em
 `damage_receipt_sends`: falhas anteriores à chamada de mensagem ficam rejeitadas;
 resposta incerta após iniciar envio fica UNKNOWN para bloquear duplicidade.
 Não há webhook de confirmação de entrega nesta mudança.
+
+
+## Reenvio confirmado e aceite com envio — 10/11/2026
+
+Versão 1.7.73: cada registro em Minhas avarias possui a ação Reenviar comprovante
+de avaria. O cadastro do cliente é resolvido por código, nome e cidade, mantendo
+a autoria e a unidade. Abrir o comprovante não dispara mensagens.
+
+O aceite usa o botão Aceitar termos e enviar comprovante. A ação registra o
+consentimento, relê a elegibilidade do contato e solicita o envio autenticado.
+Se o aceite for salvo e o envio falhar, o contato continua autorizado e a falha
+é apresentada separadamente, permitindo retomar o envio.
+
+Um contato com envio já aceito exige uma confirmação de nova mensagem/cobrança.
+O navegador mantém o mesmo operation_id ao repetir a mesma tentativa após uma
+resposta perdida. O servidor reserva atomicamente a operação; PROCESSING/UNKNOWN
+continuam bloqueando concorrência. Um reenvio deliberado cria outro registro
+com resend_of, outro PDF e outro DGB, preservando todos os arquivos, hashes e
+aceites anteriores. Clientes antigos continuam protegidos contra duplicidade.
+
+A migração 86 foi aplicada ao projeto jrsjbcdahqpcgcvzdtfb antes da publicação
+da função. Oito consultas de verificação retornaram true, incluindo ausência
+de execução direta por anon/authenticated e manutenção do RLS. A função foi
+recarregada no editor e o fonte publicado coincidiu com o arquivo canônico.
+
+SHA-256 dos fontes publicados:
+
+- index.ts: eeeeb9991fb97344401a889f26cef54c7cf41f61948cc49881c9468ac5b9e7a7
+- receipt-pdf.mjs (inalterado): 542d74deb174b0e2e982984dfce3642af336dca8b691fb37931821a14c91cf3e
+- migração 86: 36d70fe04ba78f0b2022d9c89429dee5330f97ced87d5be84b5c7553b16f3f4c
+
+67 testes passaram, incluindo PostgreSQL/PGlite real para a reserva, histórico,
+replays, concorrência, consentimento, troca de conta/unidade e capturas tardias.
+A interface foi conferida com dados fictícios e rede simulada. Nenhuma mensagem
+real ou invocação da função foi executada pelo agente nesta atualização.
+Tokens, modelo da Meta e permissões de acesso aos dados não foram alterados.
+
+Evidências locais: tmp/receipt-resend-migration86-checks.png,
+tmp/receipt-resend-service-verified.png, tmp/minhas-avarias-reenviar.png e
+tmp/aceitar-termos-e-enviar.png.

@@ -1315,3 +1315,5 @@ button[data-sales-delivered]:hover{
 .invoice-lots-summary{margin-top:12px;padding:11px 13px;border:1px solid #d8e5f4;border-radius:10px;background:#f1f7ff;color:#28537a;font-size:12px;font-weight:700}
 .invoice-lots-summary.over-limit{background:#fff1f1;color:#b62424;border-color:#efcaca}
 @media(max-width:650px){.invoice-lot-entry .grid{grid-template-columns:1fr}.invoice-lot-entry{padding:12px}#invoiceLotsRows{max-height:48vh}}
+
+#view-avaria-minhas .delivery-my-card-actions{display:flex;justify-content:flex-end;margin-top:14px;padding-top:14px;border-top:1px solid #d6e5ef;gap:10px}#view-avaria-minhas .delivery-my-card-actions .btn{min-height:44px}@media(max-width:650px){#view-avaria-minhas .delivery-my-card-actions .btn{width:100%;white-space:normal}}

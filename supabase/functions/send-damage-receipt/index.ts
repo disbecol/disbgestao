@@ -49,7 +49,15 @@ Deno.serve(async (req) => {
   try { input = await req.json(); } catch { return json({ error: 'INVALID_BODY' }, 400); }
   const requestId = String(input?.request_id || '');
   const contactId = String(input?.contact_id || '');
-  if (!uuid.test(requestId) || !uuid.test(contactId)) return json({ error: 'INVALID_BODY' }, 400);
+  const resend = input?.resend === true;
+  const suppliedOperationId = input?.operation_id;
+  // Reenviar um aceite pode gerar nova cobrança e exige confirmação explícita.
+  // Um UUID estável por confirmação torna seguro repetir uma chamada perdida.
+  if (!uuid.test(requestId) || !uuid.test(contactId)
+      || (input?.resend !== undefined && typeof input.resend !== 'boolean')
+      || (suppliedOperationId !== undefined && (typeof suppliedOperationId !== 'string' || !uuid.test(suppliedOperationId)))
+      || (resend && suppliedOperationId === undefined)) return json({ error: 'INVALID_BODY' }, 400);
+  const operationId = typeof suppliedOperationId === 'string' ? suppliedOperationId : crypto.randomUUID();
 
   // RLS e a autoria da avaria limitam o motorista aos próprios comprovantes.
   const { data: damage, error: damageError } = await userDb.from('damage_requests')
@@ -94,20 +102,34 @@ Deno.serve(async (req) => {
   }
   try { receiptGreeting(damage.created_at); } catch { return json({ error: 'RECEIPT_NOT_FOUND' }, 422); }
 
-  const { data: attempt, error: logError } = await adminDb.from('damage_receipt_sends')
-    .insert({ request_id: requestId, contact_id: contactId, recipient_phone: contact.phone_normalized,
-      requested_by: userData.user.id, status: 'PROCESSING' }).select('id').single();
+  // A reserva transacional protege confirmações concorrentes e preserva todos
+  // os aceites anteriores. O navegador nunca insere/atualiza esse histórico.
+  const { data: attempt, error: logError } = await adminDb.rpc('reserve_damage_receipt_send', {
+    p_request_id: requestId, p_contact_id: contactId, p_requested_by: userData.user.id,
+    p_operation_id: operationId, p_resend: resend,
+  });
   if (logError) {
-    if (logError.code === '23505') {
-      const { data: existing } = await adminDb.from('damage_receipt_sends')
-        .select('status,provider_message_id').eq('request_id', requestId).eq('contact_id', contactId)
-        .in('status', ['PROCESSING', 'ACCEPTED', 'UNKNOWN']).order('created_at', { ascending: false }).limit(1).maybeSingle();
-      if (existing?.status === 'ACCEPTED') return json({ accepted: true, already_sent: true, message_id: existing.provider_message_id });
-      return json({ error: existing?.status === 'UNKNOWN' ? 'SEND_STATUS_UNKNOWN' : 'SEND_IN_PROGRESS' }, 409);
-    }
+    const conflict = ['OPERATION_ID_CONFLICT','RESEND_NOT_AVAILABLE'].find(code => String(logError.message || '').includes(code));
+    if (conflict) return json({ error: conflict }, 409);
+    if (String(logError.message || '').includes('FORBIDDEN')) return json({ error: 'RECEIPT_NOT_FOUND' }, 404);
     console.error('receipt send log', logError);
     return json({ error: 'SEND_LOG_FAILED' }, 500);
   }
+  if (!attempt?.id || !['PROCESSING','ACCEPTED','REJECTED','UNKNOWN'].includes(attempt.status)) {
+    return json({ error: 'SEND_LOG_FAILED' }, 500);
+  }
+  if (attempt.reserved !== true) {
+    if (attempt.status === 'ACCEPTED') {
+      const { data: existingReceipt } = await adminDb.from('damage_receipts')
+        .select('receipt_code').eq('send_id', attempt.id).maybeSingle();
+      return json({ accepted: true, already_sent: true, message_id: attempt.provider_message_id,
+        operation_id: attempt.operation_id, receipt_code: existingReceipt?.receipt_code || null });
+    }
+    if (attempt.status === 'REJECTED') return json({ error: 'META_SEND_FAILED', operation_id: attempt.operation_id }, 502);
+    return json({ error: attempt.status === 'UNKNOWN' ? 'SEND_STATUS_UNKNOWN' : 'SEND_IN_PROGRESS',
+      operation_id: attempt.operation_id }, 409);
+  }
+  if (attempt.status !== 'PROCESSING') return json({ error: 'SEND_LOG_FAILED' }, 500);
 
   let status = 'UNKNOWN';
   let providerMessageId: string | null = null;
@@ -116,6 +138,12 @@ Deno.serve(async (req) => {
   let preparationStage = 'PDF_SIGNATURE_FAILED';
   let receiptCode: string | null = null;
   try {
+    // Não transmitir para um telefone diferente daquele validado com aceite.
+    // Se o contato mudou entre a consulta e a reserva, encerrar esta tentativa
+    // como rejeitada e exigir nova leitura/validação do contato.
+    preparationStage = 'CONTACT_NOT_FOUND';
+    if (attempt.recipient_phone !== contact.phone_normalized) throw new Error('CONTACT_NOT_FOUND');
+    preparationStage = 'PDF_SIGNATURE_FAILED';
     // A assinatura é lida da avaria autenticada, nunca de URL ou arquivo do cliente.
     const { data: signatureBlob, error: signatureError } = await userDb.storage.from('avarias').download(damage.signature_path || '');
     if (signatureError || !signatureBlob || signatureBlob.size > 3000000
@@ -193,7 +221,8 @@ Deno.serve(async (req) => {
     .update({ status, provider_message_id: providerMessageId, provider_error_code: providerErrorCode,
       updated_at: new Date().toISOString() }).eq('id', attempt.id);
   if (updateError) { console.error('receipt send status update', updateError); return json({ error: 'SEND_STATUS_UNKNOWN' }, 503); }
-  if (status === 'ACCEPTED') return json({ accepted: true, already_sent: false, message_id: providerMessageId, receipt_code: receiptCode });
-  const preparationError = ['PDF_SIGNATURE_FAILED','PDF_REGISTRY_FAILED','RECEIPT_LAYOUT_TOO_LARGE','RECEIPT_SIGNATURE_MISSING','RECEIPT_SIGNATURE_INVALID'].includes(String(providerErrorCode));
+  if (status === 'ACCEPTED') return json({ accepted: true, already_sent: false, message_id: providerMessageId,
+    receipt_code: receiptCode, operation_id: operationId, resent: resend });
+  const preparationError = ['CONTACT_NOT_FOUND','PDF_SIGNATURE_FAILED','PDF_REGISTRY_FAILED','RECEIPT_LAYOUT_TOO_LARGE','RECEIPT_SIGNATURE_MISSING','RECEIPT_SIGNATURE_INVALID'].includes(String(providerErrorCode));
   return json({ error: status === 'REJECTED' ? (preparationError ? providerErrorCode : 'META_SEND_FAILED') : 'SEND_STATUS_UNKNOWN' }, status === 'REJECTED' ? 502 : 503);
 });
