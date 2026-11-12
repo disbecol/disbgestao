@@ -1,1 +1,1 @@
-v1.7.76 - Produtos de avaria em linhas compactas; botão de detalhes preserva ações, evidências e histórico.
+v1.7.77 - Rolagem única nas janelas de avarias, mantendo cabeçalho e ações visíveis.

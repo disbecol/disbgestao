@@ -181,6 +181,8 @@ button,a,summary{touch-action:manipulation}
 #modal .modal-body{padding:23px 25px;background:#fff;font-family:inherit}
 #modal .modal-actions{position:sticky;bottom:0;z-index:8;gap:9px;padding:16px 25px;background:#fff;border-top:1px solid #e5ebf3;margin:0;border-radius:0 0 17px 17px}
 #modal .modal-actions:empty{display:none}
+#modal:has(.damage-review-workspace) .modal-box{display:block;overflow-y:auto;overscroll-behavior-y:contain}
+#modal:has(.damage-review-workspace) .modal-body{overflow:visible;min-height:0}
 #modal .modal-body .notice{font-size:12px;line-height:1.7;border-radius:10px;font-weight:400}
 #modal .modal-body .section-title{font-size:11px;color:#5b7390;font-weight:600;letter-spacing:.4px;border-color:#e7edf4}
 #toast.toast{font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;line-height:1.6;border-radius:11px;box-shadow:0 8px 26px #142b4620;padding:14px 18px}
