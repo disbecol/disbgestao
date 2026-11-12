@@ -237,7 +237,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.74-forms',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.75-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -5117,8 +5117,8 @@ function showDamageDecisionPanel({status,count,label,onConfirm,onError}){
   panel.scrollIntoView({block:'nearest',behavior:'smooth'});
   panel.querySelector('textarea')?.focus({preventScroll:true});
 }
-function openModal(title,subtitle,body,actions=[]){cleanupDamageGeoMap();$('modalTitle').textContent=title;$('modalSubtitle').textContent=subtitle||'';$('modalBody').classList.remove('damage-review-workspace');$('modalBody').innerHTML=body||'';const a=$('modalActions');a.hidden=false;a.innerHTML='';actions.forEach(x=>{const b=document.createElement('button');b.className=`btn ${x.class||'secondary'}`;b.textContent=x.label;b.addEventListener('click',x.onClick);a.appendChild(b);});$('modal').classList.add('open');}
-function closeModal(){if(printOperation&&$('modalTitle')?.textContent==='Confirmar impressão'){void finishPrint('CANCELADO');return;}closeDamagePhotoViewer();cleanupPullMaps();cleanupDamageGeoMap();$('modal').classList.remove('open');$('modalBody').onchange=null;$('modalBody').onclick=null;$('modalBody').classList.remove('damage-review-workspace');$('modalBody').innerHTML='';$('modalActions').hidden=false;$('modalActions').innerHTML='';}
+function openModal(title,subtitle,body,actions=[]){cleanupDamageGeoMap();$('modalTitle').textContent=title;$('modalSubtitle').textContent=subtitle||'';$('modalBody').classList.remove('damage-review-workspace','damage-review-delivery');$('modalBody').innerHTML=body||'';const a=$('modalActions');a.hidden=false;a.innerHTML='';actions.forEach(x=>{const b=document.createElement('button');b.className=`btn ${x.class||'secondary'}`;b.textContent=x.label;b.addEventListener('click',x.onClick);a.appendChild(b);});$('modal').classList.add('open');}
+function closeModal(){if(printOperation&&$('modalTitle')?.textContent==='Confirmar impressão'){void finishPrint('CANCELADO');return;}closeDamagePhotoViewer();cleanupPullMaps();cleanupDamageGeoMap();$('modal').classList.remove('open');$('modalBody').onchange=null;$('modalBody').onclick=null;$('modalBody').classList.remove('damage-review-workspace','damage-review-delivery');$('modalBody').innerHTML='';$('modalActions').hidden=false;$('modalActions').innerHTML='';}
 function damageReviewProductIdentity(item,index){
   const raw=String(item?.product_text||'').trim();
   const parts=raw.match(/^([A-Za-z0-9]+)\s*[-–—•]\s*(.+)$/);
@@ -5164,12 +5164,13 @@ function setupDamageReviewWorkspace(kind){
   if(!cards.length)return;
   hydrateSalesDamageProductImages(body);
   body.classList.add('damage-review-workspace');
+  if(kind==='delivery')body.classList.add('damage-review-delivery');
   const stageFor=status=>status==='PENDENTE'?'review':status==='EM_ANALISE'?'final':status==='APROVADO'?'launch':status==='LANCADO'?'deliver':'history';
   const stages=[
-    {key:'review',label:'Para decidir',hint:'Confira cada produto e use os botões junto ao status. A seleção permite decidir vários de uma vez.'},
+    {key:'review',label:'Para decidir',hint:kind==='delivery'?'Confira os produtos e escolha uma ação abaixo dos dados. Você também pode selecionar vários produtos.':'Confira cada produto e use os botões junto ao status. A seleção permite decidir vários de uma vez.'},
     ...(kind==='sales'?[{key:'final',label:'Decisão final',hint:'Analise os produtos encaminhados pelo Gerente de Vendas e registre a decisão junto ao status.'}]:[]),
-    {key:'launch',label:'Para lançar',hint:'Confirme o lançamento no botão junto ao status do produto.'},
-    {key:'deliver',label:'Para entregar',hint:'Confirme a entrega no botão junto ao status do produto.'},
+    {key:'launch',label:'Para lançar',hint:kind==='delivery'?'Após lançar no sistema, confirme o lançamento no botão do produto.':'Confirme o lançamento no botão junto ao status do produto.'},
+    {key:'deliver',label:'Para entregar',hint:kind==='delivery'?'Após entregar ao cliente, confirme a entrega no botão do produto.':'Confirme a entrega no botão junto ao status do produto.'},
     {key:'history',label:'Concluídos',hint:'Consulte as decisões e os comprovantes registrados.'},
   ];
   const counts=new Map(stages.map(stage=>[stage.key,0]));
@@ -5200,9 +5201,10 @@ function setupDamageReviewWorkspace(kind){
   const hero=body.querySelector(':scope > .damage-request-hero');
   const nav=document.createElement('nav');nav.className='damage-stage-nav';nav.setAttribute('aria-label','Etapas da avaria');
   for(const stage of stages){
-    if(!counts.get(stage.key))continue;
+    if(!counts.get(stage.key)&&kind!=='delivery')continue;
     const button=document.createElement('button');button.type='button';button.className='damage-stage-tab';button.dataset.damageTab=stage.key;
     button.innerHTML=`<span>${stage.label}</span><b>${counts.get(stage.key)||0}</b>`;
+    button.disabled=!counts.get(stage.key);
     nav.append(button);
   }
   hero?.after(nav);
@@ -5211,6 +5213,15 @@ function setupDamageReviewWorkspace(kind){
     const details=document.createElement('details');details.className='damage-request-context';
     const summary=document.createElement('summary');summary.textContent='Dados da ocorrência';
     context.before(details);details.append(summary,context);
+  }
+  if(kind==='delivery'){
+    // Informações de apoio vêm depois dos produtos; os cartões continuam filhos diretos.
+    const signature=body.querySelector(':scope > .signature-details');
+    const geo=body.querySelector(':scope > .damage-geo-details');
+    const contextDetails=body.querySelector(':scope > .damage-request-context');
+    if(geo)body.append(geo);
+    if(contextDetails)body.append(contextDetails);
+    if(signature)body.append(signature);
   }
   const intro=document.createElement('p');intro.className='damage-stage-intro';nav.after(intro);
   const selection=body.querySelector(':scope > .damage-selection-bar');
@@ -6152,12 +6163,12 @@ async function showAvariaDetail(id){
     const cancelled=i.cancelled_at?`<div class="sales-decision rejected"><strong>Cancelado${i.cancelled_from_status?` após ${esc(i.cancelled_from_status.toLowerCase())}`:''}</strong><span>${esc(i.cancelled_by_name||'—')} • ${fmtDateTime(i.cancelled_at)}</span><p>${esc(i.cancel_reason||'—')}</p></div>`:'';
     let inlineActions=reviewable?`<button type="button" class="damage-card-action approve" data-delivery-review="APROVADO" data-item-id="${i.id}">Aprovar</button><button type="button" class="damage-card-action reject" data-delivery-review="REPROVADO" data-item-id="${i.id}">Reprovar</button>`:launchable?`<button type="button" class="damage-card-action launch" data-delivery-launch="${i.id}">Marcar como lançada</button>`:deliverable?`<button type="button" class="damage-card-action deliver" data-delivery-delivered="${i.id}">Marcar como entregue</button>`:'';
     if(cancellable)inlineActions+=`<button type="button" class="damage-card-action reject" data-delivery-cancel="${i.id}">Cancelar avaria</button>`;
-    return `<div class="damage-admin-item" data-item="${i.id}" data-damage-status="${esc(i.status)}"><div class="damage-product-head">${selectable?`<label class="damage-check"><input type="checkbox" class="delivery-review-check" value="${i.id}" data-review-kind="${kind}"><span></span></label>`:''}${damageReviewProductIdentity(i,idx)}${damageReviewControls(i.status,inlineActions)}</div><div class="damage-summary-grid"><div><small>LOTE</small><strong>${esc(i.lot)}</strong></div><div><small>QUANTIDADE</small><strong>${fmtNum(i.quantity)} ${esc(i.quantity_unit)}</strong></div><div><small>MOTIVO</small><strong>${esc(i.reason)}</strong></div><div><small>EVIDÊNCIAS</small><strong>${photos.length} foto(s)</strong></div></div><div class="damage-lot-row">${match.length?`<span class="status approved">Lote compatível</span><span>${match.slice(0,4).map(n=>esc(n.nri)).join(', ')}</span>`:'<span class="status rejected">Lote não encontrado</span>'}</div><details class="damage-evidence"><summary><span>Ver evidências</span><small>${photos.length?`${photos.length} foto(s) • localização por foto`:i.reason==="Não foi no caminhão"?"Foto dispensada pelo motivo":"Sem foto"}</small></summary><div class="damage-photo-grid">${photoHtml||'<div class="empty-state">Sem foto disponível.</div>'}</div></details>${decision}${launched}${delivered}${cancelled}</div>`;
+    return `<div class="damage-admin-item" data-item="${i.id}" data-damage-status="${esc(i.status)}"><div class="damage-product-head">${selectable?`<label class="damage-check" aria-label="Selecionar produto ${idx+1}"><input type="checkbox" class="delivery-review-check" value="${i.id}" data-review-kind="${kind}"><span></span></label>`:''}${damageReviewProductIdentity(i,idx)}${damageReviewControls(i.status)}</div><div class="damage-summary-grid"><div><small>LOTE</small><strong>${esc(i.lot||'Não informado')}</strong></div><div><small>QUANTIDADE</small><strong>${fmtNum(i.quantity)} ${esc(i.quantity_unit)}</strong></div><div><small>MOTIVO</small><strong>${esc(i.reason)}</strong></div></div><div class="damage-lot-row">${match.length?`<span class="status approved">Lote compatível</span><span>${match.slice(0,4).map(n=>esc(n.nri)).join(', ')}</span>`:!i.lot?'<span class="damage-lot-info">Lote não informado</span>':'<span class="status rejected">Lote não encontrado na base NRI</span>'}</div>${inlineActions?`<div class="damage-product-actions"><span>Ações deste produto</span><div>${inlineActions}</div></div>`:''}<details class="damage-evidence"><summary><span>Ver evidências</span><small>${photos.length?`${photos.length} foto(s) • localização por foto`:i.reason==="Não foi no caminhão"?"Foto dispensada pelo motivo":"Sem foto"}</small></summary><div class="damage-photo-grid">${photoHtml||'<div class="empty-state">Sem foto disponível.</div>'}</div></details>${decision}${launched}${delivered}${cancelled}</div>`;
   }).join('');
   const pending=items.filter(i=>i.status==='PENDENTE').length,approved=items.filter(i=>i.status==='APROVADO').length,launched=items.filter(i=>i.status==='LANCADO').length,canDeliverCount=items.filter(i=>i.status==='LANCADO').length,selectableCount=(canReview?pending:0)+(canPost?approved+canDeliverCount:0);
-  const body=`<div class="damage-request-hero"><div><small>OCORRÊNCIA</small><strong>PDV ${esc(r.customer_code)} · ${esc(r.customer_name)}</strong><span>${esc(r.city)} • Mapa ${esc(r.map_number)} • ${esc(r.delivery_name)}</span></div><div class="damage-counts"><b>${items.length}</b><span>produtos</span><b>${pending+approved+launched}</b><span>em fluxo</span></div></div><div class="detail-grid damage-request-grid"><div class="detail-card"><small>PDV</small><strong>${esc(r.customer_name)}</strong></div><div class="detail-card"><small>Código</small><strong>${esc(r.customer_code)}</strong></div><div class="detail-card"><small>Cidade</small><strong>${esc(r.city)}</strong></div><div class="detail-card"><small>Mapa</small><strong>${esc(r.map_number)}</strong></div><div class="detail-card"><small>Motorista</small><strong>${esc(r.delivery_name)}</strong></div></div>${selectableCount?`<div class="damage-selection-bar delivery-selection-bar"><label class="check delivery-select-all"><input id="deliveryDamageSelectAll" type="checkbox"> Selecionar tudo</label><span id="avariaSelectionSummary">0 selecionados</span><small>${pending&&canReview?'Pendentes: aprovação ou reprovação. ':''}${approved&&canPost?'Aprovados: prontos para lançamento. ':''}${canDeliverCount&&canPost?'Lançados: prontos para marcar como entregues.':''}</small></div>`:''}${productsHtml}<details class="signature-details"><summary>Ver assinatura do cliente</summary><img src="${esc(signatureUrl)}" alt="Assinatura"></details>`;
+  const body=`<div class="damage-request-hero"><div><small>AVARIA DE ENTREGA · ${fmtDate(r.occurrence_date)}</small><strong>PDV ${esc(r.customer_code)} · ${esc(r.customer_name)}</strong><span>${esc(r.city)} • Mapa ${esc(r.map_number)} • ${esc(r.delivery_name)}</span></div><div class="damage-counts"><div><b>${items.length}</b><span>produto${items.length===1?'':'s'}</span></div><div><b>${pending+approved+launched}</b><span>em andamento</span></div></div></div><div class="detail-grid damage-request-grid"><div class="detail-card"><small>PDV</small><strong>${esc(r.customer_name)}</strong></div><div class="detail-card"><small>Código</small><strong>${esc(r.customer_code)}</strong></div><div class="detail-card"><small>Cidade</small><strong>${esc(r.city)}</strong></div><div class="detail-card"><small>Mapa</small><strong>${esc(r.map_number)}</strong></div><div class="detail-card"><small>Motorista</small><strong>${esc(r.delivery_name)}</strong></div></div>${selectableCount?`<div class="damage-selection-bar delivery-selection-bar"><label class="check delivery-select-all"><input id="deliveryDamageSelectAll" type="checkbox"> Selecionar tudo</label><span id="avariaSelectionSummary">0 selecionados</span><small>${pending&&canReview?'Pendentes: aprovação ou reprovação. ':''}${approved&&canPost?'Aprovados: prontos para lançamento. ':''}${canDeliverCount&&canPost?'Lançados: prontos para marcar como entregues.':''}</small></div>`:''}${productsHtml}<details class="signature-details"><summary>Assinatura do cliente<span class="damage-support-status">${signatureUrl?'Registrada':'Não disponível'}</span></summary>${signatureUrl?`<img src="${esc(signatureUrl)}" alt="Assinatura do cliente registrada na avaria">`:'<div class="empty-state">Esta ocorrência não possui assinatura disponível.</div>'}</details>`;
   const actions=[];
-  actions.push({label:'Comprovantes emitidos',class:'secondary',onClick:()=>showDamageReceiptHistory(r.id)});
+  actions.push({label:'Comprovantes emitidos',class:'secondary damage-action-global damage-receipts-action',onClick:()=>showDamageReceiptHistory(r.id)});
   if(canReview&&pending)actions.push({label:'Reprovar selecionados',class:'danger damage-action-review',onClick:()=>reviewAvaria('REPROVADO',false)},{label:'Aprovar selecionados',class:'success damage-action-review',onClick:()=>reviewAvaria('APROVADO',false)});
   if(canPost&&approved)actions.push({label:'✓ Marcar como lançada',class:'success damage-action-launch',onClick:markDeliveryDamageLaunchedBulk});
   if(canPost&&canDeliverCount)actions.push({label:'✓ Marcar como entregue',class:'primary damage-action-deliver',onClick:markDeliveryDamageDeliveredBulk});

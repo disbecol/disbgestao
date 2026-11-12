@@ -1,1 +1,1 @@
-v1.7.1 - Materiais final: cadastro/estoque/movimentacoes/inventario; corrige escopo Offline Resync, preserva Push Android FCM e remove patches de versao duplicados.
+v1.7.75 - Identidade visual unificada com a nova Puxada; detalhe de avarias reorganizado e responsivo.
