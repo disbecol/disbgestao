@@ -1,1 +1,1 @@
-v1.7.75 - Identidade visual unificada com a nova Puxada; detalhe de avarias reorganizado e responsivo.
+v1.7.76 - Produtos de avaria em linhas compactas; botão de detalhes preserva ações, evidências e histórico.

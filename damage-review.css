@@ -108,3 +108,56 @@
   .modal-box:has(.damage-review-delivery) .modal-actions{padding:12px 16px}
   #modal .modal-box:has(.damage-review-delivery) .modal-actions .btn{min-height:44px!important;font-size:11px!important;flex:1 1 auto!important;padding:10px 12px!important}
 }
+
+/* Lista compacta: os detalhes e as ações só são exibidos ao abrir o produto. */
+#modal .damage-review-delivery .damage-stage-nav{display:flex;flex-wrap:wrap;gap:6px}
+#modal .damage-review-delivery .damage-stage-tab{flex:0 1 auto;min-height:34px;padding:6px 10px;gap:12px;border-radius:8px;font-size:10px}
+#modal .damage-review-delivery .damage-stage-tab b{min-width:19px;height:19px;border-radius:5px;font-size:9px}
+#modal .damage-review-delivery .damage-stage-intro{margin:9px 2px 10px;font-size:11px}
+#modal .damage-review-delivery .damage-selection-bar{display:flex;flex-wrap:nowrap;align-items:center;justify-content:flex-start;gap:12px;min-height:0;padding:2px 2px 7px;margin:0 0 5px;background:transparent;border:0;border-radius:0;box-shadow:none}
+#modal .damage-review-delivery .damage-selection-bar .delivery-select-all{display:inline-flex;align-items:center;gap:7px;flex:none;width:auto;min-width:0;min-height:28px;padding:0;margin:0;border:0;border-radius:0;background:transparent;box-shadow:none;font-size:11px;color:#415c78;white-space:nowrap;cursor:pointer}
+#modal .damage-review-delivery .damage-selection-bar .delivery-select-all input{width:16px;height:16px;margin:0;accent-color:#1d63eb}
+#modal .damage-review-delivery .damage-selection-bar>span{font-size:10px;font-weight:500;color:#718198}
+#modal .damage-review-delivery .damage-selection-bar>small{display:none}
+#modal .damage-review-delivery .damage-product-disclosure{margin-bottom:9px;border-radius:11px;box-shadow:none}
+#modal .damage-review-delivery .damage-product-head.damage-product-row{display:flex;flex-wrap:nowrap;align-items:center;gap:14px;min-height:0;padding:11px 16px;border:0;background:#fff}
+#modal .damage-review-delivery .damage-product-row>.damage-product-identity{flex-direction:row;flex:1 1 auto;gap:12px;min-width:0}
+#modal .damage-review-delivery .damage-product-row .damage-product-visual{width:42px;height:48px;flex:0 0 42px;padding:3px;border-radius:8px}
+#modal .damage-review-delivery .damage-product-row .damage-product-visual img{max-height:40px}
+#modal .damage-review-delivery .damage-product-row .damage-product-name{gap:4px;min-width:0}
+#modal .damage-review-delivery .damage-product-row .damage-product-name small{font-size:0;letter-spacing:0;line-height:1}
+#modal .damage-review-delivery .damage-product-row .damage-product-code{font-size:8px;margin-left:0;padding:2px 5px}
+#modal .damage-review-delivery .damage-product-row .damage-product-name strong{font-size:13px;line-height:1.4;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+#modal .damage-review-delivery .damage-row-quantity{display:flex;flex:0 0 auto;flex-direction:column;align-items:flex-end;gap:4px;min-width:105px;color:#233e5b}
+#modal .damage-review-delivery .damage-row-quantity small{font-size:8px;letter-spacing:.5px;font-weight:600;color:#8191a5}
+#modal .damage-review-delivery .damage-row-quantity strong{font:800 14px/1.4 'Manrope',sans-serif;white-space:nowrap}
+#modal .damage-review-delivery .damage-row-quantity strong span{font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500}
+#modal .damage-review-delivery .damage-detail-toggle{display:grid;place-items:center;flex:0 0 40px;width:40px;height:40px;min-height:40px;border:1px solid #dce6f3;border-radius:9px;padding:9px;background:#f4f8ff;color:#2463c7;cursor:pointer}
+#modal .damage-review-delivery .damage-detail-toggle svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+#modal .damage-review-delivery .damage-detail-toggle:hover{background:#eaf1ff}
+#modal .damage-review-delivery .damage-detail-toggle:focus-visible{outline:3px solid #a7c6ff;outline-offset:2px}
+#modal .damage-review-delivery .damage-product-expanded .damage-detail-toggle{background:#1d63eb;color:#fff;border-color:#1d63eb}
+#modal .damage-review-delivery .damage-product-details{border-top:1px solid #e7edf4}
+#modal .damage-review-delivery .damage-detail-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px 0}
+#modal .damage-review-delivery .damage-detail-heading>strong{font-size:12px;font-weight:700;color:#536b85}
+#modal .damage-review-delivery .damage-detail-heading .damage-card-controls{margin:0;padding:0;width:auto;max-width:60%}
+#modal .damage-review-delivery .damage-product-details .damage-summary-grid{margin-top:13px}
+@media(max-width:700px){
+  #modal .damage-review-delivery .damage-stage-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  #modal .damage-review-delivery .damage-stage-tab{min-height:34px;padding:6px 9px;font-size:10px}
+  #modal .damage-review-delivery .damage-product-head.damage-product-row{padding:10px 12px;gap:9px}
+  #modal .damage-review-delivery .damage-product-row>.damage-product-identity{gap:9px;flex:1 1 auto}
+  #modal .damage-review-delivery .damage-product-row .damage-product-visual{width:36px;height:42px;flex-basis:36px;padding:2px}
+  #modal .damage-review-delivery .damage-product-row .damage-product-name strong{font-size:11px;line-height:1.45}
+  #modal .damage-review-delivery .damage-product-row .damage-product-code{font-size:7px}
+  #modal .damage-review-delivery .damage-row-quantity{min-width:47px;max-width:74px;align-items:center}
+  #modal .damage-review-delivery .damage-row-quantity small{display:none}
+  #modal .damage-review-delivery .damage-row-quantity strong{font-size:13px;text-align:center;white-space:normal}
+  #modal .damage-review-delivery .damage-row-quantity strong span{display:block;font-size:10px}
+  #modal .damage-review-delivery .damage-detail-toggle{width:40px;height:44px;min-height:44px;flex-basis:40px}
+  #modal .damage-review-delivery .damage-detail-heading{padding:14px 16px 0}
+}
+#modal .damage-review-delivery>.damage-geo-details,#modal .damage-review-delivery>.damage-request-context,#modal .damage-review-delivery>.signature-details{margin-top:6px;border-radius:8px}
+#modal .damage-review-delivery>.damage-geo-details>summary,#modal .damage-review-delivery>.damage-request-context>summary,#modal .damage-review-delivery>.signature-details>summary{min-height:34px;padding:8px 12px;gap:8px;font-size:11px;line-height:1.5}
+#modal .damage-review-delivery .damage-geo-pill{padding:3px 7px;font-size:9px}
+#modal .damage-review-delivery .damage-support-status{font-size:9px}

@@ -237,7 +237,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.75-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.76-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -5153,6 +5153,24 @@ function openDamagePhotoViewer(url,label){
   damagePhotoViewer.querySelector('p').textContent=label||'Evidência da avaria';
   damagePhotoViewer.hidden=false;damagePhotoViewer.querySelector('button').focus();
 }
+function setupDeliveryDamageProductDisclosure(cards){
+  const resets=[];
+  cards.forEach(card=>{
+    const button=card.querySelector('[data-damage-details-toggle]'),panel=card.querySelector('.damage-product-details');
+    if(!button||!panel)return;
+    const name=card.querySelector('.damage-product-name strong')?.textContent||'produto';
+    const setOpen=open=>{
+      panel.hidden=!open;
+      card.classList.toggle('damage-product-expanded',open);
+      button.setAttribute('aria-expanded',String(open));
+      button.setAttribute('aria-label',`${open?'Ocultar':'Ver'} detalhes de ${name}`);
+      button.title=open?'Ocultar detalhes':'Ver detalhes';
+    };
+    button.addEventListener('click',()=>setOpen(panel.hidden));
+    resets.push(()=>setOpen(false));
+  });
+  return ()=>resets.forEach(reset=>reset());
+}
 function setupDamageReviewWorkspace(kind){
   const body=$('modalBody'),actions=$('modalActions');
   if(!body||!actions)return;
@@ -5167,10 +5185,10 @@ function setupDamageReviewWorkspace(kind){
   if(kind==='delivery')body.classList.add('damage-review-delivery');
   const stageFor=status=>status==='PENDENTE'?'review':status==='EM_ANALISE'?'final':status==='APROVADO'?'launch':status==='LANCADO'?'deliver':'history';
   const stages=[
-    {key:'review',label:'Para decidir',hint:kind==='delivery'?'Confira os produtos e escolha uma ação abaixo dos dados. Você também pode selecionar vários produtos.':'Confira cada produto e use os botões junto ao status. A seleção permite decidir vários de uma vez.'},
+    {key:'review',label:'Para decidir',hint:kind==='delivery'?'Clique no olho para conferir os detalhes e decidir sobre o produto. Você também pode selecionar vários produtos.':'Confira cada produto e use os botões junto ao status. A seleção permite decidir vários de uma vez.'},
     ...(kind==='sales'?[{key:'final',label:'Decisão final',hint:'Analise os produtos encaminhados pelo Gerente de Vendas e registre a decisão junto ao status.'}]:[]),
-    {key:'launch',label:'Para lançar',hint:kind==='delivery'?'Após lançar no sistema, confirme o lançamento no botão do produto.':'Confirme o lançamento no botão junto ao status do produto.'},
-    {key:'deliver',label:'Para entregar',hint:kind==='delivery'?'Após entregar ao cliente, confirme a entrega no botão do produto.':'Confirme a entrega no botão junto ao status do produto.'},
+    {key:'launch',label:'Para lançar',hint:kind==='delivery'?'Clique no olho para abrir o produto e confirmar o lançamento no sistema.':'Confirme o lançamento no botão junto ao status do produto.'},
+    {key:'deliver',label:'Para entregar',hint:kind==='delivery'?'Clique no olho para abrir o produto e confirmar a entrega ao cliente.':'Confirme a entrega no botão junto ao status do produto.'},
     {key:'history',label:'Concluídos',hint:'Consulte as decisões e os comprovantes registrados.'},
   ];
   const counts=new Map(stages.map(stage=>[stage.key,0]));
@@ -5179,11 +5197,12 @@ function setupDamageReviewWorkspace(kind){
     const key=stageFor(status==='EM ANÁLISE'?'EM_ANALISE':status.startsWith('LANÇADO')?'LANCADO':status);
     card.dataset.damageStage=key;
     counts.set(key,(counts.get(key)||0)+1);
-    const decisions=[...card.querySelectorAll(':scope > .sales-decision')];
+    const detailRoot=kind==='delivery'?card.querySelector('.damage-product-details')||card:card;
+    const decisions=[...detailRoot.querySelectorAll(':scope > .sales-decision')];
     if(decisions.length){
       const details=document.createElement('details');details.className='damage-decision-history';
       const summary=document.createElement('summary');summary.textContent=`Histórico e justificativas (${decisions.length})`;
-      details.append(summary,...decisions);card.append(details);
+      details.append(summary,...decisions);detailRoot.append(details);
     }
     card.querySelectorAll('.map-frame').forEach(frame=>{
       const coords=new URL(frame.src).searchParams.get('q')||'';
@@ -5198,6 +5217,7 @@ function setupDamageReviewWorkspace(kind){
       frame.replaceWith(link);
     });
   });
+  const resetProducts=kind==='delivery'?setupDeliveryDamageProductDisclosure(cards):()=>{};
   const hero=body.querySelector(':scope > .damage-request-hero');
   const nav=document.createElement('nav');nav.className='damage-stage-nav';nav.setAttribute('aria-label','Etapas da avaria');
   for(const stage of stages){
@@ -5237,6 +5257,7 @@ function setupDamageReviewWorkspace(kind){
   };
   const setStage=key=>{
     body.querySelector('.damage-decision-panel')?.remove();
+    resetProducts();
     activeStage=key;
     cards.forEach(card=>{
       const active=card.dataset.damageStage===key;
@@ -6163,7 +6184,10 @@ async function showAvariaDetail(id){
     const cancelled=i.cancelled_at?`<div class="sales-decision rejected"><strong>Cancelado${i.cancelled_from_status?` após ${esc(i.cancelled_from_status.toLowerCase())}`:''}</strong><span>${esc(i.cancelled_by_name||'—')} • ${fmtDateTime(i.cancelled_at)}</span><p>${esc(i.cancel_reason||'—')}</p></div>`:'';
     let inlineActions=reviewable?`<button type="button" class="damage-card-action approve" data-delivery-review="APROVADO" data-item-id="${i.id}">Aprovar</button><button type="button" class="damage-card-action reject" data-delivery-review="REPROVADO" data-item-id="${i.id}">Reprovar</button>`:launchable?`<button type="button" class="damage-card-action launch" data-delivery-launch="${i.id}">Marcar como lançada</button>`:deliverable?`<button type="button" class="damage-card-action deliver" data-delivery-delivered="${i.id}">Marcar como entregue</button>`:'';
     if(cancellable)inlineActions+=`<button type="button" class="damage-card-action reject" data-delivery-cancel="${i.id}">Cancelar avaria</button>`;
-    return `<div class="damage-admin-item" data-item="${i.id}" data-damage-status="${esc(i.status)}"><div class="damage-product-head">${selectable?`<label class="damage-check" aria-label="Selecionar produto ${idx+1}"><input type="checkbox" class="delivery-review-check" value="${i.id}" data-review-kind="${kind}"><span></span></label>`:''}${damageReviewProductIdentity(i,idx)}${damageReviewControls(i.status)}</div><div class="damage-summary-grid"><div><small>LOTE</small><strong>${esc(i.lot||'Não informado')}</strong></div><div><small>QUANTIDADE</small><strong>${fmtNum(i.quantity)} ${esc(i.quantity_unit)}</strong></div><div><small>MOTIVO</small><strong>${esc(i.reason)}</strong></div></div><div class="damage-lot-row">${match.length?`<span class="status approved">Lote compatível</span><span>${match.slice(0,4).map(n=>esc(n.nri)).join(', ')}</span>`:!i.lot?'<span class="damage-lot-info">Lote não informado</span>':'<span class="status rejected">Lote não encontrado na base NRI</span>'}</div>${inlineActions?`<div class="damage-product-actions"><span>Ações deste produto</span><div>${inlineActions}</div></div>`:''}<details class="damage-evidence"><summary><span>Ver evidências</span><small>${photos.length?`${photos.length} foto(s) • localização por foto`:i.reason==="Não foi no caminhão"?"Foto dispensada pelo motivo":"Sem foto"}</small></summary><div class="damage-photo-grid">${photoHtml||'<div class="empty-state">Sem foto disponível.</div>'}</div></details>${decision}${launched}${delivered}${cancelled}</div>`;
+    const detailsId=`deliveryDamageProductDetails-${idx}`,toggleId=`deliveryDamageProductToggle-${idx}`;
+    const quantityUnit=i.quantity_unit==='CAIXA'?(Number(i.quantity)===1?'caixa':'caixas'):i.quantity_unit==='UNIDADE'?(Number(i.quantity)===1?'unidade':'unidades'):i.quantity_unit;
+    const detailToggle=`<button type="button" id="${toggleId}" class="damage-detail-toggle" data-damage-details-toggle aria-expanded="false" aria-controls="${detailsId}" aria-label="Ver detalhes de ${esc(i.product_text)}" title="Ver detalhes"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button>`;
+    return `<div class="damage-admin-item damage-product-disclosure" data-item="${i.id}" data-damage-status="${esc(i.status)}"><div class="damage-product-head damage-product-row">${selectable?`<label class="damage-check" aria-label="Selecionar produto ${idx+1}"><input type="checkbox" class="delivery-review-check" value="${i.id}" data-review-kind="${kind}"><span></span></label>`:''}${damageReviewProductIdentity(i,idx)}<div class="damage-row-quantity"><small>QTD. AVARIADA</small><strong>${fmtNum(i.quantity)} <span>${esc(quantityUnit)}</span></strong></div>${detailToggle}</div><section class="damage-product-details" id="${detailsId}" role="region" aria-labelledby="${toggleId}" hidden><div class="damage-detail-heading"><strong>Detalhes da avaria</strong>${damageReviewControls(i.status)}</div><div class="damage-summary-grid"><div><small>LOTE</small><strong>${esc(i.lot||'Não informado')}</strong></div><div><small>QUANTIDADE</small><strong>${fmtNum(i.quantity)} ${esc(i.quantity_unit)}</strong></div><div><small>MOTIVO</small><strong>${esc(i.reason)}</strong></div></div><div class="damage-lot-row">${match.length?`<span class="status approved">Lote compatível</span><span>${match.slice(0,4).map(n=>esc(n.nri)).join(', ')}</span>`:!i.lot?'<span class="damage-lot-info">Lote não informado</span>':'<span class="status rejected">Lote não encontrado na base NRI</span>'}</div>${inlineActions?`<div class="damage-product-actions"><span>Ações deste produto</span><div>${inlineActions}</div></div>`:''}<details class="damage-evidence"><summary><span>Ver evidências</span><small>${photos.length?`${photos.length} foto(s) • localização por foto`:i.reason==="Não foi no caminhão"?"Foto dispensada pelo motivo":"Sem foto"}</small></summary><div class="damage-photo-grid">${photoHtml||'<div class="empty-state">Sem foto disponível.</div>'}</div></details>${decision}${launched}${delivered}${cancelled}</section></div>`;
   }).join('');
   const pending=items.filter(i=>i.status==='PENDENTE').length,approved=items.filter(i=>i.status==='APROVADO').length,launched=items.filter(i=>i.status==='LANCADO').length,canDeliverCount=items.filter(i=>i.status==='LANCADO').length,selectableCount=(canReview?pending:0)+(canPost?approved+canDeliverCount:0);
   const body=`<div class="damage-request-hero"><div><small>AVARIA DE ENTREGA · ${fmtDate(r.occurrence_date)}</small><strong>PDV ${esc(r.customer_code)} · ${esc(r.customer_name)}</strong><span>${esc(r.city)} • Mapa ${esc(r.map_number)} • ${esc(r.delivery_name)}</span></div><div class="damage-counts"><div><b>${items.length}</b><span>produto${items.length===1?'':'s'}</span></div><div><b>${pending+approved+launched}</b><span>em andamento</span></div></div></div><div class="detail-grid damage-request-grid"><div class="detail-card"><small>PDV</small><strong>${esc(r.customer_name)}</strong></div><div class="detail-card"><small>Código</small><strong>${esc(r.customer_code)}</strong></div><div class="detail-card"><small>Cidade</small><strong>${esc(r.city)}</strong></div><div class="detail-card"><small>Mapa</small><strong>${esc(r.map_number)}</strong></div><div class="detail-card"><small>Motorista</small><strong>${esc(r.delivery_name)}</strong></div></div>${selectableCount?`<div class="damage-selection-bar delivery-selection-bar"><label class="check delivery-select-all"><input id="deliveryDamageSelectAll" type="checkbox"> Selecionar tudo</label><span id="avariaSelectionSummary">0 selecionados</span><small>${pending&&canReview?'Pendentes: aprovação ou reprovação. ':''}${approved&&canPost?'Aprovados: prontos para lançamento. ':''}${canDeliverCount&&canPost?'Lançados: prontos para marcar como entregues.':''}</small></div>`:''}${productsHtml}<details class="signature-details"><summary>Assinatura do cliente<span class="damage-support-status">${signatureUrl?'Registrada':'Não disponível'}</span></summary>${signatureUrl?`<img src="${esc(signatureUrl)}" alt="Assinatura do cliente registrada na avaria">`:'<div class="empty-state">Esta ocorrência não possui assinatura disponível.</div>'}</details>`;

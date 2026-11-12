@@ -11,7 +11,7 @@ const source=app.replace(/\}\)\(\);\s*$/,`window.reviewTest={
     sb={storage:{from:()=>({createSignedUrl:async path=>({data:{signedUrl:'https://example.test/'+path}})})}};
     openModal=(...args)=>hooks.modals.push(args);setupDamageGeoMap=()=>{};setupDamageReviewWorkspace=()=>{};
     customerGeoForDamage=async()=>null;
-  },show:showAvariaDetail
+  },show:showAvariaDetail,disclosures:setupDeliveryDamageProductDisclosure
 };})();`);
 const item=(id,status,overrides={})=>({id,status,product_code:'988',product_text:'988 - BRAHMA 600ML',lot:'L123',quantity:2,quantity_unit:'UNIDADE',reason:'Quebrado',...overrides});
 const record=(items,overrides={})=>({id:'request',customer_code:'40',customer_name:'Mercado de exemplo',city:'Caicó',map_number:'123',delivery_name:'Motorista',occurrence_date:'2026-11-12',damage_items:items,...overrides});
@@ -20,7 +20,7 @@ async function render(row,permissions=[],matches=[]){
   const window={addEventListener(){}};
   vm.runInNewContext(source,{window,document:{getElementById:()=>el,addEventListener(){},querySelectorAll:()=>[]},navigator:{onLine:true},console,setInterval(){},setTimeout,clearTimeout,clearInterval(){}},{timeout:3000});
   window.reviewTest.setup(row,permissions,matches,{modals});await window.reviewTest.show(row.id);
-  const [title,subtitle,html,actions]=modals[0];return {title,subtitle,html,actions};
+  const [title,subtitle,html,actions]=modals[0];return {title,subtitle,html,actions,api:window.reviewTest};
 }
 test('delivery detail keeps status-specific permissions and never exposes actions to read-only users',async()=>{
   const row=record([item('pending','PENDENTE'),item('approved','APROVADO'),item('launched','LANCADO'),item('done','ENTREGUE')]);
@@ -58,4 +58,24 @@ test('evidence, audit, and signature remain available without broken missing-sig
 test('customer and product text is escaped in the redesigned detail',async()=>{
   const result=await render(record([item('a','PENDENTE',{product_text:'988 - <script>alert(1)</script>',reason:'<img onerror=alert(1)>'})],{customer_name:'<svg onload=alert(1)>'}));
   assert.doesNotMatch(result.html,/<script>|<svg onload|<img onerror/);assert.match(result.html,/&lt;script&gt;/);assert.match(result.html,/&lt;svg/);
+});
+test('each compact row starts closed and its eye controls only its own complete details',async()=>{
+  const result=await render(record([item('a','PENDENTE'),item('b','APROVADO')]));
+  assert.equal((result.html.match(/class="damage-product-details"[^>]* hidden/g)||[]).length,2);
+  assert.equal((result.html.match(/data-damage-details-toggle/g)||[]).length,2);
+  assert.match(result.html,/aria-controls="deliveryDamageProductDetails-0"/);
+  assert.match(result.html,/aria-controls="deliveryDamageProductDetails-1"/);
+  assert.match(result.html,/damage-row-quantity/);
+  const makeCard=name=>{
+    const attrs={},listeners={},panel={hidden:false},classes=new Set();
+    const button={setAttribute:(k,v)=>attrs[k]=v,addEventListener:(k,fn)=>listeners[k]=fn};
+    const card={classList:{toggle:(k,v)=>v?classes.add(k):classes.delete(k)},querySelector:selector=>selector==='[data-damage-details-toggle]'?button:selector==='.damage-product-details'?panel:{textContent:name}};
+    return {card,panel,button,attrs,classes,click:()=>listeners.click()};
+  };
+  const a=makeCard('Produto A'),b=makeCard('Produto B');
+  const reset=result.api.disclosures([a.card,b.card]);reset();
+  assert.equal(a.panel.hidden,true);assert.equal(b.panel.hidden,true);assert.equal(a.attrs['aria-expanded'],'false');
+  a.click();assert.equal(a.panel.hidden,false);assert.equal(b.panel.hidden,true);assert.equal(a.attrs['aria-expanded'],'true');assert.equal(a.button.title,'Ocultar detalhes');
+  a.click();assert.equal(a.panel.hidden,true);assert.equal(a.button.title,'Ver detalhes');
+  a.click();b.click();reset();assert.equal(a.panel.hidden,true);assert.equal(b.panel.hidden,true);assert.equal(b.attrs['aria-expanded'],'false');
 });
