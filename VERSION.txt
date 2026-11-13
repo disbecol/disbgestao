@@ -1,1 +1,1 @@
-v1.7.78 - Corrige rolagem vertical da página com o cursor sobre tabelas; preserva rolagem lateral.
+v1.7.79 - Preserva avarias offline até confirmação do servidor; protege troca de conta e comprovantes pendentes; mantém as correções de rolagem.

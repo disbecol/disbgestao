@@ -237,7 +237,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.78-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.79-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -5965,12 +5965,12 @@ async function saveCustomerContactForReceipt(ctx,phone,label=''){
 async function openDeliveryDamageReceipt(ctx){
   const owner=authUser?.id,unit=activeUnit;
   const current=()=>owner===authUser?.id&&unit===activeUnit&&(!ctx.unit||ctx.unit===unit);
-  if(!current())return;
-  try{ctx=await currentDeliveryDamageReceiptContext(ctx);}catch(error){if(current())toast(damageReceiptSendError(error),'error');return;}
-  if(!current())return;
+  if(!current())return false;
+  try{ctx=await currentDeliveryDamageReceiptContext(ctx);}catch(error){if(current())toast(damageReceiptSendError(error),'error');return false;}
+  if(!current())return false;
   let contacts=[];let contactError='';
   try{contacts=await getCustomerContacts(ctx.customer.id,ctx.customer.code);}catch(e){contactError=humanCustomerContactError(e);}
-  if(!current())return;
+  if(!current())return false;
   deliveryDamageReceiptContext=ctx;
   const last=contacts.reduce((max,x)=>!max||String(x.updated_at)>String(max)?x.updated_at:max,'');
   const eligibleContacts=contacts.filter(c=>c.whatsapp_receipt_eligible===true&&c.whatsapp_receipt_verified_at);
@@ -5981,6 +5981,7 @@ async function openDeliveryDamageReceipt(ctx){
   $('modalBody')?.querySelectorAll('[data-capture-receipt-optin]').forEach(b=>b.addEventListener('click',()=>openDeliveryDamageReceiptOptin(contacts.find(c=>c.id===b.dataset.captureReceiptOptin),ctx)));
   $('modalBody')?.querySelectorAll('[data-manual-receipt-phone]').forEach(b=>b.addEventListener('click',()=>openWhatsappReceipt(b.dataset.manualReceiptPhone,ctx)));
   $('btnDeliveryReceiptAddPhone')?.addEventListener('click',()=>saveCustomerContactForReceipt(ctx,$('deliveryReceiptNewPhone')?.value||'',$('deliveryReceiptNewLabel')?.value||''));
+  return true;
 }
 function openDeliveryDamageReceiptOptin(contact,ctx){
   if(!contact||!ctx.request_id)return toast('A avaria ainda não foi sincronizada. Aguarde a conexão.','error');
@@ -6703,11 +6704,48 @@ function offlineLocalId(prefix){return `local-${prefix}-${uuid()}`;}
 function offlineIsLocalId(v){return String(v||'').startsWith('local-');}
 
 async function offlineDamageReceipts(){return (await offlineStateGet('damage_receipts'))||[];}
-async function offlineSaveDamageReceipt(ctx){const rows=await offlineDamageReceipts();if(!rows.some(x=>x.offline_operation_id===ctx.offline_operation_id)){rows.push(ctx);await offlineStateSet('damage_receipts',rows);}return rows;}
+function assertOfflineDamageOwner(owner,client=sb){
+  if(!owner||authUser?.id!==owner||sb!==client)throw new Error('OFFLINE_CONTEXT_CHANGED');
+}
+async function updateOfflineDamageReceipts(owner,client,update){
+  assertOfflineDamageOwner(owner,client);
+  const db=await offlineDb();assertOfflineDamageOwner(owner,client);
+  // One read/write transaction prevents two finishing uploads losing a prompt.
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction('state','readwrite'),store=tx.objectStore('state'),key=`${owner}:damage_receipts`;
+    let rows=[],failure=null;
+    const request=store.get(key);
+    request.onsuccess=()=>{
+      try{
+        assertOfflineDamageOwner(owner,client);rows=update(request.result?.value||[]);
+        store.put({key,user_id:owner,value:rows,updated_at:new Date().toISOString()});
+      }catch(error){failure=error;tx.abort();}
+    };
+    tx.oncomplete=()=>resolve(rows);
+    tx.onerror=tx.onabort=()=>reject(failure||tx.error||new Error('Não foi possível salvar o comprovante pendente no aparelho.'));
+  });
+}
+async function offlineSaveDamageReceipt(ctx,owner=authUser?.id){
+  const client=sb;
+  const rows=await updateOfflineDamageReceipts(owner,client,rows=>rows.some(x=>x.offline_operation_id===ctx.offline_operation_id)?rows:[...rows,ctx]);
+  assertOfflineDamageOwner(owner,client);return rows;
+}
+let offlineDamageReceiptOpening=null;
 async function offlineOpenNextDamageReceipt(){
-  const rows=await offlineDamageReceipts();if(!rows.length)return false;
-  if(!navigator.onLine)return toast('O comprovante precisa de internet para abrir o WhatsApp.','error');
-  const ctx=rows.shift();await offlineStateSet('damage_receipts',rows);updateOnlineStatus();await openDeliveryDamageReceipt(ctx);return true;
+  if(offlineDamageReceiptOpening)return offlineDamageReceiptOpening;
+  const owner=authUser?.id,unit=activeUnit,client=sb;
+  const current=()=>authUser?.id===owner&&activeUnit===unit&&sb===client;
+  const task=(async()=>{
+    const rows=await offlineDamageReceipts();if(!current())return false;
+    const ctx=rows.find(row=>!row.unit||row.unit===unit);if(!ctx)return false;
+    if(!navigator.onLine){toast('O comprovante precisa de internet para abrir o WhatsApp.','error');return false;}
+    // Keep the pending prompt until the recipient dialog actually opens.
+    if(!await openDeliveryDamageReceipt(ctx)||!current())return false;
+    await updateOfflineDamageReceipts(owner,client,rows=>rows.filter(row=>row.offline_operation_id!==ctx.offline_operation_id));
+    updateOnlineStatus();return true;
+  })();
+  offlineDamageReceiptOpening=task;
+  try{return await task;}finally{if(offlineDamageReceiptOpening===task)offlineDamageReceiptOpening=null;}
 }
 
 updateOnlineStatus = function(){
@@ -7774,7 +7812,7 @@ onPullOpenOccurrenceClick = async function(event){
   finally{pullStepActionPending=false;renderPullDriver();}
 };
 
-async function offlineUploadDamageStorage(path,blob){const {error}=await sb.storage.from('avarias').upload(path,blob,{contentType:'image/jpeg',upsert:true});if(error)throw error;}
+async function offlineUploadDamageStorage(path,blob,client=sb){const {error}=await client.storage.from('avarias').upload(path,blob,{contentType:'image/jpeg',upsert:true});if(error)throw error;}
 const damagePushResultsV174=new Map();
 
 submitAvaria = async function(e){
@@ -7985,16 +8023,30 @@ async function processOfflineRecord(row){
     return data;
   }
   if(row.type==='DAMAGE_CREATE'){
-    const p=row.payload,base=`${authUser.id}/offline_${row.id}`,signaturePath=`${base}/assinatura.jpg`;await offlineUploadDamageStorage(signaturePath,p.signature_blob);const uploaded=[];
-    for(let i=0;i<p.items.length;i++){const x=p.items[i],photos=[];for(let j=0;j<(x.photos||[]).length;j++){const ph=x.photos[j],path=`${base}/produto_${String(i+1).padStart(2,'0')}_foto_${String(j+1).padStart(2,'0')}.jpg`;await offlineUploadDamageStorage(path,ph.blob);photos.push({photo_path:path,latitude:ph.gps.latitude,longitude:ph.gps.longitude,accuracy:ph.gps.accuracy||'',gps_at:ph.gps.capturedAt});}uploaded.push({...x,photos});}
-    const serverPayload={unit:p.unit||p.receiptCtx?.unit||activeUnit,date:p.date,customer_code:p.customer.code,customer_name:p.customer.name,city:p.customer.city,map_number:p.map_number,signature_path:signaturePath,items:uploaded.map(x=>{const first=x.photos[0];return {product:x.product,lot:x.lot,quantity:x.quantity,unit:x.unit,reason:x.reason,photos:x.photos,photo_path:first?.photo_path||'',latitude:first?.latitude,longitude:first?.longitude,accuracy:first?.accuracy,gps_at:first?.gps_at};})};
-    const {data,error}=await sb.rpc('offline_sync_damage_request',{p_operation_id:row.id,p_payload:serverPayload});if(error)throw error;
-    if(p.captureLocation&&data?.request_id){
-      const loc=p.captureLocation;
-      const {error:locationError}=await sb.rpc('set_damage_request_location',{p_request_id:data.request_id,p_latitude:loc.latitude,p_longitude:loc.longitude,p_accuracy:loc.accuracy??null,p_captured_at:loc.capturedAt??null});
-      if(locationError)throw locationError;
+    const owner=row.user_id,client=sb,checkOwner=()=>assertOfflineDamageOwner(owner,client);
+    checkOwner();
+    const p=row.payload,base=`${owner}/offline_${row.id}`,signaturePath=`${base}/assinatura.jpg`;
+    await offlineUploadDamageStorage(signaturePath,p.signature_blob,client);checkOwner();
+    const uploaded=[];
+    for(let i=0;i<p.items.length;i++){
+      const x=p.items[i],photos=[];
+      for(let j=0;j<(x.photos||[]).length;j++){
+        const ph=x.photos[j],path=`${base}/produto_${String(i+1).padStart(2,'0')}_foto_${String(j+1).padStart(2,'0')}.jpg`;
+        await offlineUploadDamageStorage(path,ph.blob,client);checkOwner();
+        photos.push({photo_path:path,latitude:ph.gps.latitude,longitude:ph.gps.longitude,accuracy:ph.gps.accuracy||'',gps_at:ph.gps.capturedAt});
+      }
+      uploaded.push({...x,photos});
     }
-    const ctx={...p.receiptCtx,request_id:data?.request_id||null};await offlineSaveDamageReceipt(ctx);
+    const serverPayload={unit:p.unit||p.receiptCtx?.unit||activeUnit,date:p.date,customer_code:p.customer.code,customer_name:p.customer.name,city:p.customer.city,map_number:p.map_number,signature_path:signaturePath,items:uploaded.map(x=>{const first=x.photos[0];return {product:x.product,lot:x.lot,quantity:x.quantity,unit:x.unit,reason:x.reason,photos:x.photos,photo_path:first?.photo_path||'',latitude:first?.latitude,longitude:first?.longitude,accuracy:first?.accuracy,gps_at:first?.gps_at};})};
+    const {data,error}=await client.rpc('offline_sync_damage_request',{p_operation_id:row.id,p_payload:serverPayload});
+    checkOwner();if(error)throw error;
+    if(typeof data?.request_id!=='string'||!data.request_id.trim())throw new Error('O servidor não confirmou a avaria. O cadastro continua salvo no aparelho para uma nova tentativa.');
+    if(p.captureLocation){
+      const loc=p.captureLocation;
+      const {error:locationError}=await client.rpc('set_damage_request_location',{p_request_id:data.request_id,p_latitude:loc.latitude,p_longitude:loc.longitude,p_accuracy:loc.accuracy??null,p_captured_at:loc.capturedAt??null});
+      checkOwner();if(locationError)throw locationError;
+    }
+    const ctx={...p.receiptCtx,request_id:data.request_id};await offlineSaveDamageReceipt(ctx,owner);checkOwner();
     const pushOk=await dispatchDamagePushV170('delivery',data?.request_id||null);
     const diagnostic=window.__lastPushDispatchV170||{};
     const pushResult={ok:pushOk,sent:Number(diagnostic.data?.sent||0),error:String(diagnostic.error||'Falha sem detalhe').slice(0,180)};
