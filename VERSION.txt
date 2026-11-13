@@ -1,1 +1,1 @@
-v1.7.79 - Preserva avarias offline até confirmação do servidor; protege troca de conta e comprovantes pendentes; mantém as correções de rolagem.
+v1.7.80 - Adiciona assinatura ampliada em tela cheia, com salvar, limpar e cancelar; retorna a assinatura horizontal sem distorção e preserva o cadastro offline.

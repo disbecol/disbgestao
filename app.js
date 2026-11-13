@@ -119,6 +119,7 @@ let deliveryDamageSelectedProduct = null;
 let deliveryDamageProductActiveIndex = -1;
 let deliveryDamageProductSearchTimer = null;
 let signatureDirty = false;
+let expandedSignaturePad = null;
 let drawingSignature = false;
 let currentAvariaDetail = null;
 let customerContactRows = [];
@@ -237,7 +238,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.79-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.80-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -5474,8 +5475,21 @@ async function captureGps({maxAccuracy=null,maxWaitMs=15000,onProgress=null,useR
 }
 function compressImage(file,max,quality){return new Promise((resolve,reject)=>{const img=new Image(),url=URL.createObjectURL(file);img.onload=()=>{let w=img.naturalWidth,h=img.naturalHeight;if(Math.max(w,h)>max){const s=max/Math.max(w,h);w=Math.round(w*s);h=Math.round(h*s);}const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);c.toBlob(b=>{URL.revokeObjectURL(url);b?resolve(b):reject(new Error('Falha ao processar foto.'));},'image/jpeg',quality);};img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('Imagem inválida.'));};img.src=url;});}
 function paintSignatureBackground(c){const ctx=c.getContext('2d');ctx.save();ctx.globalCompositeOperation='destination-over';ctx.fillStyle='#ffffff';ctx.fillRect(0,0,c.width,c.height);ctx.restore();}
-function setupSignatureCanvas(){const c=$('signatureCanvas'),ctx=c.getContext('2d');paintSignatureBackground(c);ctx.lineWidth=4;ctx.lineCap='round';ctx.strokeStyle='#17202a';const pos=e=>{const r=c.getBoundingClientRect();return {x:(e.clientX-r.left)*c.width/r.width,y:(e.clientY-r.top)*c.height/r.height};};c.addEventListener('pointerdown',e=>{drawingSignature=true;signatureDirty=true;c.setPointerCapture(e.pointerId);const p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);});c.addEventListener('pointermove',e=>{if(!drawingSignature)return;const p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();});['pointerup','pointercancel','pointerleave'].forEach(ev=>c.addEventListener(ev,()=>drawingSignature=false));}
-function clearSignature(){const c=$('signatureCanvas'),ctx=c.getContext('2d');ctx.save();ctx.globalCompositeOperation='source-over';ctx.clearRect(0,0,c.width,c.height);ctx.fillStyle='#ffffff';ctx.fillRect(0,0,c.width,c.height);ctx.restore();ctx.lineWidth=4;ctx.lineCap='round';ctx.strokeStyle='#17202a';signatureDirty=false;}
+function setupSignatureCanvas(){
+  const c=$('signatureCanvas'),ctx=c.getContext('2d');paintSignatureBackground(c);ctx.lineWidth=4;ctx.lineCap='round';ctx.strokeStyle='#17202a';
+  const pos=e=>{const r=c.getBoundingClientRect();return {x:(e.clientX-r.left)*c.width/r.width,y:(e.clientY-r.top)*c.height/r.height};};
+  c.addEventListener('pointerdown',e=>{drawingSignature=true;signatureDirty=true;c.setPointerCapture(e.pointerId);const p=pos(e);ctx.beginPath();ctx.arc(p.x,p.y,2,0,Math.PI*2);ctx.fillStyle=ctx.strokeStyle;ctx.fill();ctx.beginPath();ctx.moveTo(p.x,p.y);});
+  c.addEventListener('pointermove',e=>{if(!drawingSignature)return;const p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();});
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=>c.addEventListener(ev,()=>drawingSignature=false));
+  expandedSignaturePad=window.DisbSignaturePad?.bind({
+    canvas:c,button:$('btnAmpliarAssinatura'),isSigned:()=>signatureDirty,
+    onSave:()=>{drawingSignature=false;signatureDirty=true;},
+    canOpen:()=>avariaStep===3&&!submitAvaria._pending,
+    getContext:()=>JSON.stringify([authUser?.id,activeUnit,avariaEditorVersion,$('avPdv').value,$('avMapa').value,$('avData').value]),
+    onContextChanged:()=>toast('Os dados da avaria mudaram. Confira os dados e peça a assinatura novamente.','error')
+  });
+}
+function clearSignature(){expandedSignaturePad?.cancel();const c=$('signatureCanvas'),ctx=c.getContext('2d');ctx.save();ctx.globalCompositeOperation='source-over';ctx.clearRect(0,0,c.width,c.height);ctx.fillStyle='#ffffff';ctx.fillRect(0,0,c.width,c.height);ctx.restore();ctx.lineWidth=4;ctx.lineCap='round';ctx.strokeStyle='#17202a';signatureDirty=false;}
 function canvasBlob(c,q){return new Promise((resolve,reject)=>{const out=document.createElement('canvas');out.width=c.width;out.height=c.height;const ctx=out.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,out.width,out.height);ctx.drawImage(c,0,0);out.toBlob(b=>b?resolve(b):reject(new Error('Falha ao gerar assinatura.')),'image/jpeg',q);});}
 
 async function readCsvFileText(file){

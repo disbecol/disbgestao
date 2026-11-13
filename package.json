@@ -1,10 +1,11 @@
 {
   "name": "disb-gestao",
-  "version": "1.7.79",
+  "version": "1.7.80",
   "private": true,
   "scripts": {
     "prepare:web": "node scripts/copy-web.mjs",
     "test:push": "node --test tests/push-dispatch.test.mjs",
+    "test:signature": "node --test tests/signature-pad.test.mjs",
     "test:damage:offline": "node --test tests/damage-entry-flow.test.mjs tests/damage-offline-sync.test.mjs tests/damage-offline-database.test.mjs tests/damage-receipt-ui.test.mjs",
     "test:whatsapp": "node --test tests/damage-receipt.test.mjs",
     "test:forms": "node --test tests/forms.test.mjs tests/forms-database.test.mjs",
