@@ -107,7 +107,7 @@ button,a,summary{touch-action:manipulation}
 #appShell .filters{margin-bottom:17px}
 #appShell :is(.notice,.import-result){border-radius:10px;font-size:12px;line-height:1.7;font-weight:400;box-shadow:none}
 #appShell .notice:not(.error):not(.warning):not(.success){background:#f6f9fd;border-color:#dfe8f3;color:#607c9a}
-:is(#appShell,#modal) .table-wrap{border:1px solid #e0e8f2;border-radius:12px;scrollbar-width:auto;scrollbar-color:#b5c4d6 #f3f6fa;overscroll-behavior:contain}
+:is(#appShell,#modal) .table-wrap{border:1px solid #e0e8f2;border-radius:12px;scrollbar-width:auto;scrollbar-color:#b5c4d6 #f3f6fa;overscroll-behavior-x:contain;overscroll-behavior-y:auto}
 :is(#appShell,#modal) table{font-family:inherit;font-size:12px;line-height:1.65;color:#405872}
 :is(#appShell,#modal) table th{background:#f5f8fc!important;color:#72859e!important;font-size:9px!important;line-height:1.5;font-weight:700!important;letter-spacing:.5px;border-color:#e1e8f1;padding:13px 14px}
 :is(#appShell,#modal) table td{font-size:12px;font-weight:400;padding:14px;border-color:#e8edf4;line-height:1.65}

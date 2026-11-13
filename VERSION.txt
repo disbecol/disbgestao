@@ -1,1 +1,1 @@
-v1.7.77 - Rolagem única nas janelas de avarias, mantendo cabeçalho e ações visíveis.
+v1.7.78 - Corrige rolagem vertical da página com o cursor sobre tabelas; preserva rolagem lateral.
