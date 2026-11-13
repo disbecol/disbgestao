@@ -36,7 +36,7 @@ class Element{
 }
 class Canvas extends Element{
   constructor(document){super();this.ownerDocument=document;this.width=1000;this.height=300;this.capture=null;
-    this.ctx={ink:false,draws:[],setTransform(){},fillRect:()=>{this.ctx.ink=false;},beginPath(){},arc(){},fill:()=>{this.ctx.ink=true;},moveTo(){},lineTo(){},stroke:()=>{this.ctx.ink=true;},
+    this.ctx={ink:false,draws:[],moves:[],lines:[],setTransform(){},fillRect:()=>{this.ctx.ink=false;},beginPath(){},arc(){},fill:()=>{this.ctx.ink=true;},moveTo:(x,y)=>{this.ctx.moves.push([x,y]);},lineTo:(x,y)=>{this.ctx.lines.push([x,y]);},stroke:()=>{this.ctx.ink=true;},
       drawImage:(...args)=>{this.ctx.ink=true;this.ctx.draws.push(args);},
       getImageData:()=>{const image={width:8,height:4,data:new Uint8ClampedArray(8*4*4).fill(255)};if(this.ctx.ink){image.data.set([23,32,42,255],(1*8+1)*4);image.data.set([23,32,42,255],(2*8+6)*4);}return image;}};
   }
@@ -98,4 +98,20 @@ test('changed customer/account context cannot save stale handwriting',()=>{
   const h=harness();h.api.open();h.draw();h.changeContext();assert.equal(h.api.save(),false);
   assert.equal(h.canvas.ctx.draws.length,0);assert.equal(h.state().saves,0);assert.equal(h.state().invalidations,1);assert.equal(h.controls.dialog.open,false);
   h.disallow();assert.equal(h.api.open(),false);
+});
+
+test('changing the screen aspect ratio preserves the handwriting proportions',()=>{
+  const h=harness();h.api.open();h.draw();
+  const ratio=()=>{const a=h.pad.ctx.moves.at(-1),b=h.pad.ctx.lines.at(-1);return Math.abs((b[0]-a[0])/(b[1]-a[1]));};
+  const before=ratio();h.controls.stage.clientWidth=650;h.controls.stage.clientHeight=200;h.observer.fn();
+  assert.ok(Math.abs(ratio()-before)<1e-9,'rotation must fit the handwriting uniformly instead of stretching it');
+  const fittedRatio=parseFloat(h.pad.style.width)/parseFloat(h.pad.style.height);assert.ok(Math.abs(fittedRatio-650/300)<1e-9);
+  h.controls.stage.clientWidth=300;h.controls.stage.clientHeight=650;h.observer.fn();assert.ok(Math.abs(ratio()-before)<1e-9);
+  h.controls.stage.clientWidth=650;h.controls.stage.clientHeight=200;h.observer.fn();h.controls.clear.fire('click');
+  assert.equal(h.pad.style.width,'650px');assert.equal(h.pad.style.height,'200px');
+});
+
+test('rotating before writing uses the entire new signing area',()=>{
+  const h=harness();h.api.open();h.controls.stage.clientWidth=650;h.controls.stage.clientHeight=200;h.observer.fn();
+  assert.equal(h.pad.style.width,'650px');assert.equal(h.pad.style.height,'200px');assert.equal(h.controls.save.disabled,true);
 });

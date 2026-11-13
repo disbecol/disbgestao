@@ -1,1 +1,1 @@
-v1.7.80 - Adiciona assinatura ampliada em tela cheia, com salvar, limpar e cancelar; retorna a assinatura horizontal sem distorção e preserva o cadastro offline.
+v1.7.81 - Assinatura ampliada em tela cheia; mantém o traço proporcional ao girar o celular e devolve a assinatura horizontal ao cadastro, inclusive offline.

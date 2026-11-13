@@ -57,14 +57,20 @@
     function layout(){
       if(!session||!stage.clientWidth||!stage.clientHeight)return;
       const width=stage.clientWidth,height=stage.clientHeight;rotated=height>width;
-      logicalWidth=rotated?height:width;logicalHeight=rotated?width:height;
+      const availableWidth=rotated?height:width,availableHeight=rotated?width:height;
+      // Once written, keep the paper proportions when the phone rotates.
+      // An empty paper can use the whole newly available area.
+      if(!session.paperWidth||!session.base&&!session.strokes.length){session.paperWidth=availableWidth;session.paperHeight=availableHeight;}
+      logicalWidth=session.paperWidth;logicalHeight=session.paperHeight;
+      const fitted=containRect(logicalWidth,logicalHeight,availableWidth,availableHeight);
+      pad.style.width=fitted.width+'px';pad.style.height=fitted.height+'px';
+      pad.style.transform=`translate(-50%,-50%)${rotated?' rotate(90deg)':''}`;
+      guide.classList.toggle('is-rotated',rotated);
       const ratio=Math.min(2,Math.max(1,view.devicePixelRatio||1));
       const pixelWidth=Math.round(logicalWidth*ratio),pixelHeight=Math.round(logicalHeight*ratio);
       if(pad.width===pixelWidth&&pad.height===pixelHeight&&pad.dataset.rotated===String(rotated))return;
       pad.width=pixelWidth;pad.height=pixelHeight;pad.dataset.rotated=String(rotated);
-      pad.style.width=logicalWidth+'px';pad.style.height=logicalHeight+'px';
-      pad.style.transform=`translate(-50%,-50%)${rotated?' rotate(90deg)':''}`;
-      guide.classList.toggle('is-rotated',rotated);repaint();
+      repaint();
     }
     function stop(event){
       if(!session||event&&event.pointerId!==session.pointer)return;
@@ -90,7 +96,7 @@
       dialog.innerHTML='<header class="signature-sheet-header"><div><h2 id="expandedSignatureTitle">Assinatura do cliente</h2><p>Vire o celular de lado e use a área branca para assinar.</p></div><button type="button" class="signature-sheet-cancel" data-signature-cancel>Cancelar</button></header><div class="signature-sheet-stage"><canvas aria-label="Área ampliada para a assinatura do cliente"></canvas><span class="signature-sheet-guide" aria-hidden="true">Assine aqui</span></div><footer class="signature-sheet-footer"><button type="button" class="btn secondary" data-signature-clear>Limpar</button><button type="button" class="btn primary" data-signature-save disabled>Salvar assinatura</button></footer>';
       document.body.append(dialog);stage=dialog.querySelector('.signature-sheet-stage');pad=stage.querySelector('canvas');guide=stage.querySelector('.signature-sheet-guide');saveButton=dialog.querySelector('[data-signature-save]');
       dialog.querySelector('[data-signature-cancel]').addEventListener('click',finish);
-      dialog.querySelector('[data-signature-clear]').addEventListener('click',()=>{if(!session)return;stop();session.base=null;session.strokes=[];repaint();pad.focus();});
+      dialog.querySelector('[data-signature-clear]').addEventListener('click',()=>{if(!session)return;stop();session.base=null;session.strokes=[];layout();repaint();pad.focus();});
       saveButton.addEventListener('click',save);
       dialog.addEventListener('cancel',event=>{event.preventDefault();finish();});
       dialog.addEventListener('close',()=>{if(!dialog.open)finish();});
