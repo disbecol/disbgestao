@@ -1,1 +1,1 @@
-v1.7.83 - Contraste corrigido no menu; modos claro, escuro e automático com preferência local e suporte offline.
+v1.7.84 - Correção das cores no modo escuro em campos, conferência, NRI, avarias, indicadores, estoque e vendas.

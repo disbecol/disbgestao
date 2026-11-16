@@ -36,7 +36,7 @@
 #view-avaria-cadastro .avaria-client-summary .av-client-name strong{font-size:14px}
 #view-avaria-cadastro .avaria-customer-choice{order:initial;margin:0!important}
 #view-avaria-cadastro .av-delivery-metadata{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:24px;padding-top:22px;border-top:1px solid #edf0f4}
-#view-avaria-cadastro .av-delivery-metadata input{height:44px;background:#f8fafc!important;font-size:13px}
+#view-avaria-cadastro .av-delivery-metadata input{height:44px;background:var(--control-readonly-bg,#f8fafc)!important;font-size:13px}
 #view-avaria-cadastro .av-delivery-context{display:flex;align-items:center;gap:12px;background:#f2f6fa;border:1px solid #e0e8ef;padding:14px 18px;border-radius:13px;margin-bottom:16px}
 #view-avaria-cadastro .av-context-icon{font-size:24px;color:#8495a6}
 #view-avaria-cadastro .av-delivery-context>div{min-width:0;flex:1}

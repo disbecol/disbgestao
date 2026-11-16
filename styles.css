@@ -333,24 +333,24 @@ body:before{content:"";position:fixed;inset:0 0 auto 0;height:180px;background:l
 .form-block{border:1px solid #e5e9ef;border-radius:14px;background:#fff;padding:16px}.form-block.accent{background:#fbfcff}.block-head{border-color:#eef1f5}.block-head strong{color:#233047}.block-head small{color:#8590a0}.step{background:#eff6ff;color:#2563eb;border:1px solid #dbeafe;border-radius:8px}
 
 /* Campos */
-.field label{color:#344054;font-size:10.5px;font-weight:800;letter-spacing:.01em}.field input,.field select,textarea{border:1px solid #d9dfe8!important;border-radius:10px!important;background:#fff!important;color:#1f2937!important;box-shadow:0 1px 2px rgba(15,23,42,.015);transition:border-color .15s,box-shadow .15s}.field input,.field select{height:45px}.field input:focus,.field select:focus,textarea:focus{border-color:#60a5fa!important;box-shadow:0 0 0 3px rgba(37,99,235,.10)!important;outline:none}.field input[readonly],.field input:disabled,.field select:disabled{background:#f5f7fa!important;color:#7b8798!important}.field-help{color:#8b97a8}
+.field label{color:#344054;font-size:10.5px;font-weight:800;letter-spacing:.01em}.field input,.field select,textarea{border:1px solid var(--control-border,#d9dfe8)!important;border-radius:10px!important;background:var(--control-bg,#fff)!important;color:var(--control-text,#1f2937)!important;box-shadow:0 1px 2px rgba(15,23,42,.015);transition:border-color .15s,box-shadow .15s}.field input,.field select{height:45px}.field input:focus,.field select:focus,textarea:focus{border-color:var(--control-focus,#60a5fa)!important;box-shadow:0 0 0 3px rgba(37,99,235,.10)!important;outline:none}.field input[readonly],.field input:disabled,.field select:disabled{background:var(--control-readonly-bg,#f5f7fa)!important;color:var(--control-readonly-text,#7b8798)!important}.field-help{color:#8b97a8}
 .product-preview{border-color:#e2e7ee;background:#fbfcfe;border-radius:11px}.multi-lot-list{border-color:#d7dee8;background:#fbfcfe}.multi-lot-chip{border-color:#dbeafe;background:#eff6ff;color:#1d4ed8}.multi-lot-chip button{background:#dbeafe;color:#1d4ed8}
 
 /* Botoes */
 .btn{border-radius:10px;min-height:40px;font-size:10.5px;font-weight:800;box-shadow:none;transition:transform .13s,box-shadow .13s,background .13s}.btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 7px 18px rgba(15,23,42,.09)}.btn.primary{background:#2563eb;color:#fff;border-color:#2563eb;box-shadow:0 5px 12px rgba(37,99,235,.16)}.btn.primary:hover:not(:disabled){background:#1d4ed8}.btn.secondary{background:#fff;border-color:#d9dfe8;color:#475569}.btn.secondary:hover:not(:disabled){background:#f8fafc}.btn.success{background:#16a34a;border-color:#16a34a}.btn.danger{background:#dc2626;border-color:#dc2626}
 
 /* Tabelas e listas */
-.table-wrap{border:1px solid #e6eaf0;border-radius:13px;background:#fff;overflow:auto}table{border-collapse:separate;border-spacing:0}thead th{background:#f8fafc!important;color:#667085!important;border-bottom:1px solid #e6eaf0!important;font-size:8.5px!important;letter-spacing:.055em!important;text-transform:uppercase}tbody td{border-bottom-color:#eef1f4!important;color:#344054}tbody tr:hover td{background:#fbfcfe}.empty-state{color:#8b97a8;background:#fbfcfe;border-color:#e5e9ef}
+.table-wrap{border:1px solid #e6eaf0;border-radius:13px;background:#fff;overflow:auto}table{border-collapse:separate;border-spacing:0}thead th{background:#f8fafc!important;color:#667085!important;border-bottom:1px solid #e6eaf0!important;font-size:8.5px!important;letter-spacing:.055em!important;text-transform:uppercase}tbody td{border-bottom-color:var(--border,#eef1f4)!important;color:#344054}tbody tr:hover td{background:#fbfcfe}.empty-state{color:#8b97a8;background:#fbfcfe;border-color:#e5e9ef}
 .status,.tag,.pill{box-shadow:none}
 
 /* Dashboards / indicadores */
-.kpi,.stat-card,.dashboard-card,.metric-card{border-color:#e6eaf0!important;border-radius:14px!important;box-shadow:var(--shadow)!important;background:#fff!important}.kpi strong,.stat-card strong,.metric-card strong{color:#172033}.kpi small,.stat-card small,.metric-card small{color:#8490a1}
+.kpi,.stat-card,.dashboard-card,.metric-card{border-color:var(--border,#e6eaf0)!important;border-radius:14px!important;box-shadow:var(--shadow)!important;background:var(--card,#fff)!important}.kpi strong,.stat-card strong,.metric-card strong{color:#172033}.kpi small,.stat-card small,.metric-card small{color:#8490a1}
 
 /* Ativo de Giro */
 .asset-active-head h2{color:#172033}.asset-kpi{border-color:#e5e9ef;background:#f8fafc;border-radius:11px}.asset-kpi strong{color:#2563eb}.asset-count-table-wrap{border-color:#e5e9ef;border-radius:13px;box-shadow:0 4px 16px rgba(15,23,42,.035)}.asset-count-header{background:#172033;color:#f8fafc}.asset-count-row{border-top-color:#e9edf2}.asset-count-row>div{border-left-color:#edf0f4}.asset-desc strong{color:#243247}.asset-desc small{color:#8793a4}.asset-qty-input{border-color:#d8dee7;background:#fff;color:#243247;border-radius:9px}.asset-qty-input:focus{outline:none;border-color:#60a5fa;box-shadow:0 0 0 3px rgba(37,99,235,.10)}.asset-running-total{background:#f7faff;color:#335f9d}
 
 /* Selectores visuais de produto */
-.sales-product-options,.operational-product-options{border-color:#dfe5ec!important;border-radius:12px!important;box-shadow:0 18px 45px rgba(15,23,42,.14)!important}.sales-product-option:hover,.sales-product-option.active,.operational-product-option:hover,.operational-product-option.active{background:#f1f6ff!important;outline-color:#c9dcfb!important}.sales-product-selected.chosen,.operational-product-selected.chosen{border-color:#dbe5f4!important;background:#f8fbff!important}
+.sales-product-options,.operational-product-options{border-color:#dfe5ec!important;border-radius:12px!important;box-shadow:0 18px 45px rgba(15,23,42,.14)!important}.sales-product-option:hover,.sales-product-option.active,.operational-product-option:hover,.operational-product-option.active{background:var(--option-hover,#f1f6ff)!important;outline-color:#c9dcfb!important}.sales-product-selected.chosen,.operational-product-selected.chosen{border-color:#dbe5f4!important;background:var(--selected-surface,#f8fbff)!important}
 
 /* Scrollbar discreta */
 .sidebar::-webkit-scrollbar,.table-wrap::-webkit-scrollbar,.asset-count-table-wrap::-webkit-scrollbar{width:8px;height:8px}.sidebar::-webkit-scrollbar-thumb{background:#334155;border-radius:999px}.table-wrap::-webkit-scrollbar-thumb,.asset-count-table-wrap::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:999px}.table-wrap::-webkit-scrollbar-track,.asset-count-table-wrap::-webkit-scrollbar-track{background:#f8fafc}
@@ -744,12 +744,12 @@ button[data-sales-launch]:focus-visible,
 /* ==========================================================================
    v1.6.5 - Restaura cores das Avarias de Entrega e visual do comprovante
    ========================================================================== */
-.status.analysis{background:#eef2ff!important;color:#4338ca!important;border:1px solid #c7d2fe!important}
-.status.approved{background:#ecfdf3!important;color:#067647!important;border:1px solid #abefc6!important}
-.status.launched{background:#f4f0ff!important;color:#6938ef!important;border:1px solid #d9d6fe!important}
-.status.delivered{background:#ecfdf8!important;color:#087a61!important;border:1px solid #a6f4c5!important}
-.status.rejected{background:#fff1f3!important;color:#c01048!important;border:1px solid #fecdd6!important}
-.status.discarded{background:#f2f4f7!important;color:#475467!important;border:1px solid #d0d5dd!important}
+.status.analysis{background:var(--status-info-bg,#eef2ff)!important;color:var(--status-info-text,#4338ca)!important;border:1px solid #c7d2fe!important}
+.status.approved{background:var(--status-success-bg,#ecfdf3)!important;color:var(--status-success-text,#067647)!important;border:1px solid #abefc6!important}
+.status.launched{background:var(--status-launched-bg,#f4f0ff)!important;color:var(--status-launched-text,#6938ef)!important;border:1px solid #d9d6fe!important}
+.status.delivered{background:var(--status-success-bg,#ecfdf8)!important;color:var(--status-success-text,#087a61)!important;border:1px solid #a6f4c5!important}
+.status.rejected{background:var(--status-danger-bg,#fff1f3)!important;color:var(--status-danger-text,#c01048)!important;border:1px solid #fecdd6!important}
+.status.discarded{background:var(--status-neutral-bg,#f2f4f7)!important;color:var(--status-neutral-text,#475467)!important;border:1px solid #d0d5dd!important}
 
 .receipt-proof-card{border:1px solid #dbe5ef;border-radius:15px;background:#fff;padding:15px;margin-bottom:16px;box-shadow:0 5px 18px rgba(15,23,42,.045)}
 .receipt-proof-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;padding-bottom:12px;border-bottom:1px solid #edf1f5}
@@ -797,7 +797,7 @@ button[data-sales-launch]:focus-visible,
   padding:9px 11px!important;
   border:1px solid #e1e8ef!important;
   border-radius:11px!important;
-  background:#f8fafc!important;
+  background:var(--subtle-surface,#f8fafc)!important;
 }
 .sales-select-all{
   display:inline-flex!important;
@@ -807,8 +807,8 @@ button[data-sales-launch]:focus-visible,
   padding:7px 10px!important;
   border:1px solid #d8e1ea!important;
   border-radius:9px!important;
-  background:#fff!important;
-  color:#344054!important;
+  background:var(--card,#fff)!important;
+  color:var(--text,#344054)!important;
   font-size:10.5px!important;
   font-weight:900!important;
   cursor:pointer!important;
@@ -818,7 +818,7 @@ button[data-sales-launch]:focus-visible,
   min-width:auto!important;
   font-size:10px!important;
   font-weight:800!important;
-  color:#667085!important;
+  color:var(--muted,#667085)!important;
 }
 
 .sales-launch-action{

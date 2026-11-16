@@ -8,6 +8,8 @@ html[data-theme="light"]{color-scheme:light}
 @media print{.appearance-control{display:none!important}}
 
 @media screen{
+ /* Estas variáveis também atendem às regras legadas com !important. */
+ :root[data-theme="dark"]{--control-bg:#15202e;--control-text:#e1e7ef;--control-border:#65768b;--control-focus:#a8cdf7;--control-readonly-bg:#202d3e;--control-readonly-text:#adb9c9;--selected-surface:#23354c;--option-hover:#293a50;--subtle-surface:#202d3e;--status-info-bg:#23354c;--status-info-text:#c4ddfb;--status-success-bg:#1e372d;--status-success-text:#a8e4c3;--status-launched-bg:#302b48;--status-launched-text:#d8ccff;--status-danger-bg:#3b252d;--status-danger-text:#ffc0c7;--status-neutral-bg:#202d3e;--status-neutral-text:#c6d1df}
  :root[data-theme="dark"]{color-scheme:dark;--bg:#111923;--card:#192331;--border:#3b4a5d;--text:#e1e7ef;--muted:#adb9c9;--nav:#e1e7ef;--nav2:#9fc6f5;--blue:#9fc6f5;--blue2:#bdd9fa;--green:#8cd5af;--red:#f2a6ae;--amber:#e8c581;--ui-soft:#23354c;--shadow:none;--dark-soft:#202d3e;--dark-hover:#293a50}
  :root[data-theme="dark"] ::selection{background:#38597e;color:#fff}
  :root[data-theme="dark"] :is(button,a,input,select,textarea,summary):focus-visible{outline-color:#a8cdf7}
@@ -114,6 +116,49 @@ html[data-theme="light"]{color-scheme:light}
  :root[data-theme="dark"] :is(#appShell,#modal) :is(.fm-metric.warn strong,.fm-self-counts .warn){color:#efd39d}
  :root[data-theme="dark"] :is(#appShell,#modal) :is(.fm-metric.brand strong,.fm-dynamic-nav .fm-nav-name,.fm-calendar-day.today>strong){color:#c4ddfb}
  :root[data-theme="dark"] :is(#appShell,#modal) :is(.fm-empty,.refugo-empty,.home-empty){background:var(--dark-soft);color:var(--muted);border-color:var(--border)}
+
+ /* Componentes compartilhados e painéis dinâmicos de Conferência/NRI/Avarias. */
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.block-head,.list-head,.section-heading,.customer-card>div+div,.delivery-my-card-actions,.evidence-card-head){border-color:var(--border)}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.block-head strong,.customer-card strong,.live-info strong,.kpi strong,.stat-card strong,.metric-card strong,.conf-outcome-donut strong,.delivery-my-product .damage-product-name strong,.delivery-my-product-meta strong,.delivery-my-heading>strong,.evidence-card-head strong){color:var(--text)}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.block-head small,.customer-card small,.live-info small,.kpi span,.kpi small,.stat-card small,.metric-card small,.conf-outcome-donut span,.delivery-my-card-head small,.delivery-my-card-head span:not(.status),.delivery-my-card-label,.delivery-my-product .damage-product-name small,.delivery-my-product-meta small,.delivery-my-product-status>small,.delivery-my-heading small,.evidence-card-head small,.sales-damage-request-observation>small,.optional-label){color:var(--muted)}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.customer-card,.live-info>div,.multi-lot-list,.delivery-my-card-body,.conf-outcome-donut>div,.photo-gallery.empty,.gps-status){background:var(--dark-soft);border-color:var(--border);color:var(--muted)}
+ :root[data-theme="dark"] :is(#appShell,#modal) .evidence-card{background:var(--card);border-color:var(--border);color:var(--text)}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.delivery-my-card,.delivery-my-product){box-shadow:none}
+ :root[data-theme="dark"] :is(#appShell,#modal) .delivery-my-card-actions{border-color:var(--border)}
+ :root[data-theme="dark"] :is(#appShell,#modal) .delivery-my-product .damage-product-code{background:#23354c;color:#c4ddfb}
+ :root[data-theme="dark"] #appShell #view-sales-avaria-cadastro .sales-damage-request-observation textarea{display:block;width:100%;min-height:100px;resize:vertical}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.conference-product-head,.conference-phase:last-child,.conference-phase:nth-last-child(2),.conference-simple-row:nth-child(even),.conference-sale-details,.conference-bottle-summary){background:var(--dark-soft);border-color:var(--border)}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.conference-product-head h4,.conference-phase-line strong,.conference-simple-name,.conference-simple-metric strong,.conference-bottle-summary strong){color:var(--text)}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.conference-product-head small,.conference-phase-label,.conference-phase-line small,.conference-simple-metric small,.conference-estimate-note,.conference-results h3,.conference-sale-toggle>span,.conference-bottle-summary span,.conference-bottle-summary small,.conference-unpriced){color:var(--muted)}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.conference-phase,.conference-phase-line,.conference-simple-row,.conference-sale-toggle){border-color:var(--border)}
+ :root[data-theme="dark"] :is(#appShell,#modal) .conference-product-status.no-base{background:#23354c;color:#c4ddfb}
+ :root[data-theme="dark"] :is(#appShell,#modal) .conference-product-status.matched{background:#1e372d;color:#a8e4c3}
+ :root[data-theme="dark"] :is(#appShell,#modal) .conference-product-status.different{background:#3b252d;color:#ffc0c7}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.value-positive,.kpi.positive strong,.conference-phase-line strong.value-positive,.conference-simple-metric strong.value-positive){color:#a8cdf7}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.value-negative,.kpi.negative strong,.conference-phase-line strong.value-negative,.conference-simple-metric strong.value-negative){color:#ffc0c7}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.value-zero,.conference-phase-line strong.value-zero,.conference-simple-metric strong.value-zero){color:#a8e4c3}
+ :root[data-theme="dark"] :is(#appShell,#modal) .kpi.warning strong{color:#efd39d}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.sales-pricing-metric,.sales-pricing-row){border-color:var(--border)}
+ :root[data-theme="dark"] :is(#appShell,#modal) .sales-pricing-metric h4{background:#284565;color:#e1efff}
+ :root[data-theme="dark"] :is(#appShell,#modal) .sales-pricing-metric.ttv h4{background:#245d46;color:#e8f3ec}
+ :root[data-theme="dark"] :is(#appShell,#modal) .sales-pricing-row strong.missing{color:#adb9c9}
+ /* Contagens, materiais e textos auxiliares compartilham a mesma paleta. */
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.nri-damage-box,.fefo-hero-stats>div,.mat-identifier-box,.asset-kpi,.transfer-start-summary,.pull-driver-detail-summary,.pull-tabs,.dashboard-section-tag){background:var(--dark-soft);border-color:var(--border)}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.home-picker-head strong,.conf-outcome-row strong,.fefo-hero-stats strong,.asset-kpi strong,.transfer-start-summary strong,.pull-driver-detail-summary h2){color:var(--text)}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.home-picker-head small,.field>small,.section-heading span,.muted-text,.fefo-hero small,.fefo-hero span,.conf-outcome-row>div:first-child,.transfer-start-summary small,.pull-plan-filter-help,.marketplace-live span,.eyebrow,.dashboard-section-tag){color:var(--muted)}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.pull-live-time strong,.pull-next-head small){color:#a8cdf7}
+ :root[data-theme="dark"] #appShell .notice:not(.error):not(.warning):not(.success){background:#23354c;border-color:#4c6d94;color:#c4ddfb}
+ :root[data-theme="dark"] #appShell #view-nri-avarias-historico .damage-history-filter{background:var(--dark-soft);border-color:var(--border)}
+ :root[data-theme="dark"] #appShell #view-puxada-dashboard{--pull-ink:#e1e7ef;--pull-muted:#adb9c9;--pull-line:#3b4a5d;--pull-blue:#335d8e;--pull-soft:#23354c}
+ :root[data-theme="dark"] #appShell #view-puxada-dashboard :is(.pull-dashboard-nav button,.pull-dashboard-nav button.active,.pull-donut>div,.pull-tabs){background:var(--dark-soft);color:var(--text);border-color:var(--border)}
+ :root[data-theme="dark"] #appShell #view-puxada-dashboard :is(.pull-dashboard-nav button>span,.pull-tabs button.active){background:#294566;color:#c4ddfb}
+ :root[data-theme="dark"] #appShell #view-puxada-dashboard :is(.pull-dashboard-nav strong,.pull-donut strong,.pull-donut-legend strong){color:var(--text)}
+ :root[data-theme="dark"] #appShell #view-puxada-dashboard :is(.pull-dashboard-nav small,.pull-donut span,.pull-donut-legend>div,.pull-donut-legend p,.pull-dashboard-details summary small,.section-heading span,.dashboard-section-tag){color:var(--muted)}
+ :root[data-theme="dark"] :is(#appShell,#modal) .pull-plan-date-filter{background:var(--dark-soft);border-color:var(--border)}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.pull-driver-detail-summary small,.pull-driver-detail-summary span,.pull-driver-details .pull-live-time){color:var(--muted)}
+ :root[data-theme="dark"] #appShell #view-puxada-dashboard :is(.pull-arrival-summary>div,.pull-arrival-tabs button.active){background:var(--dark-soft);color:var(--text);border-color:var(--border)}
+ :root[data-theme="dark"] #appShell #view-puxada-dashboard details>summary{background:var(--dark-soft);color:var(--text);border-color:var(--border)}
+ :root[data-theme="dark"] #appShell #view-puxada-dashboard .pull-arrival-summary span{color:var(--muted)}
 
  /* Tela de acesso e painéis auxiliares. */
  :root[data-theme="dark"] #loginScreen.login-screen{background:var(--bg)}
