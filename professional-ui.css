@@ -7,29 +7,38 @@ h1,h2,h3,.brand-row strong{font-family:'DM Sans','Segoe UI',system-ui,sans-serif
 :is(button,a,input,select,textarea,summary):focus-visible{outline:3px solid #335d8e;outline-offset:3px}
 .skip-link{position:fixed;top:8px;left:270px;z-index:4000;transform:translateY(-160%);background:#253449;color:#fff;padding:12px 18px;border-radius:6px}
 .skip-link:focus{transform:none}
-/* Menu claro: rótulos presentes, seleção discreta, sem novos níveis. */
+/* Hierarquia: área > módulo > tela. A seleção pertence à tela aberta. */
+:root{--sidebar-group:#5f6b7a;--sidebar-module:#344155;--sidebar-link:#526174;--sidebar-hover:#f1f3f6;--sidebar-line:#dce1e7;--sidebar-active-bg:#eaf0f6;--sidebar-active-text:#244f7c;--sidebar-active-border:#ccd8e6;--sidebar-active-icon-bg:#fff;--sidebar-row-height:40px;--sidebar-group-height:32px;--sidebar-link-size:12px}
 #sidebar.sidebar{width:var(--shell-nav-width);padding:23px 12px 18px;background:#fff;border-right:1px solid var(--border);box-shadow:none;scrollbar-color:#b8c2ce transparent}
 .sidebar .brand-row{padding:0 10px 18px;gap:10px}
 .sidebar .brand-box,.sidebar .brand-box img{width:36px;height:36px;border-radius:8px}
 .sidebar .brand-row strong{font:700 17px/1.4 'DM Sans',sans-serif;letter-spacing:-.3px;color:#253449}
 .sidebar .brand-row span{font-size:11px;letter-spacing:0;color:#667386;margin-top:2px}
 .sidebar .app-version-badge{margin:0 10px 18px;color:#667386;font-size:10px;letter-spacing:0}
-.sidebar .nav-area{margin-top:13px}
-.sidebar .nav-area-toggle{min-height:38px;padding:8px 10px;color:#596779;font-size:12px;font-weight:600;letter-spacing:0;text-transform:none}
-.sidebar .area-icon,.sidebar .module-icon{color:#64748a!important}
-.sidebar .area-chevron,.sidebar .module-chevron{color:#64748a}
-.sidebar .nav-module-toggle{min-height:39px;padding:9px 10px;border-radius:6px;color:#39485d;font-size:13px;font-weight:500}
-.sidebar .nav-module-toggle .module-name{color:inherit;font-size:13px;font-weight:500;line-height:1.4}
-.sidebar .nav-module-toggle .module-name:before{content:none}
+#sidebar .nav-area{margin:18px 0 0;background:transparent;border:0;box-shadow:none}
+#sidebar .nav-area-toggle{display:grid;grid-template-columns:minmax(0,1fr) 14px;gap:8px;min-height:var(--sidebar-group-height);padding:7px 10px;border-radius:6px;background:transparent;color:var(--sidebar-group);font-size:11px;font-weight:650;letter-spacing:.08em;text-transform:uppercase}
+#sidebar .nav-area-toggle .area-icon{display:none}
+#sidebar .area-name{font:inherit;color:inherit;letter-spacing:inherit}
+#sidebar .area-chevron,#sidebar .module-chevron{color:var(--sidebar-group);font-size:13px}
+#sidebar .nav-area-items{margin:0;padding:3px 0 0}
+#sidebar .nav-module{margin:3px 0 5px;border:0;background:transparent;box-shadow:none}
+#sidebar .nav-module-toggle{display:grid;grid-template-columns:18px minmax(0,1fr) 14px;gap:10px;min-height:var(--sidebar-row-height);padding:8px 10px;border-radius:7px;background:transparent;color:var(--sidebar-module);font-size:13px;font-weight:600;letter-spacing:0}
+#sidebar .nav-module-toggle .module-name{color:inherit;font-size:13px;font-weight:600;line-height:1.4}
+#sidebar .nav-module-toggle .module-name:before{content:none}
+#sidebar .module-icon{width:18px;height:20px;color:var(--sidebar-module)!important;background:transparent!important;border:0!important;box-shadow:none!important}
 #sidebar .app-version-badge{color:#667386!important;background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;padding:0!important;font-weight:500!important;font-size:10px!important}
-.sidebar .nav-module.open>.nav-module-toggle{background:#f5f6f8;color:#253449}
-.sidebar :is(.nav-area-toggle,.nav-module-toggle,.nav-item):hover{background:#f1f3f6;color:#253449}
-.sidebar .nav-module-items{margin:2px 0 5px 18px;padding:2px 0 3px 10px;border-left:1px solid #e4e8ed}
-.sidebar .nav-item{min-height:38px;margin:2px 0;padding:8px 10px;border-radius:6px;color:#526174;font-size:12px;font-weight:400}
-.sidebar .nav-item.active,.sidebar .nav-module .nav-item.active{background:#eaf0f6;color:#244f7c;box-shadow:inset 3px 0 #335d8e;font-weight:600}
-.sidebar .nav-item.active:after{content:none}
-.sidebar .nav-item .badge{background:#eef1f5;color:#465971;font-size:10px}
-.sidebar .home-nav-item{font-size:13px;margin-bottom:14px}
+#sidebar .nav-module.open>.nav-module-toggle{color:var(--sidebar-module)}
+#sidebar :is(.nav-area-toggle,.nav-module-toggle,.nav-item):hover{background:var(--sidebar-hover)}
+#sidebar .nav-module-items{margin:2px 2px 10px 10px;padding:1px 0 1px 8px;border-left:1px solid var(--sidebar-line)}
+#sidebar .nav-module-items:before,#sidebar .nav-module .nav-item:before{content:none;display:none}
+#sidebar .nav-item{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:8px;width:100%;min-height:var(--sidebar-row-height);margin:3px 0;padding:7px 8px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--sidebar-link);font-size:var(--sidebar-link-size);font-weight:400;line-height:1.45;overflow-wrap:anywhere;box-shadow:none}
+#sidebar .nav-item>span:first-child{display:grid;place-items:center;width:24px;height:24px;margin:0;border-radius:6px;background:transparent;color:inherit}
+#sidebar .nav-module-items .nav-item .ui-nav-icon{width:15px;height:15px}
+#sidebar .nav-item.active,#sidebar .nav-module .nav-item.active{background:var(--sidebar-active-bg);border-color:var(--sidebar-active-border);color:var(--sidebar-active-text);box-shadow:none;font-weight:600}
+#sidebar .nav-item.active>span:first-child{background:var(--sidebar-active-icon-bg);color:var(--sidebar-active-text);box-shadow:none}
+#sidebar .nav-item.active:after{content:none}
+#sidebar .nav-item .badge{justify-self:end;margin-left:0;background:var(--sidebar-hover);color:var(--sidebar-link);font-size:10px}
+#sidebar .home-nav-item{font-size:13px;margin-bottom:14px}
 .sidebar .sidebar-logout{margin-top:22px;border:1px solid #e1e6ec;background:#fff;color:#596779;border-radius:6px;font-size:12px}
 /* Espaço de trabalho com cabeçalho enxuto e informação secundária legível. */
 #appShell .topbar{left:var(--shell-nav-width);height:68px;padding:0 26px;gap:14px}
@@ -185,6 +194,7 @@ h1,h2,h3,.brand-row strong{font-family:'DM Sans','Segoe UI',system-ui,sans-serif
 @media(max-width:1200px){:root{--shell-nav-width:236px}#appShell .content{padding-inline:20px}#appShell .topbar{padding-inline:20px}}
 @media(max-width:1000px){#sidebar.sidebar{width:280px}#appShell .topbar{left:0;height:66px;padding-inline:18px}#appShell .content{margin-left:0;padding:91px 20px 35px}.skip-link{left:18px}}
 @media(max-width:700px){
+ :root{--sidebar-row-height:44px;--sidebar-group-height:44px;--sidebar-link-size:13px}
  #appShell .topbar{display:grid;grid-template-columns:36px minmax(0,1fr) 36px 34px;grid-template-rows:auto 24px;height:88px;gap:0 10px;padding:8px 14px}
  #appShell .content{padding:110px 14px 30px}.topbar .menu-btn{grid-column:1;grid-row:1;width:36px;height:40px}
  .topbar .unit-switcher{grid-column:2;grid-row:1;min-width:0;max-width:none;width:100%;margin:0}.topbar .unit-switcher select{font-size:12px}

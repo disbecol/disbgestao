@@ -1,1 +1,1 @@
-v1.7.85 - Contraste dos nomes, códigos e produtos selecionados nas sugestões de NRI, FEFO e avarias; texto mais legível nos dois temas.
+v1.7.86 - Barra lateral com hierarquia entre áreas, módulos e telas; painéis de decisão e histórico de avarias adaptados ao modo escuro.

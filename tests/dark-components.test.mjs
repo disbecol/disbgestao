@@ -8,8 +8,10 @@ const read=name=>fs.readFileSync(new URL('../'+name,import.meta.url),'utf8');
 
 // O HTML é o da aplicação, e os componentes dinâmicos saem das funções de
 // produção. Os dados são fictícios; nenhuma sessão ou requisição é aberta.
-function renderedApplication(productQuery=''){
+function renderedApplication(productQuery='',decision=null){
   const {document}=parseHTML(read('index.html'));
+  document.defaultView.HTMLElement.prototype.scrollIntoView=()=>{};
+  document.defaultView.HTMLElement.prototype.focus=()=>{};
   const window={addEventListener(){},DISB_CONFERENCE:{bottlesFromCrates:()=>({estimated:69,gross:69})},DISB_SALES_PRICING:{SEGMENTS:['AD_ROTA','ASR'],formatPrice:value=>value==null?'—':`R$ ${value.toFixed(2)}`,searchProducts:products=>({total:products.length,rows:products})}};
   const context=vm.createContext({window,document,navigator:{onLine:true},console:{log(){},info(){},warn(){},error(){}},setTimeout(){},clearTimeout(){},setInterval(){},clearInterval(){}});
   const source=read('app.js').replace(/\}\)\(\);\s*$/,`window.appearanceRenderTest={types:VALUE_TYPES,
@@ -17,7 +19,8 @@ function renderedApplication(productQuery=''){
     conference:renderConferenceQuantityCards,detail:showDashboardDetail,
     own(requests){deliveryDamageMyRequests=requests;renderDeliveryDamageMy();},
     prices(){salesPricingLoaded=true;salesPricingProducts=[{code:'982',name:'SKOL 600ML',ttv:{AD_ROTA:89.4},ttc:{AD_ROTA:9.99}}];renderSalesPricing();},
-    pickers(query){refs.products=[{code:'25178',name:'51 ICE LIMÃO GARRAFA VD 275ML CX C/24'},{code:'9148',name:'ÁGUA M STER BOM S/GÁS PET 1,5L CAIXA C/6'}];const product=refs.products[0];for(const kind of ['nri','fefo']){selectOperationalProduct(kind,product);renderOperationalProductOptions(kind,query);}selectDeliveryDamageProduct(product);renderDeliveryDamageProductOptions(query);selectSalesDamageProduct(product);renderSalesDamageProductOptions(query);}
+    pickers(query){refs.products=[{code:'25178',name:'51 ICE LIMÃO GARRAFA VD 275ML CX C/24'},{code:'9148',name:'ÁGUA M STER BOM S/GÁS PET 1,5L CAIXA C/6'}];const product=refs.products[0];for(const kind of ['nri','fefo']){selectOperationalProduct(kind,product);renderOperationalProductOptions(kind,query);}selectDeliveryDamageProduct(product);renderDeliveryDamageProductOptions(query);selectSalesDamageProduct(product);renderSalesDamageProductOptions(query);},
+    decision(status,domain){const body=$('modalBody');body.className='damage-review-workspace'+(domain==='entrega'?' damage-review-delivery':'');body.innerHTML='<div class="damage-selection-bar"></div>';showDamageDecisionPanel({status,count:2,label:'Avaria de '+domain,onConfirm:()=>{throw new Error('This fixture cannot apply a decision.');}});}
   };})();`);
   vm.runInContext(source,context,{timeout:3000});
   const api=window.appearanceRenderTest;api.setup();api.conference();
@@ -26,6 +29,7 @@ function renderedApplication(productQuery=''){
   api.own([{id:'example',occurrence_date:'2026-11-16',created_at:'2026-11-16T12:00:00Z',customer_code:'371',customer_name:'CLIENTE DE EXEMPLO',map_number:'123456',damage_items:[{product_text:'982 - SKOL 600ML',quantity:1,quantity_unit:'UNIDADE',lot:'123',reason:'Quebrado',status:'CANCELADO'}]}]);
   document.getElementById('salesPricingSearch').value='skol';api.prices();
   api.pickers(productQuery);
+  if(decision)api.decision(decision.status,decision.domain);
   return document.toString();
 }
 const markup=renderedApplication();
@@ -87,4 +91,15 @@ test('product empty-result messages remain readable in dark mode',()=>{
   const c=cascade({theme:'dark',markup:renderedApplication('produto-inexistente')});
   assert.equal(c.document.querySelectorAll('.sales-product-empty').length,4);
   for(const el of c.document.querySelectorAll('.sales-product-empty')){darkSurface(c,el);readable(c,el);}
+});
+for(const domain of ['entrega','vendas'])for(const status of ['APROVADO','REPROVADO','CANCELADO'])test(`generated bulk decision panel follows dark mode (${domain}, ${status})`,()=>{
+  const scene=renderedApplication('',{status,domain}),c=cascade({theme:'dark',markup:scene}),panel=c.document.querySelector('.damage-decision-panel');
+  assert.ok(panel.getAttribute('aria-label').includes('2 produtos'));
+  darkSurface(c,panel);
+  for(const el of panel.querySelectorAll('strong,small,label,textarea,button'))readable(c,el);
+  for(const media of ['screen','print']){
+    const light=cascade({theme:'light',media,markup:scene}),lightPanel=light.document.querySelector('.damage-decision-panel');
+    assert.ok(luminance(light.background(lightPanel))>.9);
+  }
+  const darkPrint=cascade({theme:'dark',media:'print',markup:scene});assert.ok(luminance(darkPrint.background(darkPrint.document.querySelector('.damage-decision-panel')))>.9);
 });
