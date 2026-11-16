@@ -1,1 +1,1 @@
-v1.7.82 - Repaginação profissional: superfícies neutras, menu claro, tipografia legível, tabelas compactas, controles acessíveis e sincronização visível no celular.
+v1.7.83 - Contraste corrigido no menu; modos claro, escuro e automático com preferência local e suporte offline.

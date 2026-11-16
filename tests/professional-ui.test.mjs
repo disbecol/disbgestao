@@ -23,7 +23,8 @@ test('every application stylesheet remains available in the offline precache',()
   const sheets=[...html.matchAll(/<link\b[^>]*rel="stylesheet"[^>]*href="([^"]+)"/g)].map(match=>match[1]);
   assert.ok(sheets.length>10);
   for(const href of sheets){assert.ok(worker.includes(`'${href}'`),`missing precache: ${href}`);assert.ok(fs.existsSync(new URL('../'+href.split('?')[0],import.meta.url)));}
-  assert.ok(sheets.at(-1).startsWith('professional-ui.css'));
+  assert.ok(sheets.at(-2).startsWith('professional-ui.css'));
+  assert.ok(sheets.at(-1).startsWith('appearance.css'));
   assert.ok(read('scripts/copy-web.mjs').includes("'professional-ui.css'"),'APK must include the same theme');
 });
 

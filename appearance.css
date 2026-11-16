@@ -1,0 +1,131 @@
+/* Aparência compartilhada. A assinatura e os documentos conservam o fundo branco. */
+html[data-theme="light"]{color-scheme:light}
+.appearance-control{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 10px 14px;color:#596779;font-size:12px;font-weight:500}
+.appearance-control select{width:120px;min-height:38px;padding:7px 9px;border:1px solid #b9c4d1;border-radius:6px;background:#fff;color:#39485d;font:inherit;cursor:pointer}
+.appearance-control select:focus-visible{outline:3px solid #335d8e;outline-offset:2px}
+.login-appearance{align-self:flex-end;margin:0 0 22px}
+@media(max-width:700px){.appearance-control select{min-height:44px;font-size:16px;width:144px}}
+@media print{.appearance-control{display:none!important}}
+
+@media screen{
+ :root[data-theme="dark"]{color-scheme:dark;--bg:#111923;--card:#192331;--border:#3b4a5d;--text:#e1e7ef;--muted:#adb9c9;--nav:#e1e7ef;--nav2:#9fc6f5;--blue:#9fc6f5;--blue2:#bdd9fa;--green:#8cd5af;--red:#f2a6ae;--amber:#e8c581;--ui-soft:#23354c;--shadow:none;--dark-soft:#202d3e;--dark-hover:#293a50}
+ :root[data-theme="dark"] ::selection{background:#38597e;color:#fff}
+ :root[data-theme="dark"] :is(button,a,input,select,textarea,summary):focus-visible{outline-color:#a8cdf7}
+ :root[data-theme="dark"] body{background:var(--bg);color:var(--text)}
+ :root[data-theme="dark"] #sidebar.sidebar{background:var(--card);border-color:var(--border);scrollbar-color:#65768b transparent}
+ :root[data-theme="dark"] .sidebar :is(.brand-row strong,.nav-area-toggle,.nav-module-toggle,.nav-item,.sidebar-logout){color:var(--text)}
+ :root[data-theme="dark"] .sidebar :is(.brand-row span,.area-chevron,.module-chevron){color:var(--muted)}
+ :root[data-theme="dark"] #sidebar .app-version-badge{color:var(--muted)!important}
+ :root[data-theme="dark"] .sidebar :is(.area-icon,.module-icon){color:var(--muted)!important}
+ :root[data-theme="dark"] .sidebar .nav-module.open>.nav-module-toggle{background:var(--dark-soft);color:var(--text)}
+ :root[data-theme="dark"] .sidebar :is(.nav-area-toggle,.nav-module-toggle,.nav-item,.sidebar-logout):hover{background:var(--dark-hover);color:#fff}
+ :root[data-theme="dark"] .sidebar :is(.nav-module-items,.sidebar-logout){border-color:var(--border)}
+ :root[data-theme="dark"] .sidebar .sidebar-logout{background:var(--card)}
+ :root[data-theme="dark"] .sidebar .nav-item.active{background:#294566;color:#c4ddfb;box-shadow:inset 3px 0 #9fc6f5}
+ :root[data-theme="dark"] .sidebar .nav-item .badge{background:var(--dark-soft);color:var(--text)}
+ :root[data-theme="dark"] .appearance-control{color:var(--muted)}
+ :root[data-theme="dark"] .appearance-control select{background:var(--dark-soft);border-color:#65768b;color:var(--text)}
+
+ /* Superfícies e textos comuns em todas as áreas. */
+ :root[data-theme="dark"] :is(#appShell,#modal,#loginScreen) :is(.topbar,.user-box,.card,.list-card,.form-block,.pull-card,.mat-kpi,.asset-running-total,.home-hero,.home-shortcut-card,.home-shortcut-picker,.modal-box,.modal-head,.modal-body,.modal-actions,.conference-qty-card,.conference-product-card,.refugo-item-card,.refugo-open-card,.refugo-catalog-card,.stock-validity-card,.sales-pricing-card,.pull-plan-card,.pull-next-card,.pull-checklist-history,.pull-history-item,.pull-trip-hero,.fm-panel,.fm-model,.fm-question-editor,.fm-self-card,.fm-self-item,.fm-application-bar,.module-setting-card,.customer-contact-card,.geo-admin-card,.asset-count-row,.sales-product-options,.operational-product-options){background:var(--card);border-color:var(--border);color:var(--text)}
+ :root[data-theme="dark"] :is(#appShell,#modal,#loginScreen) :is(h1,h2,h3,.topbar-title strong,.user-box strong,.list-head strong,.section-heading strong,.block-head h3,.home-shortcut-card strong,.pull-card-head strong,.pull-next-card h2,.modal-head strong,.detail-card strong,.fefo-hero strong){color:var(--text)}
+ :root[data-theme="dark"] :is(#appShell,#modal,#loginScreen) :is(.breadcrumb,.page-head p,.dashboard-page-head p,.topbar-title span,.user-box span,.unit-switcher>span,.section-title,.field-help,.home-kicker,.home-section-eyebrow,.home-hero p,.home-section-head p,.home-shortcut-card small,.list-head small,.section-heading small,.pull-card-head small,.pull-card-body,.modal-head small,.detail-card small){color:var(--muted)}
+ :root[data-theme="dark"] #appShell .view{--view-accent:#9fc6f5;--view-soft:#23354c;--view-border:#3b4a5d}
+ :root[data-theme="dark"] #appShell :is(.page-head,.dashboard-page-head){background:transparent}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.filters,.dashboard-filter-card,.detail-card,.empty-state,.conference-map-row,.conference-sale-panel,.refugo-session-head,.fefo-hero,.marketplace-active,.home-context span,.sales-product-selected.chosen,.fm-tabs,.asset-count-header){background:var(--dark-soft);border-color:var(--border);color:var(--muted)}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.page-chip,.block-head .step,.counter,.tag,.avatar,.home-shortcut-icon,.home-option-icon){background:var(--dark-soft);border-color:var(--border);color:#b8d4f5}
+ :root[data-theme="dark"] :is(#appShell,#modal,#loginScreen) :is(.field label,.field>span:first-child,.conference-qty-card label){color:var(--text)}
+ :root[data-theme="dark"] :is(#appShell,#modal,#loginScreen) :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),select,textarea){background:#15202e;color:var(--text);border-color:#65768b}
+ :root[data-theme="dark"] :is(#appShell,#modal,#loginScreen) :is(input,textarea)::placeholder{color:#a1aec0}
+ :root[data-theme="dark"] :is(#appShell,#modal,#loginScreen) :is(input,select,textarea):is(:disabled,[readonly]){background:var(--dark-soft);color:var(--muted);border-color:var(--border)}
+ :root[data-theme="dark"] :is(#appShell,#modal,#loginScreen) :is(input,select,textarea):focus{border-color:#a8cdf7;box-shadow:0 0 0 3px #a8cdf71c}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(input[type=checkbox],input[type=radio]){accent-color:#9fc6f5}
+ :root[data-theme="dark"] :is(#appShell,#modal,#loginScreen) :is(.btn.secondary,.mini-btn,.choice-btn,.menu-btn,.notification-toggle,.user-box button,#btnMostrarSenha,#modalClose){background:var(--dark-soft);border-color:#65768b;color:var(--text)}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.btn.secondary,.mini-btn,.choice-btn):hover:not(:disabled){background:var(--dark-hover);color:#fff;border-color:#9fc6f5}
+ :root[data-theme="dark"] :is(#appShell,#modal,#loginScreen) :is(.btn.primary,#btnEntrar){background:#335d8e;border-color:#729aca;color:#fff}
+ :root[data-theme="dark"] :is(#appShell,#modal,#loginScreen) :is(.btn.primary,#btnEntrar):hover:not(:disabled){background:#284b74;color:#fff}
+ :root[data-theme="dark"] :is(#appShell,#modal) .btn.success{background:#246b4d;border-color:#629e80;color:#fff}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.btn.danger,.mini-btn.danger){background:#3b252d;border-color:#965a65;color:#ffc0c7}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.pull-tabs button,.fm-tabs button){background:transparent;color:var(--muted);border-color:var(--border)}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.pull-tabs button.active,.fm-tabs button.active,.choice-btn.active){background:#294566;color:#c4ddfb;border-color:#729aca}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.notice,.import-result){background:#23354c;border-color:#4c6d94;color:#c4ddfb}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.notice.error,.import-result.error){background:#3b252d;border-color:#965a65;color:#ffc0c7}
+ :root[data-theme="dark"] :is(#appShell,#modal) .notice.warning{background:#3a3020;border-color:#8e764d;color:#efd39d}
+ :root[data-theme="dark"] :is(#appShell,#modal) .notice.success{background:#1e372d;border-color:#4e8068;color:#a8e4c3}
+ :root[data-theme="dark"] .topbar .sync-pill{background:#1e372d;border-color:#4e8068;color:#a8e4c3}
+ :root[data-theme="dark"] .topbar :is(.sync-pill.offline,.sync-pill.pending){background:#3a3020;border-color:#8e764d;color:#efd39d}
+
+ /* Tabelas, sugestões de produtos e estados mantêm suas diferenças semânticas. */
+ :root[data-theme="dark"] :is(#appShell,#modal) .table-wrap{background:var(--card);border-color:var(--border)}
+ :root[data-theme="dark"] :is(#appShell,#modal) table{color:var(--text);background:var(--card)}
+ :root[data-theme="dark"] :is(#appShell,#modal) table th{background:var(--dark-soft)!important;color:#c6d1df!important;border-color:var(--border)}
+ :root[data-theme="dark"] :is(#appShell,#modal) table td{background:transparent;color:var(--text);border-color:var(--border)}
+ :root[data-theme="dark"] :is(#appShell,#modal) table td strong{color:var(--text)}
+ :root[data-theme="dark"] :is(#appShell,#modal) table td small{color:var(--muted)}
+ :root[data-theme="dark"] :is(#appShell,#modal) table tbody tr{background:var(--card)}
+ :root[data-theme="dark"] :is(#appShell,#modal) table tbody tr:nth-child(even){background:#1d2938}
+ :root[data-theme="dark"] :is(#appShell,#modal) table tbody tr:hover{background:var(--dark-hover)}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.sales-product-option,.operational-product-option){background:var(--card);color:var(--text);border-color:var(--border)}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.sales-product-option:hover,.sales-product-option.active,.operational-product-option:hover,.operational-product-option.active){background:var(--dark-hover)}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.status.ok,.status.approved,.status.delivered){background:#1e372d;border-color:#4e8068;color:#a8e4c3}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.status.bad,.status.rejected){background:#3b252d;border-color:#965a65;color:#ffc0c7}
+ :root[data-theme="dark"] :is(#appShell,#modal) .status.pending{background:#3a3020;border-color:#8e764d;color:#efd39d}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.status.launched,.status.partial){background:#23354c;border-color:#4c6d94;color:#c4ddfb}
+
+ /* Cadastro, análise, assinatura e comprovantes de avaria. */
+ :root[data-theme="dark"] #appShell #view-avaria-cadastro{--av-navy:#e1e7ef;--av-accent:#9fc6f5;--av-soft:#23354c;--av-line:#3b4a5d;--av-muted:#adb9c9}
+ :root[data-theme="dark"] #appShell #view-avaria-cadastro :is(.av-stepper,.av-step-panel,.av-products-summary,.av-signature,.av-product-card,.item-row,.av-evidence,.av-review-customer){background:var(--card);border-color:var(--border)}
+ :root[data-theme="dark"] #appShell #view-avaria-cadastro :is(.av-step-number,.avaria-client-summary,.av-delivery-context,.av-unit-toggle,.av-request-summary,.av-review-customer,.gps-status,.av-product-quantity){background:var(--dark-soft);color:var(--muted);border-color:var(--border)}
+ :root[data-theme="dark"] #appShell #view-avaria-cadastro :is(.av-step-button.active,.av-step-button[aria-current="step"],.av-unit-toggle button.active,.av-unit-toggle button[aria-pressed="true"],.av-camera-button){background:#23354c;color:#c4ddfb;border-color:#4c6d94}
+ :root[data-theme="dark"] #appShell #view-avaria-cadastro :is(.av-step-button.active,.av-step-button[aria-current="step"]) .av-step-number{background:#335d8e;color:#fff}
+ :root[data-theme="dark"] #appShell #view-avaria-cadastro :is(.av-step-actions,.av-signature-expand){background:var(--card);color:var(--text);border-color:var(--border)}
+ :root[data-theme="dark"] #appShell #view-avaria-cadastro :is(.avaria-client-summary small,.av-context-icon,.av-action-hint,.av-camera-button small,.av-summary-head .av-eyebrow,.av-text-button,.av-unit-toggle button){color:var(--muted)}
+ :root[data-theme="dark"] #appShell #view-avaria-cadastro .gps-status.ok{background:#1e372d;color:#a8e4c3}
+ :root[data-theme="dark"] #appShell #view-avaria-cadastro .gps-status.error{background:#3b252d;color:#ffc0c7}
+ :root[data-theme="dark"] #modal .damage-review-workspace.damage-review-delivery{background:var(--bg)}
+ :root[data-theme="dark"] #modal .damage-review-delivery :is(.damage-request-hero,.damage-admin-item,.damage-product-head,.damage-product-row,.damage-product-actions,.damage-evidence,.damage-decision-history,.damage-geo-details,.damage-request-context,.signature-details,.damage-stage-tab,.damage-geo-details>summary,.damage-request-context>summary,.signature-details>summary){background:var(--card);border-color:var(--border);color:var(--text)}
+ :root[data-theme="dark"] #modal .damage-review-delivery :is(.damage-product-disclosure,.damage-summary-grid,.damage-summary-grid>div,.damage-evidence>summary,.damage-photo-grid,.damage-product-code,.damage-detail-toggle,.damage-stage-tab b){background:var(--dark-soft);border-color:var(--border);color:var(--muted)}
+ :root[data-theme="dark"] #modal .damage-review-delivery :is(.damage-request-hero strong,.damage-product-name strong,.damage-row-quantity,.damage-summary-grid strong){color:var(--text)}
+ :root[data-theme="dark"] #modal .damage-review-delivery :is(.damage-request-hero span,.damage-product-name small,.damage-stage-intro,.damage-summary-grid small,.damage-lot-info,.damage-product-actions>span,.damage-evidence>summary small,.damage-decision-history>summary,.damage-support-status,.damage-selection-bar>span,.damage-row-quantity small,.damage-detail-heading>strong,.delivery-select-all){color:var(--muted)}
+ :root[data-theme="dark"] #modal .damage-review-delivery :is(.damage-stage-tab.active,.damage-detail-toggle:hover){background:#294566;border-color:#729aca;color:#c4ddfb}
+ :root[data-theme="dark"] #modal .damage-review-delivery :is(.damage-card-action.deliver,.damage-card-action.launch,.damage-product-expanded .damage-detail-toggle){background:#335d8e;border-color:#729aca;color:#fff}
+ :root[data-theme="dark"] #modal .damage-review-delivery .damage-card-action.approve{background:#1e372d;border-color:#4e8068;color:#a8e4c3}
+ :root[data-theme="dark"] #modal .damage-review-delivery .damage-card-action.reject{background:#3b252d;border-color:#965a65;color:#ffc0c7}
+ :root[data-theme="dark"] #modal .damage-review-delivery [data-damage-status="LANCADO"] .status{background:#23354c;border-color:#4c6d94;color:#c4ddfb}
+ :root[data-theme="dark"] #modal .damage-review-delivery [data-damage-status="ENTREGUE"] .status{background:#1e372d;color:#a8e4c3}
+ /* Fotos reais, imagens de produtos e a tinta da assinatura não são filtradas. */
+ :root[data-theme="dark"] #appShell #view-avaria-cadastro .av-signature canvas{background:#fff;color:#172b43;color-scheme:light}
+ :root[data-theme="dark"] #modal .damage-review-delivery .damage-product-visual{background:#fff}
+ :root[data-theme="dark"] .signature-sheet{color-scheme:light}
+
+ /* Recebimento, conferência, formulários, estoque e vendas. */
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.invoice-existing-note,.invoice-product-card,.invoice-lot-group,.delivery-my-card,.delivery-my-card-head,.delivery-my-product,.conference-simple-list,.mat-id-row,.pull-attachment-card,.pull-history-scroll-dock,.home-option,.fm-choice-list label,.fm-answer-buttons>button,.fm-answer-buttons>span,.fm-metric,.fm-calendar-day){background:var(--card);border-color:var(--border);color:var(--text)}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.invoice-product-card strong,.delivery-my-card-head strong,.delivery-my-product strong,.refugo-session-head h2,.refugo-item-card strong,.refugo-open-card strong,.refugo-catalog-card strong,.refugo-timer strong,.fm-empty strong,.fm-answer-title>strong,.fm-fill-footer strong,.fm-metric strong,.fm-unit-banner>strong,.fm-detail-answer>strong,.fm-evaluated-person-name strong,.stock-validity-context strong,.sales-pricing-source strong,.sales-pricing-row strong){color:var(--text)}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.refugo-session-head p,.refugo-kicker,.refugo-timer small,.refugo-timer span,.refugo-reason span,.refugo-total span,.refugo-item-card small,.refugo-open-card small,.refugo-catalog-card small,.refugo-item-card p,.fm-card-title p,.fm-model p,.fm-model-top small,.fm-model>small,.fm-model-meta,.fm-help,.fm-archive-row p,.fm-section-heading small,.fm-question-heading small,.fm-builder-bottom p,.fm-preview-question small,.fm-fill-footer small,.fm-metric small,.fm-metric>span,.fm-chart figcaption,.fm-detail-header small,.fm-detail-answer p,.fm-evaluated-bar p,.fm-person-heading small,.fm-calendar-week span,.fm-self-result p,.fm-self-result>small,.stock-validity-context small,.stock-validity-card-main small,.sales-pricing-source small,.sales-pricing-product small,.sales-pricing-metric h4,.sales-pricing-row span){color:var(--muted)}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.fm-fill-footer,.fm-calendar-day.other-month,.fm-unit-banner,.fm-detail-header>div,.fm-detail-answer:nth-child(odd),.fm-rank-track,.fm-progress,.fm-photo-editor,.fm-self-plan,.refugo-session-stats span,.refugo-timer,.refugo-catalog-group,.refugo-count-summary,.stock-validity-context>div,.stock-validity-date,.stock-validity-days,.stock-validity-preview,.sales-pricing-source>div,.sales-pricing-actions,.sales-pricing-metric.ttv,.sales-pricing-alert,.sales-pricing-status,.pull-appointment-summary>div,.permission-row,.user-unit-editor){background:var(--dark-soft);border-color:var(--border);color:var(--text)}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.fm-question-heading>button,.fm-answer-tools button,.fm-text-button,.fm-cell-button,.fm-calendar-event,.refugo-pill,.refugo-reason,.sales-pricing-input button,.conference-sale-row button){background:#23354c;color:#c4ddfb;border-color:#4c6d94}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.fm-badge.good,.fm-answer-buttons .yes.selected,.fm-matrix .fm-cell-good,.fm-farol .fm-farol-OK,.fm-calendar-event.completed){background:#1e372d;color:#a8e4c3;border-color:#4e8068}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.fm-badge.bad,.fm-answer-buttons .no.selected,.fm-matrix .fm-cell-bad,.fm-farol .fm-farol-NOK,.fm-calendar-event.cancelled,.fm-person-answer.has-nok){background:#3b252d;color:#ffc0c7;border-color:#965a65}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.fm-badge.warn,.fm-cell-warn,.stock-validity-card.attention .stock-validity-date){background:#3a3020;color:#efd39d;border-color:#8e764d}
+ :root[data-theme="dark"] :is(#appShell,#modal) .stock-validity-card.critical .stock-validity-date{background:#3b252d;color:#ffc0c7}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.fm-badge,.fm-badge.brand,.fm-answer-buttons .na.selected,.fm-farol .fm-farol-NA){background:#23354c;color:#c4ddfb;border-color:#4c6d94}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.fm-metric.good strong,.fm-self-counts .good,.refugo-session-stats b){color:#a8e4c3}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.fm-metric.bad strong,.fm-self-counts .bad,.refugo-rejected,.sales-pricing-row strong.missing){color:#ffc0c7}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.fm-metric.warn strong,.fm-self-counts .warn){color:#efd39d}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.fm-metric.brand strong,.fm-dynamic-nav .fm-nav-name,.fm-calendar-day.today>strong){color:#c4ddfb}
+ :root[data-theme="dark"] :is(#appShell,#modal) :is(.fm-empty,.refugo-empty,.home-empty){background:var(--dark-soft);color:var(--muted);border-color:var(--border)}
+
+ /* Tela de acesso e painéis auxiliares. */
+ :root[data-theme="dark"] #loginScreen.login-screen{background:var(--bg)}
+ :root[data-theme="dark"] #loginScreen :is(.login-shell,.login-form-panel){background:var(--card);border-color:var(--border)}
+ :root[data-theme="dark"] #loginScreen .login-brand-panel{background:var(--dark-soft);border-color:var(--border);color:var(--text)}
+ :root[data-theme="dark"] #loginScreen :is(.login-brand-panel h1,.login-form-panel h2){color:var(--text)}
+ :root[data-theme="dark"] #loginScreen :is(.login-brand-panel>p,.login-form-panel>p,.feature-list span,.eyebrow,.eyebrow.light){color:var(--muted)}
+ :root[data-theme="dark"] #loginScreen .login-version{color:var(--muted)!important;background:transparent!important;border-color:var(--border)!important}
+ :root[data-theme="dark"] .backend-status{background:var(--dark-soft);color:var(--muted)}
+ :root[data-theme="dark"] .backend-status.ok{background:#1e372d;color:#a8e4c3}
+ :root[data-theme="dark"] .backend-status.error{background:#3b252d;color:#ffc0c7}
+ :root[data-theme="dark"] :is(.notification-panel,.notification-item,.notification-head,.notification-empty){background:var(--card);border-color:var(--border);color:var(--text)}
+ :root[data-theme="dark"] #modal .modal-body .section-title{border-color:var(--border);color:var(--muted)}
+ @media(max-width:700px){:root[data-theme="dark"] .topbar :is(.sync-pill,.sync-pill.offline,.sync-pill.pending){background:transparent}}
+}
