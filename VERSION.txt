@@ -1,1 +1,1 @@
-v1.7.84 - Correção das cores no modo escuro em campos, conferência, NRI, avarias, indicadores, estoque e vendas.
+v1.7.85 - Contraste dos nomes, códigos e produtos selecionados nas sugestões de NRI, FEFO e avarias; texto mais legível nos dois temas.

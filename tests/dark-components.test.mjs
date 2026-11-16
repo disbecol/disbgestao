@@ -8,7 +8,7 @@ const read=name=>fs.readFileSync(new URL('../'+name,import.meta.url),'utf8');
 
 // O HTML é o da aplicação, e os componentes dinâmicos saem das funções de
 // produção. Os dados são fictícios; nenhuma sessão ou requisição é aberta.
-function renderedApplication(){
+function renderedApplication(productQuery=''){
   const {document}=parseHTML(read('index.html'));
   const window={addEventListener(){},DISB_CONFERENCE:{bottlesFromCrates:()=>({estimated:69,gross:69})},DISB_SALES_PRICING:{SEGMENTS:['AD_ROTA','ASR'],formatPrice:value=>value==null?'—':`R$ ${value.toFixed(2)}`,searchProducts:products=>({total:products.length,rows:products})}};
   const context=vm.createContext({window,document,navigator:{onLine:true},console:{log(){},info(){},warn(){},error(){}},setTimeout(){},clearTimeout(){},setInterval(){},clearInterval(){}});
@@ -16,7 +16,8 @@ function renderedApplication(){
     setup(){hydrateSalesDamageProductImages=()=>{};setProductImage=()=>{};updateConferenceBottleSummary=()=>{};openModal=(title,subtitle,body)=>{$('modalBody').innerHTML=body;};},
     conference:renderConferenceQuantityCards,detail:showDashboardDetail,
     own(requests){deliveryDamageMyRequests=requests;renderDeliveryDamageMy();},
-    prices(){salesPricingLoaded=true;salesPricingProducts=[{code:'982',name:'SKOL 600ML',ttv:{AD_ROTA:89.4},ttc:{AD_ROTA:9.99}}];renderSalesPricing();}
+    prices(){salesPricingLoaded=true;salesPricingProducts=[{code:'982',name:'SKOL 600ML',ttv:{AD_ROTA:89.4},ttc:{AD_ROTA:9.99}}];renderSalesPricing();},
+    pickers(query){refs.products=[{code:'25178',name:'51 ICE LIMÃO GARRAFA VD 275ML CX C/24'},{code:'9148',name:'ÁGUA M STER BOM S/GÁS PET 1,5L CAIXA C/6'}];const product=refs.products[0];for(const kind of ['nri','fefo']){selectOperationalProduct(kind,product);renderOperationalProductOptions(kind,query);}selectDeliveryDamageProduct(product);renderDeliveryDamageProductOptions(query);selectSalesDamageProduct(product);renderSalesDamageProductOptions(query);}
   };})();`);
   vm.runInContext(source,context,{timeout:3000});
   const api=window.appearanceRenderTest;api.setup();api.conference();
@@ -24,6 +25,7 @@ function renderedApplication(){
   api.detail({status:'SEM_BASE',missing_maps:['123281'],map_number:'123281',source_map_date:'2026-11-16',conference:{checker_name:'Conferente de exemplo'},diffs,pos:0,neg:2});
   api.own([{id:'example',occurrence_date:'2026-11-16',created_at:'2026-11-16T12:00:00Z',customer_code:'371',customer_name:'CLIENTE DE EXEMPLO',map_number:'123456',damage_items:[{product_text:'982 - SKOL 600ML',quantity:1,quantity_unit:'UNIDADE',lot:'123',reason:'Quebrado',status:'CANCELADO'}]}]);
   document.getElementById('salesPricingSearch').value='skol';api.prices();
+  api.pickers(productQuery);
   return document.toString();
 }
 const markup=renderedApplication();
@@ -70,4 +72,19 @@ test('static text across all application screens retains readable dark-mode cont
     readable(c,el);checked++;
   }
   assert.ok(checked>1000);
+});
+for(const theme of ['light','dark'])for(const state of ['normal','hover','active'])test(`generated product suggestions and selected products are readable (${theme}, ${state})`,()=>{
+  const {document}=parseHTML(markup);
+  if(state!=='normal')document.querySelectorAll('.sales-product-option').forEach(el=>el.classList.add(state==='hover'?'test-hover':'active'));
+  const c=cascade({theme,markup:document.toString()});
+  for(const id of ['nriProductOptions','fefoProductOptions','avProductOptions','salesDamageProductOptions']){
+    const list=c.document.getElementById(id);assert.equal(list.querySelectorAll('.sales-product-option').length,2);
+    for(const el of list.querySelectorAll('.sales-product-option-text strong,.sales-product-option-text small,.sales-product-footer'))readable(c,el);
+  }
+  for(const el of c.document.querySelectorAll('.sales-product-selected.chosen strong,.sales-product-selected.chosen small'))readable(c,el);
+});
+test('product empty-result messages remain readable in dark mode',()=>{
+  const c=cascade({theme:'dark',markup:renderedApplication('produto-inexistente')});
+  assert.equal(c.document.querySelectorAll('.sales-product-empty').length,4);
+  for(const el of c.document.querySelectorAll('.sales-product-empty')){darkSurface(c,el);readable(c,el);}
 });
