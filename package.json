@@ -1,6 +1,6 @@
 {
   "name": "disb-gestao",
-  "version": "1.7.81",
+  "version": "1.7.82",
   "private": true,
   "scripts": {
     "prepare:web": "node scripts/copy-web.mjs",
@@ -32,6 +32,7 @@
     "@capacitor/cli": "latest",
     "@electric-sql/pglite": "0.5.13",
     "fake-indexeddb": "6.2.8",
+    "postcss": "8.5.33",
     "read-excel-file": "^9.3.12"
   }
 }

@@ -176,7 +176,7 @@ const PRODUCT_REF_LIMIT = 25000;
 const REF_CACHE_KEY = 'ops_ref_cache_v140_customers5000';
 
 const viewMeta = {
-  'home':['Home','Seus atalhos para o dia a dia'],
+  'home':['Início','Seus atalhos para o dia a dia'],
   'modulos-config':['Módulos do sistema','Ative ou inative áreas completas do aplicativo'],
   'nri-cadastro':['Cadastro por carreta','Cadastre várias NRIs de uma vez'],
   'nri-pendentes':['Impressões pendentes','Fila atualizada em tempo real'],
@@ -238,7 +238,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.81-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.82-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -1344,7 +1344,7 @@ function openView(name,force=false){
   if(name==='marketplace-recebimento')loadMarketplaceModule();
   if(name==='nri-carretas'||name.startsWith('puxada-')) pullOnView(name);
 }
-function toggleSidebar(open){$('sidebar').classList.toggle('open',open);$('overlay').classList.toggle('show',open);}
+function toggleSidebar(open){$('sidebar').classList.toggle('open',open);$('overlay').classList.toggle('show',open);$('menuBtn')?.setAttribute('aria-expanded',String(!!open));}
 
 function setupRealtime(){
   teardownRealtime();

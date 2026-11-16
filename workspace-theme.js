@@ -2,6 +2,7 @@
 (() => {
   'use strict';
   const paths={
+    bell:'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9 M10 21h4',
     home:'m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z',
     warehouse:'m3 9 9-6 9 6v12H3z M7 21V11h10v10 M7 16h10 M12 11v10',
     truck:'M3 5h11v12H3z M14 10h4l3 4v3h-7 M7 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4 M18 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4',
@@ -31,6 +32,14 @@
       const name=view==='home'?'home':/dashboard|farol|metas/.test(view)?'chart':/historico|minhas|andamento/.test(view)?'history':/config|bases|modulos/.test(view)?'settings':/usuarios|contatos/.test(view)?'users':/cadastro|contagem|afericao/.test(view)?'plus':/avaria/.test(view)?'alert':/schedule/.test(view)?'calendar':'list';
       const span=el.querySelector(':scope > span');if(span){span.innerHTML=icon(name);span.setAttribute('aria-hidden','true');}
     });
+    const notification=document.querySelector('#btnNotifications > span');if(notification)notification.innerHTML=icon('bell');
+    const shortcuts=document.getElementById('homeShortcutGrid');
+    const enhanceShortcuts=()=>shortcuts?.querySelectorAll('.home-shortcut-card').forEach(card=>{
+      const view=card.querySelector('[data-home-open]')?.dataset.homeOpen||'',target=card.querySelector('.home-shortcut-icon');
+      const name=/avaria/.test(view)?'alert':/conf/.test(view)?'check':/puxada/.test(view)?'truck':/forms/.test(view)?'form':/sales/.test(view)?'sales':'box';
+      if(target)target.innerHTML=icon(name);
+    });
+    enhanceShortcuts();if(shortcuts&&typeof MutationObserver!=='undefined')new MutationObserver(enhanceShortcuts).observe(shortcuts,{childList:true});
     const modal=document.querySelector('#modal .modal-box');
     if(modal){modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');modal.setAttribute('aria-labelledby','modalTitle');modal.setAttribute('aria-describedby','modalSubtitle');}
     for(const id of ['loginUsuario','loginSenha']){

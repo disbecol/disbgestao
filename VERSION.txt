@@ -1,1 +1,1 @@
-v1.7.81 - Assinatura ampliada em tela cheia; mantém o traço proporcional ao girar o celular e devolve a assinatura horizontal ao cadastro, inclusive offline.
+v1.7.82 - Repaginação profissional: superfícies neutras, menu claro, tipografia legível, tabelas compactas, controles acessíveis e sincronização visível no celular.
