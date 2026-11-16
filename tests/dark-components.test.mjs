@@ -8,7 +8,7 @@ const read=name=>fs.readFileSync(new URL('../'+name,import.meta.url),'utf8');
 
 // O HTML é o da aplicação, e os componentes dinâmicos saem das funções de
 // produção. Os dados são fictícios; nenhuma sessão ou requisição é aberta.
-function renderedApplication(productQuery='',decision=null){
+function renderedApplication(productQuery='',decision=null,home=null){
   const {document}=parseHTML(read('index.html'));
   document.defaultView.HTMLElement.prototype.scrollIntoView=()=>{};
   document.defaultView.HTMLElement.prototype.focus=()=>{};
@@ -20,7 +20,8 @@ function renderedApplication(productQuery='',decision=null){
     own(requests){deliveryDamageMyRequests=requests;renderDeliveryDamageMy();},
     prices(){salesPricingLoaded=true;salesPricingProducts=[{code:'982',name:'SKOL 600ML',ttv:{AD_ROTA:89.4},ttc:{AD_ROTA:9.99}}];renderSalesPricing();},
     pickers(query){refs.products=[{code:'25178',name:'51 ICE LIMÃO GARRAFA VD 275ML CX C/24'},{code:'9148',name:'ÁGUA M STER BOM S/GÁS PET 1,5L CAIXA C/6'}];const product=refs.products[0];for(const kind of ['nri','fefo']){selectOperationalProduct(kind,product);renderOperationalProductOptions(kind,query);}selectDeliveryDamageProduct(product);renderDeliveryDamageProductOptions(query);selectSalesDamageProduct(product);renderSalesDamageProductOptions(query);},
-    decision(status,domain){const body=$('modalBody');body.className='damage-review-workspace'+(domain==='entrega'?' damage-review-delivery':'');body.innerHTML='<div class="damage-selection-bar"></div>';showDamageDecisionPanel({status,count:2,label:'Avaria de '+domain,onConfirm:()=>{throw new Error('This fixture cannot apply a decision.');}});}
+    decision(status,domain){const body=$('modalBody');body.className='damage-review-workspace'+(domain==='entrega'?' damage-review-delivery':'');body.innerHTML='<div class="damage-selection-bar"></div>';showDamageDecisionPanel({status,count:2,label:'Avaria de '+domain,onConfirm:()=>{throw new Error('This fixture cannot apply a decision.');}});},
+    home(views,query){homeShortcutCatalog=()=>[{view:'nri-cadastro',title:'Cadastro por carreta',area:'Armazém',detail:'Produtos, lotes e NRIs',icon:'▣'}];saveHomeShortcutCache=()=>{};homeShortcutIds=views;$('homeShortcutSearch').value=query;renderHome();}
   };})();`);
   vm.runInContext(source,context,{timeout:3000});
   const api=window.appearanceRenderTest;api.setup();api.conference();
@@ -30,6 +31,7 @@ function renderedApplication(productQuery='',decision=null){
   document.getElementById('salesPricingSearch').value='skol';api.prices();
   api.pickers(productQuery);
   if(decision)api.decision(decision.status,decision.domain);
+  if(home)api.home(home.views||[],home.query||'');
   return document.toString();
 }
 const markup=renderedApplication();
@@ -102,4 +104,16 @@ for(const domain of ['entrega','vendas'])for(const status of ['APROVADO','REPROV
     assert.ok(luminance(light.background(lightPanel))>.9);
   }
   const darkPrint=cascade({theme:'dark',media:'print',markup:scene});assert.ok(luminance(darkPrint.background(darkPrint.document.querySelector('.damage-decision-panel')))>.9);
+});
+test('generated home empty state, shortcuts and picker messages remain readable in dark mode',()=>{
+  for(const home of [{},{views:['nri-cadastro']},{query:'busca-sem-resultados'}]){
+    const c=cascade({theme:'dark',markup:renderedApplication('',null,home)});
+    const elements=c.document.querySelectorAll('.home-empty strong,.home-empty p,.home-empty button,.home-shortcut-card strong,.home-shortcut-card small,.home-shortcut-area,.home-shortcut-open>span,.home-shortcut-remove,.home-option strong,.home-option small,.home-options-empty');
+    assert.ok(elements.length>2);
+    for(const el of elements)readable(c,el);
+    for(const el of c.document.querySelectorAll('.home-empty,.home-shortcut-card,.home-option'))darkSurface(c,el);
+    if(home.query)assert.ok(c.document.querySelector('.home-options-empty'));
+    else if(home.views)assert.ok(c.document.querySelector('.home-shortcut-card'));
+    else assert.match(c.document.querySelector('.home-empty').textContent,/Sua Home está pronta para você/);
+  }
 });
