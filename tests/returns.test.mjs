@@ -37,6 +37,16 @@ test('17.03 importa totais diários ou indicadores por filial, valida mês e nã
  assert.throws(()=>R.routeReport(rows,'','Matriz Caicó'));assert.equal(R.routeTotals([['DATA','PDV','HL'],['01/11/2026',0,0]]).rows[0].planned_hl,0);
 });
 const record=(over={})=>({operation_date:'2026-11-01',customer_code:'42',map_number:'1',amount_cents:1000,volume_hl:1,city:'Caicó',driver:'Pessoa',helper1:'A',helper2:'A',reason:'Recusa',...over});
+
+test('cidades com diferenças de caixa e acento têm um único filtro e agrupamento',()=>{
+ const rows=[record({city:'SAO JOAO'}),record({city:'São João',customer_code:'43'})];const a=R.analytics({reports:rows});assert.equal(a.cities.length,1);assert.equal(a.cities[0].label,'SÃO JOÃO');assert.equal(a.cities[0].outlets,2);assert.equal(R.labels(rows,'city').length,1);assert.equal(R.filterRows(rows,{city:'sao joao'}).length,2);assert.equal(R.cityLabel('RN00007148'),'');
+});
+test('motivos equivalentes e erro de digitação conhecido se agrupam sem alterar o texto registrado',()=>{
+ const rows=['CLIENTE CANCELOU','Cliente Cancelou.','Cliente Canelou','Cliente não cancelou'].map((reason,i)=>record({reason,customer_code:String(i)}));const a=R.analytics({reports:rows,cases:rows.map(r=>({...r,driver_reason:r.reason,client_reason:'SEM VASILHAME.'}))});assert.equal(a.reasons.length,2);assert.equal(a.reasons.find(r=>r.label==='Cliente cancelou').outlets,3);assert.equal(R.filterRows(rows,{reason:'cliente cancelou'}).length,3);assert.equal(R.labels(rows,'reason').length,2);assert.equal(a.reasonMatrix.find(r=>r.driver==='Cliente cancelou').count,3);assert.equal(rows[2].reason,'Cliente Canelou');
+});
+test('evolução omite dias com rota zerada e nenhuma devolução, sem esconder devolução sem rota',()=>{
+ const a=R.analytics({reports:[record({operation_date:'2026-11-03'})],routes:[{operation_date:'2026-11-01',planned_outlets:0,planned_hl:0},{operation_date:'2026-11-02',planned_outlets:100,planned_hl:200},{operation_date:'2026-11-04',planned_outlets:0,planned_hl:0}]});assert.deepEqual(a.daily.map(r=>r.date),['2026-11-02','2026-11-03']);assert.equal(a.daily[1].outlets,1);assert.equal(a.route.hl_rate,null);
+});
 test('taxa mensal usa soma dos denominadores, ausência não vira zero e filtros locais não usam rota global',()=>{
  const s={reports:[record(),record({operation_date:'2026-11-02'})],routes:[{operation_date:'2026-11-01',planned_outlets:10,planned_hl:10},{operation_date:'2026-11-02',planned_outlets:100,planned_hl:100}]};
  const a=R.analytics(s,{from:'2026-11-01',to:'2026-11-30'});assert.equal(a.route.outlet_rate,2/110);assert.equal(a.helpers[0].outlets,2);assert.equal(R.analytics({...s,routes:s.routes.slice(0,1)}).route.hl_rate,null);assert.equal(R.analytics(s,{city:'Caicó'}).route.hl_rate,null);assert.equal(R.analytics({reports:[]}).route.hl_rate,null);

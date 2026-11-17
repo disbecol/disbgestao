@@ -6,6 +6,7 @@ import {PGlite} from '@electric-sql/pglite';
 const db=new PGlite(),A='Matriz Caicó',B='Filial Pau dos Ferros',admin=randomUUID(),editor=randomUUID(),viewer=randomUUID();
 const migration=await readFile(new URL('../supabase/87_delivery_returns.sql',import.meta.url),'utf8');
 const googleMigration=await readFile(new URL('../supabase/88_returns_google_sources.sql',import.meta.url),'utf8');
+const cityMigration=await readFile(new URL('../supabase/migrations/20261117170852_returns_city_names.sql',import.meta.url),'utf8');
 async function as(id=admin){await db.exec('reset role');await db.query("select set_config('request.jwt.claim.sub',$1,false)",[id]);await db.exec('set role authenticated');}
 const query=async(s,a=[])=> (await db.query(s,a)).rows;
 const rpc=async(n,a)=> (await query(`select public.${n}(${a.map((_,i)=>'$'+(i+1)).join(',')}) as v`,a))[0].v;
@@ -135,4 +136,14 @@ test('troca de mês da planilha preserva os períodos anteriores',async()=>{
 });
 test('vendedor do relatório acompanha o pedido da nota/data, sem trocar pelo cadastro mais recente',async()=>{
  await as(editor);await publish('ORDERS',[{row_key:'historic-seller',operation_date:'2026-11-09',customer_code:'66',map_number:'100',invoice_number:'900',order_amount_cents:2000,city:'Caicó',seller:'Vendedor da nota'}]);await publish('REPORT',[row({row_key:'historic-note',operation_date:'2026-11-09',customer_code:'66',map_number:'100',invoice_number:'900',invoice_series:''})]);const snapshot=await rpc('returns_snapshot',[A,'2026-11-01','2026-11-30']);assert.equal(snapshot.reports.find(r=>r.row_key==='historic-note').seller,'Vendedor da nota');
+});
+test('código de cidade no pedido não prevalece sobre nome do cadastro; leitura não modifica os dados',async()=>{
+ await db.exec('reset role');await db.exec(cityMigration);await as(editor);await publish('ORDERS',[{row_key:'coded-city',operation_date:'2026-11-10',customer_code:'66',map_number:'200',invoice_number:'901',order_amount_cents:2000,city:'RN00007148',seller:'Vendedor da nota'}]);const found=await rpc('returns_lookup',[A,'66','2026-11-10']);assert.equal(found[0].city,'Caicó');assert.equal(found[0].seller,'Vendedor da nota');const stored=await query("select data->>'city' city from delivery_return_records where row_key='coded-city'");assert.equal(stored[0].city,'RN00007148');
+});
+test('cidade de PDV sem cadastro é associada somente por código inequívoco da mesma unidade',async()=>{
+ await db.exec('reset role');await query("insert into customers(code,name,city,branch) values('880','Referência','Santa Cruz','Caicó'),('881','Referência filial','Natal','Pau dos Ferros')");await as(editor);await publish('CUSTOMERS',[{row_key:'880',customer_code:'880',customer_name:'Referência',city:'RN00007254'},{row_key:'889',customer_code:'889',customer_name:'Sem cadastro',city:'RN00007254'}]);let found=await rpc('returns_lookup',[A,'889','2026-11-10']);assert.equal(found[0].city,'Santa Cruz');
+ await db.exec('reset role');await query("insert into customers(code,name,city,branch) values('882','Conflito','Natal','Caicó')");await as(editor);await publish('CUSTOMERS',[{row_key:'882',customer_code:'882',customer_name:'Conflito',city:'RN00007254'}]);found=await rpc('returns_lookup',[A,'889','2026-11-10']);assert.equal(found[0].city,'');
+});
+test('helper de nomes não é exposto aos clientes nem ao acesso anônimo',async()=>{
+ await db.exec('reset role');const privileges=(await query("select has_function_privilege('anon','public.returns_city_value(text[])','EXECUTE') anon,has_function_privilege('authenticated','public.returns_city_value(text[])','EXECUTE') client"))[0];assert.equal(privileges.anon,false);assert.equal(privileges.client,false);await as(viewer);assert.equal((await rpc('returns_lookup',[A,'66','2026-11-10']))[0].city,'Caicó');await assert.rejects(()=>query('select returns_city_value(array[\'RN00007148\',\'Caicó\'])'),/permission denied/);
 });

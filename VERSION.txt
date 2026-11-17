@@ -1,1 +1,1 @@
-v1.7.89 - Acompanhamentos com abas horizontais e bases do Google Planilhas separadas por unidade. Atualização automática com validação.
+v1.7.90 - Cidades por nome, motivos unificados, acompanhamentos simplificados e Metas em submódulo próprio.

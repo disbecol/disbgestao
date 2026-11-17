@@ -1,5 +1,16 @@
 # Devoluções
 
+## Atualização 1.7.90 — cidades, motivos e Metas
+
+- A cidade ignora códigos de localização do pedido quando há um nome válido no cadastro. Para PDVs ainda sem cadastro, um código só é convertido quando há uma única cidade correspondente entre os clientes da mesma unidade. Nenhum código é traduzido por suposição e nenhuma base é alterada.
+- Filtros e rankings agrupam variações de caixa, acentos e pontuação. Motivos conhecidos usam um nome único, incluindo a correção Cliente Canelou → Cliente cancelou. Textos originais das auditorias permanecem armazenados. Motivos com significado diferente não são aproximados automaticamente.
+- Evolução diária e gráficos omitem dias com PDVs/HL em rota zerados e sem devoluções. Devoluções sem rota continuam visíveis para não ocultar inconsistências.
+- Análise por cidade não repete a lista Devoluções do período. QLP contém Motoristas e Ajudantes, sem DROP ou a lista de notas repetida.
+- Entrega > Devoluções > Metas possui seleção de mês e configuração dos percentuais por unidade. O Resumo não contém mais a configuração. Consulta e edição mantêm as permissões existentes (RETURNS_VIEW e RETURNS_EDIT); salvar usa a mesma função de metas, com registro de autoria e horário.
+- Migração de nomes gerada pelo CLI oficial e alinhada à versão registrada pelo MCP em supabase/migrations/20261117170852_returns_city_names.sql, aplicada no projeto de produção em 17/11/2026. Apenas funções de leitura foram alteradas. MAPAS e as bases de negócio permanecem preservadas.
+- Verificação de produção: todas as cidades das devoluções retornaram nomes, sem códigos nem nomes pendentes. Helper interno bloqueado para acesso anônimo e clientes; avisos do verificador de segurança permaneceram iguais aos anteriores. Suíte completa: 367 testes passaram, zero falhas. A interface foi validada por DOM/CSS; a conferência visual em navegador não estava disponível neste ambiente.
+
+
 ## Atualização 1.7.89 — Google Planilhas e Acompanhamentos
 
 - Acompanhamentos reúne Resumo, Painel de devoluções, Análise por cidade, Análise por QLP e Análise de motivos em cinco abas horizontais. Recorrência e Devolução auditada continuam acessíveis separadamente. Os filtros de período são compartilhados entre as cinco visões.
