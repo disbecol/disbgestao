@@ -1,5 +1,16 @@
 # Devoluções
 
+## Atualização 1.7.92 — notas consolidadas e devolução parcial
+
+- A janela de ocorrências do cliente utiliza a largura disponível, até 1800 px. Valores e datas não se quebram, nomes mantêm palavras completas e telas pequenas permitem rolagem da tabela.
+- Cliente + mapa + data define uma devolução. As notas desse grupo somam valor e HL e aparecem juntas no Painel, nas maiores devoluções, no detalhe da Recorrência e no CSV. Os registros fiscais originais são preservados. Mapas ou dias distintos continuam sendo grupos distintos.
+- Novo status PARCIAL, exibido como Devolução parcial no cadastro, na lista e nos filtros. Deve ser escolhido quando o cliente devolve parte das notas do pedido e fica com pelo menos uma. A classificação é manual; o sistema não presume aceite de notas ausentes na importação.
+- Devoluções parciais têm contador próprio. Entram nos casos encerrados para o denominador da taxa de reversão; somente REVERTIDO entra no numerador de reversão integral. Valor/HL dos relatórios continuam somando as notas efetivamente devolvidas.
+- A migração de status preserva as permissões, a revisão otimista, a autoria e o histórico. Conferência de produção: regra da tabela e função aceitam PARCIAL, RLS habilitado e execução anônima bloqueada; verificador de segurança sem novos avisos. Nenhuma devolução real foi usada em testes.
+- Validação final: 376 testes passaram, zero falhas. Regras de largura e quebra de texto conferidas em 390, 1440 e 1920 px, nos dois temas; a inspeção visual no navegador falhou na inicialização do ambiente.
+- Migração local alinhada à versão registrada em produção: supabase/migrations/20261117181315_returns_partial_status.sql.
+
+
 ## Atualização 1.7.91 — cadastro, monitoramento e clientes
 
 - Cadastro/edição identifica campos manuais em âmbar e campos preenchidos pela busca em azul, com etiquetas e legenda. As cores têm contraste nos temas claro e escuro. Campos automáticos continuam permitindo correções.

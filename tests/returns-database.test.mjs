@@ -7,6 +7,7 @@ const db=new PGlite(),A='Matriz Caicó',B='Filial Pau dos Ferros',admin=randomUU
 const migration=await readFile(new URL('../supabase/87_delivery_returns.sql',import.meta.url),'utf8');
 const googleMigration=await readFile(new URL('../supabase/88_returns_google_sources.sql',import.meta.url),'utf8');
 const cityMigration=await readFile(new URL('../supabase/migrations/20261117170852_returns_city_names.sql',import.meta.url),'utf8');
+const partialMigration=await readFile(new URL('../supabase/migrations/20261117181315_returns_partial_status.sql',import.meta.url),'utf8');
 async function as(id=admin){await db.exec('reset role');await db.query("select set_config('request.jwt.claim.sub',$1,false)",[id]);await db.exec('set role authenticated');}
 const query=async(s,a=[])=> (await db.query(s,a)).rows;
 const rpc=async(n,a)=> (await query(`select public.${n}(${a.map((_,i)=>'$'+(i+1)).join(',')}) as v`,a))[0].v;
@@ -146,4 +147,7 @@ test('cidade de PDV sem cadastro é associada somente por código inequívoco da
 });
 test('helper de nomes não é exposto aos clientes nem ao acesso anônimo',async()=>{
  await db.exec('reset role');const privileges=(await query("select has_function_privilege('anon','public.returns_city_value(text[])','EXECUTE') anon,has_function_privilege('authenticated','public.returns_city_value(text[])','EXECUTE') client"))[0];assert.equal(privileges.anon,false);assert.equal(privileges.client,false);await as(viewer);assert.equal((await rpc('returns_lookup',[A,'66','2026-11-10']))[0].city,'Caicó');await assert.rejects(()=>query('select returns_city_value(array[\'RN00007148\',\'Caicó\'])'),/permission denied/);
+});
+test('devolução parcial salva com histórico e revisão sem ampliar o acesso de consulta',async()=>{
+ await db.exec('reset role');await db.exec(partialMigration);await as(editor);const id=randomUUID(),data=caseData({customer_code:'partial-test',map_number:'partial-map',status:'PARCIAL'});const first=await save(id,0,data);assert.equal(first.status,'PARCIAL');const audit=(await query('select * from delivery_return_audit where case_id=$1',[id]))[0];assert.equal(audit.next.status,'PARCIAL');assert.equal(audit.actor_id,editor);await as(viewer);await assert.rejects(()=>save(id,first.revision,{...data,status:'DEVOLVIDO'}),/FORBIDDEN/);await as(editor);await assert.rejects(()=>save(id,0,{...data,status:'DEVOLVIDO'}),/RETURN_VERSION_CONFLICT/);await assert.rejects(()=>save(id,first.revision,{...data,status:'INVENTADO'}),/INVALID_CASE/);
 });

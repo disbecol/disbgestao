@@ -1,1 +1,1 @@
-v1.7.91 - Campos identificados, status na lista, análise por clientes e recorrência conforme os filtros com detalhe individual.
+v1.7.92 - Janela de ocorrências ampliada, notas consolidadas por cliente/mapa/dia e status Devolução parcial.
