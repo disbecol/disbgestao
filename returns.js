@@ -1,0 +1,136 @@
+/* Devoluções: importação e indicadores, sem acesso à rede ou à sessão. */
+(function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.DISB_RETURNS=api;})(typeof globalThis!=='undefined'?globalThis:this,()=>{
+  'use strict';
+  const STATUS={AGUARDANDO_REPASSE:'Aguardando repasse',DEVOLVIDO:'Devolvido',REVERTIDO:'Revertido'};
+  const VIEWS={
+    'returns-summary':['Resumo','Totais, metas e evolução das devoluções.'],
+    'returns-panel':['Painel de devoluções','Notas devolvidas, motivos e tratativas por período.'],
+    'returns-city':['Análise por cidade','Participação e detalhes das cidades.'],
+    'returns-team':['Análise por QLP','Motoristas, ajudantes e entregas DROP.'],
+    'returns-recurrence':['Recorrência','Clientes com devoluções em dias distintos nos últimos 30 dias.'],
+    'returns-reasons':['Análise de motivos','Motivos, valores, volume e comparação da auditoria.'],
+    'returns-audited':['Devolução auditada','Acompanhamento e edição das devoluções em tempo real.'],
+    'returns-import':['Importar relatório','Relatório 03.02.24, pedidos e bases auxiliares.']
+  };
+  const text=v=>String(v??'').trim().replace(/\s+/g,' ');
+  const norm=v=>text(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const identifier=v=>{if(typeof v==='number'){if(!Number.isSafeInteger(v)||v<0)return '';return String(v);}return text(v).replace(/\.0$/,'');};
+  function day(value){
+    if(value instanceof Date)return Number.isNaN(+value)?null:value.toISOString().slice(0,10);
+    if(typeof value==='number'){if(!Number.isFinite(value)||value<20000||value>80000)return null;return new Date(Date.UTC(1899,11,30)+Math.floor(value)*86400000).toISOString().slice(0,10);}
+    const raw=text(value);let y,m,d,match;
+    if((match=/^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/.exec(raw)))[,y,m,d]=match;
+    else if((match=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(raw)))[,d,m,y]=match;else return null;
+    const date=new Date(Date.UTC(+y,+m-1,+d));return date.getUTCFullYear()===+y&&date.getUTCMonth()===+m-1&&date.getUTCDate()===+d?`${y}-${m}-${d}`:null;
+  }
+  function number(value){
+    if(value===null||value===undefined||text(value)==='')return null;
+    if(typeof value==='number')return Number.isFinite(value)?value:null;
+    let s=text(value).replace(/R\$|\s/g,'');if(!/^-?[\d.,]+$/.test(s))return null;
+    if(s.includes(','))s=s.lastIndexOf(',')>s.lastIndexOf('.')?s.replace(/\./g,'').replace(',','.'):s.replace(/,/g,'');
+    else if((s.match(/\./g)||[]).length>1)s=s.replace(/\./g,'');
+    const n=Number(s);return Number.isFinite(n)?n:null;
+  }
+  const cents=v=>{const n=number(v);return n===null||n<0||n>1e11?null:Math.round((n+Number.EPSILON)*100);};
+  const volume=v=>{const n=number(v);return n===null||n<0||n>1e9?null:Math.round(n*10000)/10000;};
+  const dateShift=(d,n)=>{const v=new Date(d+'T12:00:00Z');v.setUTCDate(v.getUTCDate()+n);return v.toISOString().slice(0,10);};
+  const ratio=(n,d)=>d>0?n/d:null;
+  const customerDay=r=>[r.operation_date,r.customer_code,r.map_number||''].join('~');
+  const unique=rows=>new Set(rows.map(customerDay)).size;
+  function csv(source){
+    source=String(source||'').replace(/^\uFEFF/,'');const first=source.split(/\r?\n/,1)[0],sep=(first.match(/;/g)||[]).length>(first.match(/,/g)||[]).length?';':',';
+    const rows=[];let row=[],cell='',quoted=false;
+    for(let i=0;i<source.length;i++){const c=source[i];if(quoted){if(c==='"'&&source[i+1]==='"'){cell+='"';i++;}else if(c==='"')quoted=false;else cell+=c;}else if(c==='"')quoted=true;else if(c===sep){row.push(cell);cell='';}else if(c==='\n'){row.push(cell.replace(/\r$/,''));if(row.some(x=>text(x)))rows.push(row);row=[];cell='';}else cell+=c;}
+    if(quoted)throw Error('O CSV contém aspas sem fechamento.');if(cell||row.length){row.push(cell.replace(/\r$/,''));if(row.some(x=>text(x)))rows.push(row);}return rows;
+  }
+  const key=(...parts)=>parts.map(v=>text(v).replace(/~/g,' ')).join('~');
+  function header(rows,required){for(let i=0;i<Math.min(rows.length,30);i++){const names=(rows[i]||[]).map(norm);if(required.every(aliases=>aliases.some(a=>names.includes(a))))return {index:i,names};}throw Error('Cabeçalho do relatório não encontrado. Confira o tipo de importação.');}
+  const column=(names,...aliases)=>names.findIndex(h=>aliases.includes(h));
+  function issue(errors,row,message){errors.push({row,message});}
+  function report(rows){
+    const h=header(rows,[['mapa'],['cod cliente','codigo cliente'],['valor'],['volume']]),start=column(h.names,'mapa');
+    const sliced=h.names.slice(start,start+20);
+    if(sliced.length<20||!['cod cliente','codigo cliente'].includes(sliced[6])||sliced[12]!=='valor'||sliced[13]!=='volume')throw Error('Use o relatório 03.02.24, com os campos de Mapa até Hora (F:Y no arquivo de referência).');
+    const errors=[],groups=new Map(),seen=new Set();let duplicates=0,sourceRows=0;
+    for(let index=h.index+1;index<rows.length;index++){
+      const v=(rows[index]||[]).slice(start,start+20);if(!v.some(x=>text(x)))continue;if(norm(v[0]).startsWith('total'))continue;sourceRows++;
+      const r={operation_date:day(v[1]),return_date:day(v[14]),map_number:identifier(v[0]),invoice_number:identifier(v[3]),invoice_series:identifier(v[4]),customer_code:identifier(v[6]),customer_name:text(v[7]),amount_cents:cents(v[12]),volume_hl:volume(v[13]),reason_code:identifier(v[15]),reason:text(v[16]),plate:text(v[11]).toUpperCase(),return_time:text(v[19]),report_user:text(v[18]),source:{unb_note:text(v[2]),unb_customer:text(v[5]),phone:text(v[8]),area:text(v[9]),sector:text(v[10]),order_origin:text(v[17])}};
+      if(!r.operation_date||!r.map_number||!r.invoice_number||!r.customer_code||r.amount_cents===null||r.volume_hl===null||!r.return_date){issue(errors,index+1,'Confira data, mapa, nota, cliente, valor e volume.');continue;}
+      const fingerprint=JSON.stringify(r);if(seen.has(fingerprint)){duplicates++;continue;}seen.add(fingerprint);
+      r.row_key=key(r.operation_date,r.map_number,r.invoice_number,r.invoice_series,r.customer_code,r.return_date,r.return_time);
+      const previous=groups.get(r.row_key);
+      if(previous){previous.amount_cents+=r.amount_cents;previous.volume_hl=Math.round((previous.volume_hl+r.volume_hl)*10000)/10000;previous.reasons.push({reason:r.reason,amount_cents:r.amount_cents,volume_hl:r.volume_hl});previous.reason=[...new Set(previous.reasons.map(x=>x.reason))].join(' / ');}
+      else{r.reasons=[{reason:r.reason,amount_cents:r.amount_cents,volume_hl:r.volume_hl}];groups.set(r.row_key,r);}
+    }
+    return {kind:'REPORT',rows:[...groups.values()],errors,duplicates,sourceRows};
+  }
+  function orders(rows,unit=''){
+    const h=header(rows,[['mapa'],['cliente'],['emissao'],['nota'],['total']]);
+    const c={map:column(h.names,'mapa'),code:column(h.names,'cliente'),date:column(h.names,'emissao'),invoice:column(h.names,'nota'),series:column(h.names,'serie'),name:column(h.names,'nome'),amount:column(h.names,'total'),status:column(h.names,'status'),product:column(h.names,'produto'),quantity:column(h.names,'qtde'),driver:column(h.names,'motorista')};
+    const errors=[],groups=new Map(),seen=new Set();let duplicates=0,sourceRows=0;
+    const branch=column(h.names,'filial'),expected=norm(unit).includes('caico')?'1':norm(unit).includes('pau dos ferros')?'6':'';
+    for(let i=h.index+1;i<rows.length;i++){
+      const v=rows[i]||[];if(![c.map,c.code,c.date,c.invoice,c.amount].some(k=>text(v[k])))continue;if(unit&&branch>=0&&identifier(v[branch])!==expected)continue;if(['c','cancelado','cancelada'].includes(norm(v[c.status])))continue;sourceRows++;
+      const r={operation_date:day(v[c.date]),map_number:identifier(v[c.map]),customer_code:identifier(v[c.code]),customer_name:text(v[c.name]),invoice_number:identifier(v[c.invoice]),invoice_series:identifier(v[c.series]),order_amount_cents:cents(v[c.amount]),driver_code:identifier(v[c.driver])};
+      if(!r.operation_date||!r.map_number||!r.customer_code||!r.invoice_number||r.order_amount_cents===null){issue(errors,i+1,'Pedido sem data, mapa, cliente, nota ou total válido.');continue;}
+      r.row_key=key(r.operation_date,r.map_number,r.customer_code,r.invoice_number,r.invoice_series);
+      const fingerprint=key(r.row_key,text(v[c.product]),text(v[c.quantity]),r.order_amount_cents);if(seen.has(fingerprint)){duplicates++;continue;}seen.add(fingerprint);
+      const previous=groups.get(r.row_key);if(previous)previous.order_amount_cents+=r.order_amount_cents;else groups.set(r.row_key,r);
+    }return {kind:'ORDERS',rows:[...groups.values()],errors,duplicates,sourceRows};
+  }
+  function journeys(rows){
+    const h=header(rows,[['mapa','mapas'],['data'],['motorista']]),at=(...a)=>column(h.names,...a),c={date:at('data'),map:at('mapa','mapas'),driver:at('motorista'),h1:at('ajudante 1','ajudante'),h2:at('ajudante 2'),route:at('rota','cidade')};
+    if(c.h2<0&&c.h1>=0&&h.names[c.h1+1]==='ajudante')c.h2=c.h1+1;
+    const errors=[],groups=new Map();
+    for(let i=h.index+1;i<rows.length;i++){const v=rows[i]||[];if(!v.some(x=>text(x))||!identifier(v[c.map])&&(!text(v[c.driver])||text(v[c.driver]).startsWith('#')))continue;const r={operation_date:day(v[c.date]),map_number:identifier(v[c.map]),driver:text(v[c.driver]),helper1:text(v[c.h1]),helper2:text(v[c.h2]),route:text(v[c.route]),is_drop:/\bdrop\b/i.test(text(v[c.route]))?true:null};
+      if(!r.operation_date||!r.map_number){issue(errors,i+1,'Jornada sem data ou mapa válido.');continue;}r.row_key=key(r.operation_date,r.map_number);const old=groups.get(r.row_key);if(old&&JSON.stringify(old)!==JSON.stringify(r)){issue(errors,i+1,'O mesmo mapa/data tem equipes diferentes.');continue;}groups.set(r.row_key,r);
+    }return {kind:'JOURNEYS',rows:[...groups.values()],errors,duplicates:0,sourceRows:groups.size};
+  }
+  function routeTotals(rows,unit=''){
+    const h=header(rows,[['data','dia','data de entrega'],['pdvs','pdv','pdvs em rota','pdv em rota','clientes'],['hl','hl em rota','volume']]),c={date:column(h.names,'data','dia','data de entrega'),pdv:column(h.names,'pdvs','pdv','pdvs em rota','pdv em rota','clientes'),hl:column(h.names,'hl','hl em rota','volume'),unit:column(h.names,'unidade','revenda')};
+    const errors=[],groups=new Map();
+    for(let i=h.index+1;i<rows.length;i++){const v=rows[i]||[];if(!v.some(x=>text(x))||norm(v[c.date]).startsWith('total'))continue;if(c.unit>=0&&unit&&text(v[c.unit])&&norm(v[c.unit])!==norm(unit))continue;
+      const r={operation_date:day(v[c.date]),planned_outlets:number(v[c.pdv]),planned_hl:volume(v[c.hl])};
+      if(r.planned_outlets===null&&r.planned_hl===null)continue;
+      if(!r.operation_date||r.planned_outlets===null||!Number.isSafeInteger(r.planned_outlets)||r.planned_outlets<0||r.planned_hl===null){issue(errors,i+1,'Preencha uma data válida e os dois totais (PDVs e HL). Zero é permitido.');continue;}
+      r.row_key=r.operation_date;const old=groups.get(r.row_key);if(old){issue(errors,i+1,'Data repetida na mesma unidade. Consolide o total diário antes de importar.');continue;}groups.set(r.row_key,r);
+    }return {kind:'ROUTES',rows:[...groups.values()],errors,duplicates:0,sourceRows:groups.size};
+  }
+  function routeReport(rows,month,unit){
+    if(!/^\d{4}-\d{2}$/.test(month))throw Error('Informe o mês de referência do relatório 17.03.');
+    const h=header(rows,[['cod id','codigo id'],['filial'],['dia 01','dia 1']]),code=column(h.names,'cod id','codigo id'),branch=column(h.names,'filial');
+    const branchCode=norm(unit).includes('caico')?'1':norm(unit).includes('pau dos ferros')?'6':null;
+    if(!branchCode)throw Error('A filial do relatório precisa ser identificada para esta unidade.');
+    const selected=rows.slice(h.index+1).filter(r=>identifier(r[branch])===branchCode),pdv=selected.filter(r=>identifier(r[code])==='697'),hl=selected.filter(r=>identifier(r[code])==='563');
+    if(pdv.length!==1||hl.length!==1)throw Error('O relatório deve conter uma única linha dos indicadores 697 (PDVs com entrega) e 563 (HL de saída) da filial, sem subtotais por vendedor.');
+    const daily=[['DATA','PDVS EM ROTA','HL EM ROTA']];
+    for(let d=1;d<=31;d++){const date=`${month}-${String(d).padStart(2,'0')}`;if(!day(date))continue;const at=column(h.names,`dia ${String(d).padStart(2,'0')}`,`dia ${d}`);if(at<0)continue;const a=pdv[0][at],b=hl[0][at];if(text(a)===''&&text(b)==='')continue;daily.push([date,a,b]);}
+    return routeTotals(daily);
+  }
+  function customers(rows,unit=''){
+    const errors=[],groups=new Map();
+    for(let i=1;i<rows.length;i++){const v=rows[i]||[],code=identifier(v[6]);if(!code||!/^\d+$/.test(code))continue;const r={row_key:code,customer_code:code,customer_name:text(v[7]),seller:text(v[9]),branch:text(v[10]),city:text(v[11])};if(unit&&!([norm(unit),norm(unit).replace(/^(matriz|filial) /,'')].includes(norm(r.branch))))continue;if(r.customer_name&&!r.customer_name.startsWith('#'))groups.set(code,r);}
+    return {kind:'CUSTOMERS',rows:[...groups.values()],errors,duplicates:0,sourceRows:groups.size};
+  }
+  function filterRows(rows,f={}){const q=norm(f.search);return rows.filter(r=>(!f.from||r.operation_date>=f.from)&&(!f.to||r.operation_date<=f.to)&&(!f.city||norm(r.city)===norm(f.city))&&(!f.driver||norm(r.driver)===norm(f.driver))&&(!f.reason||norm(r.reason||r.driver_reason)===norm(f.reason))&&(!f.status||r.status===f.status)&&(!q||norm([r.customer_code,r.customer_name,r.map_number,r.city,r.driver,r.helper1,r.helper2,r.reason,r.driver_reason,r.client_reason,r.invoice_number].join(' ')).includes(q)));}
+  function totals(rows){return {outlets:unique(rows),amount_cents:rows.reduce((s,r)=>s+Number(r.amount_cents||0),0),volume_hl:rows.reduce((s,r)=>s+Math.round(Number(r.volume_hl||0)*10000),0)/10000,notes:rows.length};}
+  function grouped(rows,field){const map=new Map();for(const r of rows){const label=text(typeof field==='function'?field(r):r[field])||'Não informado',k=norm(label);if(!map.has(k))map.set(k,{label,rows:[]});map.get(k).rows.push(r);}const denominator=unique(rows);return [...map.values()].map(g=>({label:g.label,...totals(g.rows),share:ratio(unique(g.rows),denominator)})).sort((a,b)=>b.amount_cents-a.amount_cents||b.outlets-a.outlets||a.label.localeCompare(b.label,'pt-BR'));}
+  function analytics(snapshot,filter={}){
+    const raw=snapshot.reports||[],rows=filterRows(raw,filter),audits=filterRows(snapshot.cases||[],filter),t=totals(rows),routes=(snapshot.routes||[]).filter(r=>(!filter.from||r.operation_date>=filter.from)&&(!filter.to||r.operation_date<=filter.to)),routeDates=new Set(routes.map(r=>r.operation_date));
+    const missingDates=[...new Set(rows.map(r=>r.operation_date))].filter(d=>!routeDates.has(d));
+    const plannedOutlets=routes.length?routes.reduce((s,r)=>s+Number(r.planned_outlets),0):null,plannedHl=routes.length?routes.reduce((s,r)=>s+Math.round(Number(r.planned_hl)*10000),0)/10000:null;
+    const counts=Object.fromEntries(Object.keys(STATUS).map(s=>[s,audits.filter(r=>r.status===s).length]));
+    const recent=filterRows(raw,{...filter,from:dateShift(filter.to||new Date().toISOString().slice(0,10),-29)});
+    const recurring=new Map();for(const r of recent){const code=r.customer_code;if(!recurring.has(code))recurring.set(code,[]);recurring.get(code).push(r);}
+    const recurrence=[...recurring].filter(([,v])=>new Set(v.map(r=>r.operation_date)).size>1).map(([customer_code,v])=>({customer_code,customer_name:v[0].customer_name,city:v[0].city,days:new Set(v.map(r=>r.operation_date)).size,...totals(v),rows:v})).sort((a,b)=>b.days-a.days||b.amount_cents-a.amount_cents);
+    const helperRows=rows.flatMap(r=>[...new Set([text(r.helper1),text(r.helper2)].filter(Boolean))].map(helper=>({...r,helper})));
+    const scoped=!!(filter.city||filter.driver||filter.reason||filter.search);
+    const daily=[...new Set([...rows.map(r=>r.operation_date),...routes.map(r=>r.operation_date)])].sort().map(date=>{const g=totals(rows.filter(r=>r.operation_date===date)),p=routes.find(r=>r.operation_date===date);return {date,...g,planned_outlets:p?.planned_outlets??null,planned_hl:p?.planned_hl??null,outlet_rate:scoped?null:ratio(g.outlets,p?.planned_outlets),hl_rate:scoped?null:ratio(g.volume_hl,p?.planned_hl)};});
+    const matrix=new Map();for(const a of audits){const driver=text(a.driver_reason)||'Não informado',client=text(a.client_reason)||'Sem auditoria do cliente',k=key(norm(driver),norm(client));if(!matrix.has(k))matrix.set(k,{driver,client,count:0});matrix.get(k).count++;}
+    const reasons=rows.flatMap(r=>(Array.isArray(r.reasons)&&r.reasons.length?r.reasons:[r]).map(reason=>({...r,...reason})));
+    return {rows,audits,totals:t,cities:grouped(rows,'city'),drivers:grouped(rows,'driver'),helpers:grouped(helperRows,'helper'),drop:grouped(rows.filter(r=>r.is_drop===true),'driver'),dropUnknown:rows.filter(r=>r.is_drop==null).length,sellers:grouped(rows,'seller'),reasons:grouped(reasons,'reason'),weekdays:grouped(rows,r=>['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'][new Date(r.operation_date+'T12:00:00Z').getUTCDay()]),daily,recurrence,largest:[...rows].sort((a,b)=>b.amount_cents-a.amount_cents).slice(0,10),counts,reversal_rate:ratio(counts.REVERTIDO,counts.REVERTIDO+counts.DEVOLVIDO),reversal_all:ratio(counts.REVERTIDO,audits.length),driverReasons:grouped(audits.map(r=>({...r,reason:r.driver_reason,amount_cents:r.order_amount_cents})),'reason'),clientReasons:grouped(audits.map(r=>({...r,reason:r.client_reason||'Sem auditoria do cliente',amount_cents:r.order_amount_cents})),'reason'),reasonMatrix:[...matrix.values()].sort((a,b)=>b.count-a.count),route:{days:routes.length,missingDates,scoped,planned_outlets:plannedOutlets,planned_hl:plannedHl,outlet_rate:scoped||missingDates.length||!routes.length?null:ratio(t.outlets,plannedOutlets),hl_rate:scoped||missingDates.length||!routes.length?null:ratio(t.volume_hl,plannedHl)}};
+  }
+  const toCSV=(headers,rows)=>'\uFEFF'+[headers,...rows].map(row=>row.map(v=>{let s=String(v??'');if(/^[=+@\-]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';}).join(';')).join('\r\n');
+  return {STATUS,VIEWS,text,norm,esc,identifier,day,number,cents,volume,dateShift,ratio,csv,report,orders,journeys,routeTotals,routeReport,customers,filterRows,totals,grouped,analytics,toCSV,customerDay};
+});

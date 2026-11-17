@@ -8,6 +8,7 @@ html[data-theme="light"]{color-scheme:light}
 @media print{.appearance-control{display:none!important}}
 
 @media screen{
+ :root:not([data-theme="dark"]) #appShell .module-setting-copy p{color:#53647a}
  :root[data-theme="dark"]{--sidebar-group:#adb9c9;--sidebar-module:#e1e7ef;--sidebar-link:#c0cbda;--sidebar-hover:#293a50;--sidebar-line:#3b4a5d;--sidebar-active-bg:#294566;--sidebar-active-text:#c4ddfb;--sidebar-active-border:#4c6d94;--sidebar-active-icon-bg:#192331}
  :root[data-theme="dark"]{--product-text:#e1e7ef;--product-muted:#adb9c9;--product-hint-bg:#202d3e;--product-placeholder-bg:#202d3e}
  /* Estas variáveis também atendem às regras legadas com !important. */
@@ -181,6 +182,17 @@ html[data-theme="light"]{color-scheme:light}
  :root[data-theme="dark"] #appShell #view-puxada-dashboard .pull-arrival-summary span{color:var(--muted)}
 
  /* Tela de acesso e painéis auxiliares. */
+ :root[data-theme="dark"] #modal .damage-geo-legend{color:var(--muted)}
+ :root[data-theme="dark"] #modal .damage-geo-point{background:var(--dark-soft);border-color:var(--border);color:var(--text)}
+ :root[data-theme="dark"] #modal .damage-geo-pill.inside{background:#1e372d;color:#a8e4c3}
+ :root[data-theme="dark"] #modal .damage-geo-pill.outside{background:#3b252d;color:#ffc0c7}
+ :root[data-theme="dark"] #modal .damage-geo-pill.unknown{background:#3a3020;color:#efd39d}
+ :root[data-theme="dark"] #modal .permission-group{background:var(--card);border-color:var(--border)}
+ :root[data-theme="dark"] #modal .permission-group-title{background:var(--dark-soft);border-color:var(--border);color:var(--text)}
+ :root[data-theme="dark"] #modal .permission-group-title small{color:var(--muted)}
+ :root[data-theme="dark"] #appShell .module-setting-copy strong{color:var(--text)}
+ :root[data-theme="dark"] #appShell .module-setting-copy p{color:var(--muted)}
+ :root[data-theme="dark"] #appShell .module-setting-icon{background:#23354c;color:#b8d4f5}
  :root[data-theme="dark"] #loginScreen.login-screen{background:var(--bg)}
  :root[data-theme="dark"] #loginScreen :is(.login-shell,.login-form-panel){background:var(--card);border-color:var(--border)}
  :root[data-theme="dark"] #loginScreen .login-brand-panel{background:var(--dark-soft);border-color:var(--border);color:var(--text)}

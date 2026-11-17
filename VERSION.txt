@@ -1,1 +1,1 @@
-v1.7.87 - Contraste corrigido na página inicial sem atalhos, nos cartões e na escolha de atalhos em modo escuro.
+v1.7.88 - Devoluções: dashboards, importação e auditoria editável. Contraste corrigido em permissões, módulos e GPS.

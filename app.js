@@ -15,6 +15,7 @@ const ROLE_LABELS = {
 };
 
 const PERMISSION_CATALOG = [
+  ['Devoluções','RETURNS_VIEW','Consultar devoluções'],['Devoluções','RETURNS_EDIT','Monitorar devoluções'],['Devoluções','RETURNS_IMPORT','Importar relatórios'],
   ['NRI','NRI_PENDING_VIEW','Recebimentos e impressões pendentes'],['NRI','MARKETPLACE_RECEIVE','Recebimento Marketplace'],['NRI','NRI_CREATE','Cadastrar NRI'],['NRI','NRI_PRINT','Imprimir NRI'],['NRI','NRI_HISTORY','Histórico NRI'],['NRI','NRI_DAMAGE_HISTORY','Paletes avariados'],
   ['Avarias de Entrega','DELIVERY_DAMAGE_CREATE','Registrar avaria'],['Avarias de Entrega','DELIVERY_DAMAGE_VIEW_ALL','Visualizar todas'],['Avarias de Entrega','DELIVERY_DAMAGE_REVIEW','Aprovar / reprovar'],['Avarias de Entrega','DELIVERY_DAMAGE_POST','Lançar / entregar'],
   ['Avarias de Vendas','SALES_DAMAGE_CREATE','Cadastrar solicitação'],['Avarias de Vendas','SALES_DAMAGE_VIEW_OWN','Visualizar próprias'],['Avarias de Vendas','SALES_DAMAGE_VIEW_ALL','Visualizar todas'],['Avarias de Vendas','SALES_DAMAGE_REVIEW','Decisão do Gerente de Vendas'],['Avarias de Vendas','SALES_DAMAGE_OVERRIDE','Decisão final'],['Avarias de Vendas','SALES_DAMAGE_POST','Marcar avaria lançada'],
@@ -31,6 +32,7 @@ const PERMISSION_CATALOG = [
 ].map(([module,code,name],sort)=>({module,code,name,sort}));
 
 const MODULE_CATALOG = [
+  {name:'Devoluções',icon:'↩',description:'Relatórios, indicadores e monitoramento das devoluções auditadas.'},
   {name:'NRI',icon:'▣',description:'Recebimentos, cadastro, impressões e histórico.'},
   {name:'Conferência',icon:'✓',description:'Conferência de vasilhames e relatórios.'},
   {name:'Contagem FEFO',icon:'▦',description:'Contagens, andamento e relatórios FEFO.'},
@@ -176,6 +178,7 @@ const PRODUCT_REF_LIMIT = 25000;
 const REF_CACHE_KEY = 'ops_ref_cache_v140_customers5000';
 
 const viewMeta = {
+  ...Object.fromEntries(Object.entries(window.DISB_RETURNS?.VIEWS||{})),
   'home':['Início','Seus atalhos para o dia a dia'],
   'modulos-config':['Módulos do sistema','Ative ou inative áreas completas do aplicativo'],
   'nri-cadastro':['Cadastro por carreta','Cadastre várias NRIs de uma vez'],
@@ -238,7 +241,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.87-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.88-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -969,6 +972,7 @@ function hasPerm(code){
 function hasAnyPerm(codes){return String(codes||'').split(',').map(x=>x.trim()).filter(Boolean).some(hasPerm);}
 
 function moduleNameForPermission(code){
+  if(code.startsWith('RETURNS_'))return 'Devoluções';
   if(code.startsWith('NRI_')||code==='MARKETPLACE_RECEIVE')return 'NRI';
   if(code.startsWith('CONF_'))return 'Conferência';
   if(code.startsWith('FEFO_'))return 'Contagem FEFO';
@@ -1044,6 +1048,7 @@ async function logout(){
   if(submitAvaria._pending)return toast('Aguarde o registro da avaria ser salvo no aparelho.','');
   clearAvariaRequest();
   formsModule?.stop();
+  returnsModule?.stop();
 
   offlineClearIdentityV171();
   salesPricingProducts=[];salesPricingLoaded=false;salesPricingError='';
@@ -1308,6 +1313,7 @@ function onHomeShortcutClick(event){
 function openView(name,force=false){
   if(name==='home'&&isPullDriver())name='puxada-viagem';
   const v=$(`view-${name}`); if(!v||v.classList.contains('hidden'))return;
+  if(activeView.startsWith('returns-')&&activeView!==name&&!returnsModule.canLeave())return;
   if(!force&&activeView===name){toggleSidebar(false);return;}
   activeView=name; document.querySelectorAll('.view').forEach(x=>x.classList.remove('active')); v.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.view===name));
@@ -1328,6 +1334,7 @@ function openView(name,force=false){
   if(name==='sales-stock-validity')loadStockValidity(true);
   if(name==='sales-pricing')loadSalesPricing(true);
   if(name.startsWith('forms-'))void formsModule?.enter(name);
+  if(name.startsWith('returns-'))void returnsModule?.enter(name);
   if(name==='conf-minhas')loadMyConferences();
   if(name==='conf-historico')loadConferenceHistory();
   if(name==='conf-dashboard')loadDashboard();
@@ -8368,6 +8375,8 @@ async function changeActiveUnit(next){
   next=String(next||'').trim();if(!myUnits.includes(next)||next===activeUnit)return;
   if(submitAvaria._pending){renderActiveUnitSelector();return toast('Aguarde o registro da avaria ser salvo no aparelho.','');}
   if(formsModule&&!formsModule.canChangeUnit()){renderActiveUnitSelector();return;}
+  if(returnsModule&&!returnsModule.canChangeUnit()){renderActiveUnitSelector();return;}
+  returnsModule?.stop();
   formsModule?.stop();
   activeUnit=next;try{localStorage.setItem(unitAccessKey(),activeUnit);}catch(_e){}
   resetUnitScopedState();renderActiveUnitSelector();refRefreshPromise=null;refs.units=myUnits.map(name=>({name}));populateReferenceInputs();
@@ -13337,6 +13346,20 @@ async function deleteFefoCorrectionItem(itemId){
 // FEFO_COMPLETED_EDITS_END
 
 // FORMULARIOS_MODULE_START
+const returnsModule=window.DISB_RETURNS_UI?.create({
+  context:()=>({client:sb,user:authUser,profile,unit:activeUnit,units:[...myUnits]}),
+  hasPermission:hasPerm,toast,loadScript:loadPullPdfScript,
+  modal:({title,subtitle,html})=>openModal(title,subtitle,html,[]),closeModal,
+  download:async(name,blob)=>{
+    if(isNativeCapacitor()){
+      const cap=window.Capacitor,files=cap.Plugins?.Filesystem||cap.registerPlugin?.('Filesystem'),share=cap.Plugins?.Share||cap.registerPlugin?.('Share');
+      if(!files||!share)throw Error('Atualize o APK para compartilhar relatórios.');
+      const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||'').split(',')[1]||'');reader.onerror=reject;reader.readAsDataURL(blob);});
+      const saved=await files.writeFile({path:name,data,directory:'CACHE'});await share.share({title:'Devoluções',url:saved.uri,dialogTitle:'Salvar ou compartilhar relatório'});return;
+    }
+    const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+  }
+});
 const formsModule=window.DISB_FORMS_UI?.create({
   context:()=>({client:sb,user:authUser,profile,unit:activeUnit,units:[...myUnits],roles:ROLE_LABELS}),
   hasPermission:hasPerm,openView,toast,
