@@ -1,1 +1,1 @@
-v1.7.88 - Devoluções: dashboards, importação e auditoria editável. Contraste corrigido em permissões, módulos e GPS.
+v1.7.89 - Acompanhamentos com abas horizontais e bases do Google Planilhas separadas por unidade. Atualização automática com validação.

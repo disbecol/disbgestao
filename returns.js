@@ -2,7 +2,9 @@
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.DISB_RETURNS=api;})(typeof globalThis!=='undefined'?globalThis:this,()=>{
   'use strict';
   const STATUS={AGUARDANDO_REPASSE:'Aguardando repasse',DEVOLVIDO:'Devolvido',REVERTIDO:'Revertido'};
+  const FOLLOWUP_VIEWS=['returns-summary','returns-panel','returns-city','returns-team','returns-reasons'];
   const VIEWS={
+    'returns-followup':['Acompanhamentos','Indicadores e análises das devoluções por período.'],
     'returns-summary':['Resumo','Totais, metas e evolução das devoluções.'],
     'returns-panel':['Painel de devoluções','Notas devolvidas, motivos e tratativas por período.'],
     'returns-city':['Análise por cidade','Participação e detalhes das cidades.'],
@@ -10,7 +12,7 @@
     'returns-recurrence':['Recorrência','Clientes com devoluções em dias distintos nos últimos 30 dias.'],
     'returns-reasons':['Análise de motivos','Motivos, valores, volume e comparação da auditoria.'],
     'returns-audited':['Devolução auditada','Acompanhamento e edição das devoluções em tempo real.'],
-    'returns-import':['Importar relatório','Relatório 03.02.24, pedidos e bases auxiliares.']
+    'returns-import':['Bases do Google','Preencha as abas da unidade no Google Planilhas e acompanhe a atualização.']
   };
   const text=v=>String(v??'').trim().replace(/\s+/g,' ');
   const norm=v=>text(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
@@ -72,7 +74,7 @@
     const branch=column(h.names,'filial'),expected=norm(unit).includes('caico')?'1':norm(unit).includes('pau dos ferros')?'6':'';
     for(let i=h.index+1;i<rows.length;i++){
       const v=rows[i]||[];if(![c.map,c.code,c.date,c.invoice,c.amount].some(k=>text(v[k])))continue;if(unit&&branch>=0&&identifier(v[branch])!==expected)continue;if(['c','cancelado','cancelada'].includes(norm(v[c.status])))continue;sourceRows++;
-      const r={operation_date:day(v[c.date]),map_number:identifier(v[c.map]),customer_code:identifier(v[c.code]),customer_name:text(v[c.name]),invoice_number:identifier(v[c.invoice]),invoice_series:identifier(v[c.series]),order_amount_cents:cents(v[c.amount]),driver_code:identifier(v[c.driver])};
+      const r={operation_date:day(v[c.date]),map_number:identifier(v[c.map]),customer_code:identifier(v[c.code]),customer_name:text(v[c.name]),invoice_number:identifier(v[c.invoice]),invoice_series:identifier(v[c.series]),order_amount_cents:cents(v[c.amount]),driver_code:identifier(v[c.driver]),city:text(v[column(h.names,'cidade')]),seller:text(v[column(h.names,'vendedor')])};
       if(!r.operation_date||!r.map_number||!r.customer_code||!r.invoice_number||r.order_amount_cents===null){issue(errors,i+1,'Pedido sem data, mapa, cliente, nota ou total válido.');continue;}
       r.row_key=key(r.operation_date,r.map_number,r.customer_code,r.invoice_number,r.invoice_series);
       const fingerprint=key(r.row_key,text(v[c.product]),text(v[c.quantity]),r.order_amount_cents);if(seen.has(fingerprint)){duplicates++;continue;}seen.add(fingerprint);
@@ -132,5 +134,5 @@
     return {rows,audits,totals:t,cities:grouped(rows,'city'),drivers:grouped(rows,'driver'),helpers:grouped(helperRows,'helper'),drop:grouped(rows.filter(r=>r.is_drop===true),'driver'),dropUnknown:rows.filter(r=>r.is_drop==null).length,sellers:grouped(rows,'seller'),reasons:grouped(reasons,'reason'),weekdays:grouped(rows,r=>['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'][new Date(r.operation_date+'T12:00:00Z').getUTCDay()]),daily,recurrence,largest:[...rows].sort((a,b)=>b.amount_cents-a.amount_cents).slice(0,10),counts,reversal_rate:ratio(counts.REVERTIDO,counts.REVERTIDO+counts.DEVOLVIDO),reversal_all:ratio(counts.REVERTIDO,audits.length),driverReasons:grouped(audits.map(r=>({...r,reason:r.driver_reason,amount_cents:r.order_amount_cents})),'reason'),clientReasons:grouped(audits.map(r=>({...r,reason:r.client_reason||'Sem auditoria do cliente',amount_cents:r.order_amount_cents})),'reason'),reasonMatrix:[...matrix.values()].sort((a,b)=>b.count-a.count),route:{days:routes.length,missingDates,scoped,planned_outlets:plannedOutlets,planned_hl:plannedHl,outlet_rate:scoped||missingDates.length||!routes.length?null:ratio(t.outlets,plannedOutlets),hl_rate:scoped||missingDates.length||!routes.length?null:ratio(t.volume_hl,plannedHl)}};
   }
   const toCSV=(headers,rows)=>'\uFEFF'+[headers,...rows].map(row=>row.map(v=>{let s=String(v??'');if(/^[=+@\-]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';}).join(';')).join('\r\n');
-  return {STATUS,VIEWS,text,norm,esc,identifier,day,number,cents,volume,dateShift,ratio,csv,report,orders,journeys,routeTotals,routeReport,customers,filterRows,totals,grouped,analytics,toCSV,customerDay};
+  return {STATUS,VIEWS,FOLLOWUP_VIEWS,text,norm,esc,identifier,day,number,cents,volume,dateShift,ratio,csv,report,orders,journeys,routeTotals,routeReport,customers,filterRows,totals,grouped,analytics,toCSV,customerDay};
 });

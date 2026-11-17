@@ -1,5 +1,27 @@
 # Devoluções
 
+## Atualização 1.7.89 — Google Planilhas e Acompanhamentos
+
+- Acompanhamentos reúne Resumo, Painel de devoluções, Análise por cidade, Análise por QLP e Análise de motivos em cinco abas horizontais. Recorrência e Devolução auditada continuam acessíveis separadamente. Os filtros de período são compartilhados entre as cinco visões.
+- As quatro bases têm abas próprias para MATRIZ e FILIAL na mesma planilha do Google. A antiga 17.03 vazia foi identificada como 17.03 - MATRIZ; MAPAS e SYNC_MAPAS_LOG não receberam alterações de conteúdo ou formatação.
+- Bases do Google substitui a importação por arquivo na interface. A leitura usa valores brutos do Google (inclusive datas), evitando interpretar o formato visual como dado. PEDIDOS permite informar cidade e vendedor junto da nota.
+- Perfis com RETURNS_IMPORT e RETURNS_VIEW verificam as bases ao abrir o módulo, ao voltar à tela e a cada dois minutos enquanto a área estiver aberta. Não há agendamento quando o aplicativo está fechado. Outros perfis consultam os dados já sincronizados e continuam recebendo a auditoria em tempo real.
+- Migração 88: uma única atualização por unidade, com prazo renovável; as bases validadas são publicadas juntas. Uma falha preserva todas as versões anteriores. Abas vazias não apagam dados. Uma edição válida substitui as linhas da mesma origem nos meses presentes na planilha; períodos anteriores e importações antigas de outras origens são preservados.
+- Para o 17.03 diário, preencher DATA, PDVS EM ROTA e HL EM ROTA. Para o relatório original, manter seu cabeçalho na primeira linha e informar MES_REFERENCIA em AZ1 e 01/mm/aaaa em AZ2 quando o próprio relatório não contiver datas do mês.
+- As auditorias, suas tratativas, os status e o histórico de alterações permanecem no banco. A sincronização das bases não modifica essas decisões.
+- Migração 88 aplicada no projeto de produção em 17/11/2026, versão 20261117134509. RLS habilitado, escrita direta bloqueada e funções sem execução anônima. Nenhuma nota ou auditoria de teste foi criada. As oito abas foram conferidas pela API e pela mesma leitura JSON usada pelo aplicativo; estavam vazias, prontas para preenchimento.
+- Validação da interface por DOM e CSS em temas claro/escuro e largura de celular. A atualização periódica preserva o formulário e os filtros em digitação. A conferência visual em navegador nesta atualização ficou indisponível por falha de inicialização do ambiente de automação.
+- Suíte completa final: 358 testes passaram, zero falhas. Cobertura inclui a atualização atômica das bases, isolamento por unidade, preservação de períodos anteriores, alteração de origem, concorrência, interrupção da leitura e navegação pelas cinco abas.
+
+| Base | Matriz | Filial |
+| --- | --- | --- |
+| Devoluções | 03.02.24 - MATRIZ (17030001) | 03.02.24 - FILIAL (17030005) |
+| Pedidos | PEDIDOS - MATRIZ (17030002) | PEDIDOS - FILIAL (17030006) |
+| Equipe | BASE JORNADA LIQ - MATRIZ (17030003) | BASE JORNADA LIQ - FILIAL (17030007) |
+| Rota | 17.03 - MATRIZ (1816877762) | 17.03 - FILIAL (17030008) |
+
+As seções seguintes registram a implantação inicial 1.7.88. A rotina de atualização por Google Planilhas descrita acima é a interface vigente a partir de 1.7.89.
+
 Entrega > Devoluções reúne importação, seis visões da planilha e o acompanhamento de devoluções auditadas. A edição continua disponível depois do cadastro. A base MAPAS da conferência não deve ser alterada.
 
 ## Fontes e recortes
@@ -49,9 +71,9 @@ Acrescentar os indicadores do acompanhamento: aguardando repasse, devolvido, rev
 
 ## Uso
 
-1. Em Entrega > Devoluções > Importar relatório, escolher a unidade e importar a aba 03.02.24 do arquivo de devoluções. Conferir prévia, erros e totais antes de confirmar.
-2. Importar a base de pedidos 030237-MAP CLI MOT da unidade para o preenchimento por cliente/data. O diretório auxiliar RESUMO é lido apenas para os clientes desses pedidos. BASE JORNADA LIQ é opcional quando a equipe já consta de MAPAS na data exata.
-3. Preencher a nova aba 17.03 do Google e usar “Ler aba 17.03 do Google”; conferir e confirmar a prévia. Nenhuma escrita é feita no Google. Também é possível importar XLSX/CSV.
+1. Em Entrega > Devoluções > Bases do Google, conferir a unidade e abrir a aba correspondente. Em 03.02.24, colar os dados de F:Y em A:T, abaixo do cabeçalho. As quatro abas de cada unidade têm cabeçalhos e instruções próprios.
+2. Preencher PEDIDOS para a busca por cliente/data, incluindo cidade e vendedor quando disponíveis. BASE JORNADA LIQ associa motorista e ajudantes por mapa/data. O fallback para MAPAS continua somente de leitura e exige referência inequívoca da unidade.
+3. Preencher 17.03 com totais diários ou o relatório original e o mês de referência. Com a área Devoluções aberta por um perfil autorizado a atualizar bases, aguardar a verificação automática ou clicar em “Atualizar bases agora”. Erros são exibidos por aba e preservam a última base válida. Não há importação por arquivo na interface vigente.
 4. Devolução auditada > Cadastrar devolução: buscar cliente/data; escolher o mapa quando houver mais de um; preencher tratativas e status. Editar e Histórico permanecem disponíveis após salvar.
 
-Uma reimportação atualiza as chaves presentes no arquivo; não exclui notas ausentes. Correções que alterem a identidade da nota (data/mapa/nota/série/cliente/data e hora do retorno) exigem conciliação antes de importar para não manter a identidade anterior indevidamente. Percentuais por rota usam a base diária da unidade e são suspensos ao filtrar cidade, motorista, motivo ou pesquisa. Metas são configuradas por mês, sem assumir as metas de novembro para outros meses.
+As bases do Google substituem suas próprias linhas nos meses recebidos, preservando períodos anteriores e dados de outras origens. Abas totalmente vazias não excluem dados. As importações antigas por arquivo permanecem preservadas. Percentuais por rota usam a base diária da unidade e são suspensos ao filtrar cidade, motorista, motivo ou pesquisa. Metas são configuradas por mês, sem assumir as metas de novembro para outros meses.

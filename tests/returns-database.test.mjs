@@ -5,6 +5,7 @@ import {randomUUID} from 'node:crypto';
 import {PGlite} from '@electric-sql/pglite';
 const db=new PGlite(),A='Matriz Caicó',B='Filial Pau dos Ferros',admin=randomUUID(),editor=randomUUID(),viewer=randomUUID();
 const migration=await readFile(new URL('../supabase/87_delivery_returns.sql',import.meta.url),'utf8');
+const googleMigration=await readFile(new URL('../supabase/88_returns_google_sources.sql',import.meta.url),'utf8');
 async function as(id=admin){await db.exec('reset role');await db.query("select set_config('request.jwt.claim.sub',$1,false)",[id]);await db.exec('set role authenticated');}
 const query=async(s,a=[])=> (await db.query(s,a)).rows;
 const rpc=async(n,a)=> (await query(`select public.${n}(${a.map((_,i)=>'$'+(i+1)).join(',')}) as v`,a))[0].v;
@@ -97,4 +98,41 @@ test('módulo inativo revoga consultas e mutações, sem apagar dados',async()=>
  assert.equal((await query('select * from delivery_return_cases')).length,0);await assert.rejects(()=>rpc('returns_snapshot',[A,'2026-11-01','2026-11-30']),/FORBIDDEN/);
  await db.exec('reset role');await db.exec("update module_settings set active=true where module_name='Devoluções'");await db.exec(migration);
  assert.ok((await query('select * from delivery_return_cases')).length>0);
+});
+
+async function stageGoogle(kind,rows,filename,count=rows.length){const id=randomUUID();await rpc('returns_begin_import',[id,A,kind,filename,'c'.repeat(64),count]);await rpc('returns_stage_import',[id,JSON.stringify(rows)]);return id;}
+const sync=(id,action,ids=[],result={})=>rpc('returns_google_sync',[A,id,action,ids,JSON.stringify(result)]);
+test('migração Google preserva os registros existentes e limita concorrência por unidade/autor',async()=>{
+ await db.exec('reset role');await db.exec(googleMigration);await as(editor);const id=randomUUID();assert.equal((await sync(id,'START')).acquired,true);
+ await as(admin);assert.equal((await sync(randomUUID(),'START')).acquired,false);await assert.rejects(()=>sync(id,'COMMIT'),/SYNC_LEASE_CONFLICT/);
+ await as(viewer);await assert.rejects(()=>sync(randomUUID(),'START'),/FORBIDDEN/);await as(editor);await sync(id,'FAIL',[],{error:'Leitura interrompida'});
+ assert.ok((await query('select * from delivery_return_cases')).length>0);await assert.rejects(()=>query("update delivery_return_google_sync set last_error=''"),/permission denied/);
+});
+test('bases Google são publicadas juntas, sem dados parciais após falha',async()=>{
+ await as(editor);const id=randomUUID();await sync(id,'START');const report=await stageGoogle('REPORT',[row({row_key:'atomic-g-report'})],'Google Planilhas / REPORT / atomic');
+ const orders=await stageGoogle('ORDERS',[{row_key:'atomic-order-1',operation_date:'2026-11-01',customer_code:'42',map_number:'1',order_amount_cents:1000}],'Google Planilhas / ORDERS / atomic',2);
+ await assert.rejects(()=>sync(id,'COMMIT',[report,orders],{sources:{REPORT:{state:'OK',count:1}}}),/IMPORT_INCOMPLETE/);
+ assert.equal((await query("select * from delivery_return_records where row_key='atomic-g-report'")).length,0);
+ await rpc('returns_stage_import',[orders,JSON.stringify([{row_key:'atomic-order-2',operation_date:'2026-11-01',customer_code:'43',map_number:'1',order_amount_cents:1000}])]);
+ const cases=(await query('select count(*)::int as n from delivery_return_cases'))[0].n;const state=await sync(id,'COMMIT',[report,orders],{sources:{REPORT:{state:'OK',count:1},ORDERS:{state:'OK',count:2}}});assert.ok(state.last_synced_at);
+ assert.equal((await query("select * from delivery_return_records where row_key='atomic-g-report'")).length,1);assert.equal((await query('select count(*)::int as n from delivery_return_cases'))[0].n,cases);
+});
+test('edição da planilha substitui apenas a versão da mesma origem Google',async()=>{
+ await as(editor);const filename='Google Planilhas / REPORT / snapshot';const first=await stageGoogle('REPORT',[row({row_key:'snapshot-old'}),row({row_key:'snapshot-keep'})],filename);await rpc('returns_finish_import',[first]);
+ await publish('REPORT',[row({row_key:'manual-preserved'})]);const next=await stageGoogle('REPORT',[row({row_key:'snapshot-keep',amount_cents:1500})],filename);await rpc('returns_finish_import',[next]);
+ assert.equal((await query("select * from delivery_return_records where row_key='snapshot-old'")).length,0);assert.equal((await query("select (data->>'amount_cents')::int as v from delivery_return_records where row_key='snapshot-keep'"))[0].v,1500);assert.equal((await query("select * from delivery_return_records where row_key='manual-preserved'")).length,1);
+});
+test('lease expirada não publica e não pode encerrar a atualização de outro operador',async()=>{
+ await as(editor);const old=randomUUID();await sync(old,'START');await db.exec('reset role');await query('update delivery_return_google_sync set lease_until=now()-interval \'1 second\' where unit=$1',[A]);await as(editor);await assert.rejects(()=>sync(old,'COMMIT'),/SYNC_LEASE_EXPIRED/);
+ await as(admin);const next=randomUUID();assert.equal((await sync(next,'START')).acquired,true);await as(editor);await assert.rejects(()=>sync(old,'FAIL',[],{error:'atrasada'}),/SYNC_LEASE_CONFLICT/);await as(admin);await sync(next,'COMMIT',[],{sources:{REPORT:{state:'EMPTY'}}});
+ await as(viewer);assert.equal((await query('select unit from delivery_return_google_sync')).length,1);
+});
+test('metadados dos pedidos complementam cidade existente sem apagar o cadastro compartilhado',async()=>{
+ await as(editor);await publish('CUSTOMERS',[{row_key:'66',customer_code:'66',customer_name:'Loja Matriz',city:'',seller:'Vendedor Google',branch:A}]);const found=await rpc('returns_lookup',[A,'66','2026-11-06']);assert.equal(found[0].city,'Caicó');assert.equal(found[0].seller,'Vendedor Google');
+});
+test('troca de mês da planilha preserva os períodos anteriores',async()=>{
+ await as(editor);const filename='Google Planilhas / REPORT / monthly';const oct=await stageGoogle('REPORT',[row({row_key:'archive-oct',operation_date:'2026-10-31',return_date:'2026-10-31'})],filename);await rpc('returns_finish_import',[oct]);const nov=await stageGoogle('REPORT',[row({row_key:'archive-nov'})],filename);await rpc('returns_finish_import',[nov]);assert.equal((await query("select * from delivery_return_records where row_key='archive-oct'")).length,1);
+});
+test('vendedor do relatório acompanha o pedido da nota/data, sem trocar pelo cadastro mais recente',async()=>{
+ await as(editor);await publish('ORDERS',[{row_key:'historic-seller',operation_date:'2026-11-09',customer_code:'66',map_number:'100',invoice_number:'900',order_amount_cents:2000,city:'Caicó',seller:'Vendedor da nota'}]);await publish('REPORT',[row({row_key:'historic-note',operation_date:'2026-11-09',customer_code:'66',map_number:'100',invoice_number:'900',invoice_series:''})]);const snapshot=await rpc('returns_snapshot',[A,'2026-11-01','2026-11-30']);assert.equal(snapshot.reports.find(r=>r.row_key==='historic-note').seller,'Vendedor da nota');
 });
