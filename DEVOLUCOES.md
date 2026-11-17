@@ -1,5 +1,16 @@
 # Devoluções
 
+## Atualização 1.7.91 — cadastro, monitoramento e clientes
+
+- Cadastro/edição identifica campos manuais em âmbar e campos preenchidos pela busca em azul, com etiquetas e legenda. As cores têm contraste nos temas claro e escuro. Campos automáticos continuam permitindo correções.
+- O status pode ser alterado na própria lista por usuários com RETURNS_EDIT. A mesma função de gravação registra autor, horário e histórico; a revisão atual impede sobrescrita concorrente. Falhas recarregam a decisão do servidor. Editar e Histórico ficam alinhados na coluna Ações. Não há nova migração de banco.
+- Análise por clientes é a sexta aba de Acompanhamentos. Agrupa pelo código do PDV, mesmo quando clientes distintos têm o mesmo nome, com valor, HL, devoluções, dias e participação, além dos rankings e exportação CSV. Notas do mesmo cliente/mapa/dia não multiplicam a contagem de devoluções.
+- Análise de motivos não repete a tabela Devoluções do período.
+- Recorrência obedece ao período e demais filtros selecionados, sem limite fixo de 30 dias. O botão Ver abre apenas as ocorrências do cliente escolhido; a lista completa de ocorrências não ocupa mais a página principal.
+- Validação funcional por DOM e testes de contraste CSS nos temas claro e escuro; não houve conferência visual no navegador neste ambiente. Nenhum registro real foi alterado para testes.
+- Validação final: 373 testes passaram, zero falhas, incluindo contraste dos campos, permissões e concorrência na troca de status, somas por cliente e filtros/detalhamento individual da Recorrência.
+
+
 ## Atualização 1.7.90 — cidades, motivos e Metas
 
 - A cidade ignora códigos de localização do pedido quando há um nome válido no cadastro. Para PDVs ainda sem cadastro, um código só é convertido quando há uma única cidade correspondente entre os clientes da mesma unidade. Nenhum código é traduzido por suposição e nenhuma base é alterada.
@@ -55,7 +66,7 @@ Os arquivos de referência e suas extrações ficam somente em `tmp/returns-sour
 | PAINEL DEVOLUÇÕES | Lista por período com data, mapa, PDV, cliente, cidade, valor, HL, motivo, vendedor e tratativa. |
 | ANÁLISE POR CIDADE | Quantidade, valor, HL, participação, top cidades e detalhe da cidade selecionada. |
 | ANÁLISE POR QLP | Motoristas, ajudantes e DROP, com quantidade, HL e valor. |
-| RECORRÊNCIA | Clientes com mais de uma ocorrência em dias distintos na janela de 30 dias; detalhe de cada ocorrência. |
+| RECORRÊNCIA | Clientes com ocorrências em mais de um dia no período e filtros selecionados; detalhe individual pelo botão Ver. |
 | ANÁLISE MOTIVOS | Quantidade, valor, HL e participação por motivo, maiores devoluções por motivo. |
 
 Acrescentar os indicadores do acompanhamento: aguardando repasse, devolvido, revertido, reversão sobre casos encerrados e sobre o total, comparação de motivos do motorista e do cliente. Não inferir reversão pela ausência no relatório importado.

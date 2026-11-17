@@ -1,1 +1,1 @@
-v1.7.90 - Cidades por nome, motivos unificados, acompanhamentos simplificados e Metas em submódulo próprio.
+v1.7.91 - Campos identificados, status na lista, análise por clientes e recorrência conforme os filtros com detalhe individual.
