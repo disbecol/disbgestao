@@ -1,1 +1,1 @@
-v1.7.93 - Importação de clientes PY050094 por filial, cadastro AF e acompanhamento de devoluções em clientes novos até 60 dias.
+v1.7.94 - Motivo da devolução na tabela e no CSV de clientes novos.
