@@ -25,8 +25,8 @@ test('as seis visões, auditoria e importação renderizam sem HTML de dados ou 
  const h=harness();for(const v of Object.keys(R.VIEWS)){await h.module.enter(v);const root=h.document.getElementById('view-'+v);assert.ok(root.querySelector('h1'));assert.ok(!root.innerHTML.includes('[object Object]'),v);assert.equal(root.querySelectorAll('script').length,0);}
  assert.equal(h.document.querySelectorAll('#view-returns-import .rt-source').length,4);assert.equal(h.document.querySelectorAll('#view-returns-import input[type=file]').length,0);
 });
-test('Acompanhamentos mantém seis abas lado a lado e reaproveita o período selecionado',async()=>{
- const h=harness();await h.module.enter('returns-followup');assert.equal(h.document.querySelectorAll('#view-returns-followup [role=tab]').length,6);const before=h.document.querySelector('#view-returns-followup [name=from]').value;
+test('Acompanhamentos mantém sete abas lado a lado e reaproveita o período selecionado',async()=>{
+ const h=harness();await h.module.enter('returns-followup');assert.equal(h.document.querySelectorAll('#view-returns-followup [role=tab]').length,7);const before=h.document.querySelector('#view-returns-followup [name=from]').value;
  await h.click(h.document.querySelector('#view-returns-followup [data-tab="returns-city"]'));assert.equal(h.document.querySelector('#view-returns-followup [role=tab][aria-selected=true]').textContent,'Análise por cidade');assert.equal(h.document.querySelector('#view-returns-followup [name=from]').value,before);assert.match(h.document.querySelector('#rt-followup-panel').textContent,/Participação por cidade/);
  const target=h.document.querySelector('#view-returns-followup [data-tab="returns-city"]');for(const fn of h.events.keydown)fn({target,key:'ArrowRight',preventDefault(){}});assert.equal(h.document.querySelector('#view-returns-followup [role=tab][aria-selected=true]').textContent,'Análise por clientes');assert.match(h.document.querySelector('#rt-followup-panel').textContent,/Top 5 clientes por valor/);
 });
@@ -41,6 +41,9 @@ test('Metas permite selecionar outro mês e salva na unidade e no mês exibidos'
 });
 test('perfil de consulta vê as metas sem ação para editar',async()=>{
  const h=harness({permissions:['RETURNS_VIEW']});await h.module.enter('returns-goals');assert.ok(!h.document.querySelector('#view-returns-goals [data-rt-action=goal]'));
+});
+test('aba Clientes novos mostra o cadastro e a idade na devolução sem incluir clientes antigos',async()=>{
+ const h=harness();h.setData({...sample,reports:[{...sample.reports[0],customer_name:'Cliente novo',registration_date:R.dateShift(today,-60)},{...sample.reports[0],customer_code:'43',customer_name:'Cliente antigo',registration_date:R.dateShift(today,-61)}]});await h.module.enter('returns-followup');const root=h.document.querySelector('#view-returns-followup');await h.click(root.querySelector('[data-tab="returns-new-clients"]'));assert.match(root.textContent,/Cliente novo/);assert.ok(!root.querySelector('[data-rt-content]').textContent.includes('Cliente antigo'));assert.match(root.textContent,/Idade \(dias\)/);
 });
 test('Recorrência abre apenas as ocorrências do cliente no botão Ver, respeitando o período',async()=>{
  const h=harness(),yesterday=R.dateShift(today,-1);h.setData({...sample,reports:[{...sample.reports[0],customer_code:'42',customer_name:'Cliente Alfa'},{...sample.reports[0],customer_code:'42',customer_name:'Cliente Alfa',operation_date:yesterday,invoice_number:'102'},{...sample.reports[0],customer_code:'42',customer_name:'Cliente Alfa',operation_date:yesterday,invoice_number:'103'},{...sample.reports[0],customer_code:'43',customer_name:'Cliente Beta'},{...sample.reports[0],customer_code:'43',customer_name:'Cliente Beta',operation_date:yesterday}]});await h.module.enter('returns-recurrence');const root=h.document.querySelector('#view-returns-recurrence');assert.ok(root.textContent.includes('Clientes recorrentes no período'));assert.ok(!root.textContent.includes('30 dias'));assert.ok(!root.textContent.includes('Ocorrências dos clientes recorrentes'));assert.ok(!h.document.getElementById('test-modal'));

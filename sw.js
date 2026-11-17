@@ -1,16 +1,17 @@
 // Áreas dinâmicas e resultados privados por colaborador.
-const CACHE='disb-gestao-v1.7.92-workspace';
+const CACHE='disb-gestao-v1.7.93-workspace';
 const IMAGE_CACHE=`${CACHE}-images`;
 const IMAGE_CACHE_LIMIT=200;
-const STATIC=['./','index.html','styles.css?v=1.7.92-invoice-lots','conference.css?v=1.7.60','visual-refresh.css?v=1.7.1-visual','pull-dashboard.css?v=1.7.1-pull-dashboard','damage-geofence.css?v=2','refugo.css?v=1.7.16','sales-pricing.css?v=1.7.52','sales-pricing.js?v=1.7.52','share-reports.js?v=1.7.60','pull-report.js?v=2','invoice-note.js?v=1.7.31-keg-liters','pull-camera.js?v=1.7.32-pull-camera','asset-conversion.js?v=1.7.49','conference.js?v=1.7.60','vendor/supabase.js','vendor/leaflet.js','vendor/leaflet.css','vendor/images/layers.png','vendor/images/layers-2x.png','vendor/images/marker-icon.png','vendor/images/marker-icon-2x.png','vendor/images/marker-shadow.png','vendor/pdf-lib.min.js','vendor/pdfjs.min.js','vendor/pdfjs.worker.min.js','receipt-validation.js?v=1.7.92','table-scroll-dock.js?v=1.7.92','app.js?v=1.7.92-workspace','config.js?v=1.7.0','manifest.webmanifest','assets/icon-192.png','assets/icon-512.png'];
-STATIC.push('damage-entry.css?v=1.7.92');
-STATIC.push('professional-ui.css?v=1.7.92');
-STATIC.push('appearance.css?v=1.7.92','appearance.js?v=1.7.92');
-STATIC.push('signature-pad.css?v=1.7.92','signature-pad.js?v=1.7.92');
+const STATIC=['./','index.html','styles.css?v=1.7.93-invoice-lots','conference.css?v=1.7.60','visual-refresh.css?v=1.7.1-visual','pull-dashboard.css?v=1.7.1-pull-dashboard','damage-geofence.css?v=2','refugo.css?v=1.7.16','sales-pricing.css?v=1.7.52','sales-pricing.js?v=1.7.52','share-reports.js?v=1.7.60','pull-report.js?v=2','invoice-note.js?v=1.7.31-keg-liters','pull-camera.js?v=1.7.32-pull-camera','asset-conversion.js?v=1.7.49','conference.js?v=1.7.60','vendor/supabase.js','vendor/leaflet.js','vendor/leaflet.css','vendor/images/layers.png','vendor/images/layers-2x.png','vendor/images/marker-icon.png','vendor/images/marker-icon-2x.png','vendor/images/marker-shadow.png','vendor/pdf-lib.min.js','vendor/pdfjs.min.js','vendor/pdfjs.worker.min.js','receipt-validation.js?v=1.7.93','table-scroll-dock.js?v=1.7.93','app.js?v=1.7.93-workspace','config.js?v=1.7.0','manifest.webmanifest','assets/icon-192.png','assets/icon-512.png'];
+STATIC.push('damage-entry.css?v=1.7.93');
+STATIC.push('professional-ui.css?v=1.7.93');
+STATIC.push('appearance.css?v=1.7.93','appearance.js?v=1.7.93');
+STATIC.push('signature-pad.css?v=1.7.93','signature-pad.js?v=1.7.93');
 STATIC.push('stock-validity.css?v=1.7.41','stock-validity.js?v=1.7.41','vendor/read-excel-file.min.js');
-STATIC.push('forms.css?v=1.7.92','forms.js?v=1.7.92','forms-ui.js?v=1.7.92');
-STATIC.push('workspace-theme.css?v=1.7.92','damage-review.css?v=1.7.92','workspace-theme.js?v=1.7.92','assets/fonts/dm-sans-latin.woff2','assets/fonts/dm-sans-latin-ext.woff2','assets/fonts/manrope-latin.woff2','assets/fonts/manrope-latin-ext.woff2');
-STATIC.push('returns.js?v=1.7.92','returns-google.js?v=1.7.92','returns-file.js?v=1.7.92','returns-ui.js?v=1.7.92','returns.css?v=1.7.92','vendor/fflate.min.js');
+STATIC.push('forms.css?v=1.7.93','forms.js?v=1.7.93','forms-ui.js?v=1.7.93');
+STATIC.push('workspace-theme.css?v=1.7.93','damage-review.css?v=1.7.93','workspace-theme.js?v=1.7.93','assets/fonts/dm-sans-latin.woff2','assets/fonts/dm-sans-latin-ext.woff2','assets/fonts/manrope-latin.woff2','assets/fonts/manrope-latin-ext.woff2');
+STATIC.push('returns.js?v=1.7.93','returns-google.js?v=1.7.93','returns-file.js?v=1.7.93','returns-ui.js?v=1.7.93','returns.css?v=1.7.93','vendor/fflate.min.js');
+STATIC.push('customer-import.js?v=1.7.93');
 const STATIC_URLS=new Set(STATIC.map(path=>new URL(path,self.registration.scope).href));
 const EXTERNAL_STATIC_URLS=new Set();
 const IMAGE_PATHS=['assets/','imagens_produtos/'].map(path=>new URL(path,self.registration.scope).pathname);

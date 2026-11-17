@@ -1,1 +1,1 @@
-v1.7.92 - Janela de ocorrências ampliada, notas consolidadas por cliente/mapa/dia e status Devolução parcial.
+v1.7.93 - Importação de clientes PY050094 por filial, cadastro AF e acompanhamento de devoluções em clientes novos até 60 dias.

@@ -1,5 +1,16 @@
 # Devoluções
 
+## Atualização 1.7.93 — cadastro de clientes e novos clientes
+
+- Configurações > Bases e importações > CLIENTES aceita o relatório PY050094 em CSV Windows-1252 e o formato anterior de referências. Filial 1/0001 corresponde a Caicó (Matriz Caicó); 6/0006 corresponde a Pau dos Ferros (Filial Pau dos Ferros). Outras filiais são ignoradas e contadas na prévia.
+- A prévia valida todos os clientes antes de gravar. Nome Fantasia vazio ou com caracteres inválidos usa uma Razão Social válida, com aviso. Dados divergentes no mesmo código/filial impedem a importação. Documentos, telefones e os demais dados do relatório não são enviados.
+- A gravação usa uma única transação, controlada por ADMIN_BASES e pelas unidades do usuário. Chave código + filial, preservando IDs, coordenadas e contatos. Atualiza nome, cidade e data de cadastro; dados ausentes não apagam cidade/data já conhecidas. Clientes ausentes do arquivo permanecem no banco.
+- Data de Cadastro é lida pelo cabeçalho (coluna AF do relatório fornecido) e armazenada em registration_date.
+- Nova aba Clientes novos em Acompanhamentos: considera de 0 a 60 dias entre cadastro e a data operacional da devolução (operation_date), mantendo os filtros e a regra cliente + mapa + dia. É uma avaliação histórica, sem usar a data atual do aparelho. Cadastro ausente ou posterior à ocorrência fica não classificado e é informado separadamente.
+- Nenhum arquivo de clientes ou dado pessoal real é publicado no código. O arquivo fornecido foi apenas validado localmente; a gravação dos clientes ocorre quando o usuário confirma o upload na tela.
+- Validação final: 388 testes passaram, zero falhas. Cobertura de CSV Windows-1252, filiais, prévia/upload, transação sem gravação parcial, preservação de IDs/GPS/contatos e limite inclusivo de 60 dias. Conferência visual no navegador indisponível neste ambiente.
+
+
 ## Atualização 1.7.92 — notas consolidadas e devolução parcial
 
 - A janela de ocorrências do cliente utiliza a largura disponível, até 1800 px. Valores e datas não se quebram, nomes mantêm palavras completas e telas pequenas permitem rolagem da tabela.

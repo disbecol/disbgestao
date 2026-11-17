@@ -111,6 +111,7 @@ create table if not exists public.customers (
   name text not null,
   city text not null default '',
   branch text not null default '',
+  registration_date date,
   updated_at timestamptz not null default now(),
   unique(code,branch)
 );

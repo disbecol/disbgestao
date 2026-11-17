@@ -56,6 +56,9 @@ test('notas do mesmo cliente, mapa e dia formam uma devolução com valores e HL
 test('devolução parcial possui contador próprio e integra o denominador dos casos encerrados',()=>{
  const a=R.analytics({cases:[record({status:'PARCIAL'}),record({status:'DEVOLVIDO'}),record({status:'REVERTIDO'}),record({status:'AGUARDANDO_REPASSE'})]});assert.equal(R.STATUS.PARCIAL,'Devolução parcial');assert.equal(a.counts.PARCIAL,1);assert.equal(a.reversal_rate,1/3);assert.equal(a.reversal_all,.25);
 });
+test('cliente novo considera 0 até 60 dias na data da devolução, com limite inclusivo e desconhecidos expostos',()=>{
+ const make=(age,id)=>record({customer_code:id,registration_date:age===null?null:R.dateShift('2026-11-01',-age)}),a=R.analytics({reports:[make(0,'1'),make(60,'2'),make(61,'3'),make(null,'4'),make(-1,'5')]});assert.equal(a.newCustomers.totals.outlets,2);assert.equal(a.newCustomers.clients.length,2);assert.equal(a.newCustomers.unknown,2);assert.equal(R.registrationAge(make(60,'2')),60);assert.equal(R.analytics({reports:[make(60,'2')]},{from:'2026-11-02'}).newCustomers.rows.length,0);
+});
 test('taxa mensal usa soma dos denominadores, ausência não vira zero e filtros locais não usam rota global',()=>{
  const s={reports:[record(),record({operation_date:'2026-11-02'})],routes:[{operation_date:'2026-11-01',planned_outlets:10,planned_hl:10},{operation_date:'2026-11-02',planned_outlets:100,planned_hl:100}]};
  const a=R.analytics(s,{from:'2026-11-01',to:'2026-11-30'});assert.equal(a.route.outlet_rate,2/110);assert.equal(a.helpers[0].outlets,2);assert.equal(R.analytics({...s,routes:s.routes.slice(0,1)}).route.hl_rate,null);assert.equal(R.analytics(s,{city:'Caicó'}).route.hl_rate,null);assert.equal(R.analytics({reports:[]}).route.hl_rate,null);
