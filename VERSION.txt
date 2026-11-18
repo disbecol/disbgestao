@@ -1,1 +1,1 @@
-v1.7.96 - Cores dos status no seletor de bloqueios por reincidencia.
+v1.7.97 - Responsaveis por motivo, penalidade somente Mercado, descartes justificados e logo Disbecol por tema.

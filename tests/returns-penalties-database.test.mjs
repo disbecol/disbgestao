@@ -33,14 +33,15 @@ before(async()=>{
  for(const p of ['RETURNS_VIEW','RETURNS_EDIT'])await q('insert into user_permissions values($1,$2,true)',[editor,p]);
  await q("insert into user_permissions values($1,'RETURNS_VIEW',true)",[viewer]);
  await db.exec(await readFile(new URL('../supabase/migrations/20261118115342_returns_recurrence_penalties.sql',import.meta.url),'utf8'));
+ await db.exec(await readFile(new URL('../supabase/migrations/20261118130424_returns_reason_owners_and_exclusions.sql',import.meta.url),'utf8'));
  today=(await q("select (now() at time zone 'America/Sao_Paulo')::date::text d"))[0].d;
 });
 after(()=>db.close());
-async function seed(code,occurrences,{notes=1,start=today,unit=A}={}){
+async function seed(code,occurrences,{notes=1,start=today,unit=A,reasonCode='70',reason='Cliente cancelou'}={}){
  await db.exec('reset role');const id=randomUUID();
  await q("insert into delivery_return_imports(id,unit,kind,filename,file_hash,expected_rows,status,created_by) values($1,$2,'REPORT','fixture.csv',$3,$4,'COMPLETED',$5)",[id,unit,'a'.repeat(64),occurrences*notes,editor]);
  for(let i=0;i<occurrences;i++)for(let j=0;j<notes;j++){
-  const data={operation_date:shift(start,-i),customer_code:code,customer_name:'Cliente '+code,map_number:'map-'+i,invoice_number:'nf-'+i+'-'+j,amount_cents:100,volume_hl:.1,reason:'Cliente cancelou'};
+  const data={operation_date:shift(start,-i),customer_code:code,customer_name:'Cliente '+code,map_number:'map-'+i,invoice_number:'nf-'+i+'-'+j,amount_cents:100,volume_hl:.1,reason_code:reasonCode,reason};
   await q("insert into delivery_return_records(unit,kind,row_key,operation_date,data,import_id) values($1,'REPORT',$2,$3,$4,$5)",[unit,randomUUID(),data.operation_date,JSON.stringify(data),id]);
  }
  await as();
@@ -104,4 +105,39 @@ test('referência completa do mesmo mapa/data supre jornada parcial e não cruza
  let crew=(await q('select disb_private.resolve_return_crew($1,$2,$3) v',[A,JSON.stringify(data),JSON.stringify(partial)]))[0].v;assert.equal(crew.driver,'Motorista da referência');assert.equal(crew.helper2,'Auxiliar dois');
  crew=(await q('select disb_private.resolve_return_crew($1,$2,$3) v',[A,JSON.stringify({...data,operation_date:shift(today,-1)}),JSON.stringify(partial)]))[0].v;assert.equal(crew.driver,'');
  await seed('collision',1,{unit:B});await db.exec('reset role');await q("update delivery_return_records set data=jsonb_set(data,'{map_number}','\"crew-ref-0\"') where data->>'customer_code'='collision'");crew=(await q('select disb_private.resolve_return_crew($1,$2,$3) v',[A,JSON.stringify(data),JSON.stringify(partial)]))[0].v;assert.equal(crew.driver,'');await as();
+});
+
+const catalog=()=>rpc('returns_reason_catalog',[A]);
+const owner=async code=>(await catalog()).find(r=>r.reason_key==='C:'+code);
+const changeOwner=(r,value,op=randomUUID())=>rpc('returns_set_reason_owner',[A,r.reason_key,r.revision,value,op]);
+test('catálogo mantém códigos de mesmo nome com responsáveis diferentes e desconhecidos começam sem responsável',async()=>{
+ const list=await catalog();assert.equal(list.filter(r=>r.reason_code).length,41);assert.equal((await owner('33')).responsible,'VENDAS');assert.equal((await owner('65')).responsible,'MERCADO');
+ await seed('motivo-novo',2,{reasonCode:'999',reason:'CLIENTE CANCELOU'});assert.equal(await row('motivo-novo'),undefined);const unknown=await owner('999');assert.equal(unknown.responsible,'SEM_RESPONSAVEL');assert.equal(unknown.description,'CLIENTE CANCELOU');
+ await seed('nao-pediu-vendas',2,{reasonCode:'33',reason:'Nao Fez Pedido'});assert.equal(await row('nao-pediu-vendas'),undefined);
+ await seed('nao-pediu-mercado',2,{reasonCode:'65',reason:'NÃO FEZ PEDIDO'});assert.equal((await row('nao-pediu-mercado')).occurrence_count,2);
+});
+test('só Mercado penaliza; reclassificação tem histórico, revisão e retry sem duplicar',async()=>{
+ await seed('responsavel-editavel',2,{reasonCode:'88',reason:'Refugo de vasilhame'});let r=await owner('88');assert.ok(await row('responsavel-editavel'));const op=randomUUID(),saved=await changeOwner(r,'LOGISTICA',op);assert.equal(saved.responsible,'LOGISTICA');assert.equal(await row('responsavel-editavel'),undefined);
+ const replay=await changeOwner(r,'LOGISTICA',op);assert.equal(replay.revision,saved.revision);
+ await assert.rejects(()=>changeOwner(r,'VENDAS'),/REASON_VERSION_CONFLICT/);
+ assert.equal((await q('select count(*)::int n from delivery_return_reason_audit where reason_key=$1',['C:88']))[0].n,1);
+ assert.equal((await owner('88')).responsible,'LOGISTICA');await catalog();assert.equal((await owner('88')).responsible,'LOGISTICA');
+});
+test('descartar exige justificativa, exclui todas as notas da ocorrência e mantém a base fiscal e autoria',async()=>{
+ await seed('descartavel',2,{notes:10});let p=await row('descartavel');const initial=(await q("select count(*)::int n from delivery_return_records where data->>'customer_code'='descartavel'"))[0].n;
+ await assert.rejects(()=>rpc('returns_discard_occurrence',[A,today,'descartavel','map-0',' ',randomUUID()]),/JUSTIFICATION_REQUIRED/);
+ const op=randomUUID(),args=[A,today,'descartavel','map-0','Cliente apresentou evidência de falha da entrega',op];const result=await rpc('returns_discard_occurrence',args);assert.equal(result.created_by,editor);assert.equal(result.justification,args[4]);assert.equal((await rpc('returns_discard_occurrence',args)).id,result.id);
+ assert.equal(await row('descartavel'),undefined);assert.equal((await q("select count(*)::int n from delivery_return_records where data->>'customer_code'='descartavel'"))[0].n,initial);
+ const details=await rpc('returns_customer_occurrences',[A,p.id]);assert.equal(details.rows.length,20);assert.equal(details.rows.filter(r=>r.exclusion).length,10);assert.equal(details.rows.filter(r=>r.penalty_eligible).length,10);
+ await assert.rejects(()=>rpc('returns_discard_occurrence',[A,today,'inexistente','map-x','Justificativa',randomUUID()]),/OCCURRENCE_NOT_FOUND/);
+});
+test('perder a reincidência válida coloca bloqueio em Liberar sem apagar o histórico',async()=>{
+ await seed('bloqueado-descartado',2);let p=await row('bloqueado-descartado');p=await set(p,'BLOQUEADO');const deadline=p.release_at;
+ await rpc('returns_discard_occurrence',[A,today,'bloqueado-descartado','map-0','Reclassificação confirmada pela auditoria',randomUUID()]);p=await row('bloqueado-descartado');assert.equal(p.status,'LIBERAR');assert.equal(p.eligible_occurrence_count,1);assert.match(p.eligibility_note,/Menos de duas/);assert.ok(Date.parse(p.release_at)<Date.parse(deadline));assert.equal(p.occurrence_count,2);
+ const events=await q('select event from delivery_return_penalty_audit where penalty_id=$1 order by id',[p.id]);assert.deepEqual(events.map(x=>x.event),['BLOQUEAR','BLOQUEADO','LIBERAR']);
+});
+test('responsáveis e descartes respeitam perfil, unidade e vedam escrita direta',async()=>{
+ await as(viewer);const r=await owner('70');await assert.rejects(()=>changeOwner(r,'LOGISTICA'),/FORBIDDEN/);await assert.rejects(()=>rpc('returns_discard_occurrence',[A,today,'duas','map-0','Justificativa',randomUUID()]),/FORBIDDEN/);
+ await assert.rejects(()=>q("update delivery_return_reason_owners set responsible='MERCADO'"),/permission denied/);await assert.rejects(()=>q('delete from delivery_return_exclusions'),/permission denied/);
+ await assert.rejects(()=>rpc('returns_reason_catalog',[B]),/FORBIDDEN/);await as();
 });
