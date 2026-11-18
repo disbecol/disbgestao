@@ -1,1 +1,1 @@
-v1.7.97 - Responsaveis por motivo, penalidade somente Mercado, descartes justificados e logo Disbecol por tema.
+v1.7.98 - Corrige contraste dos paineis, itens e historico da edicao FEFO no modo escuro.
