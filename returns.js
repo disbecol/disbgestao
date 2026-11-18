@@ -2,7 +2,8 @@
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.DISB_RETURNS=api;})(typeof globalThis!=='undefined'?globalThis:this,()=>{
   'use strict';
   const STATUS={AGUARDANDO_REPASSE:'Aguardando repasse',DEVOLVIDO:'Devolvido',PARCIAL:'Devolução parcial',REVERTIDO:'Revertido'};
-  const FOLLOWUP_VIEWS=['returns-summary','returns-panel','returns-city','returns-clients','returns-new-clients','returns-team','returns-reasons'];
+  const PENALTY_STATUS={BLOQUEAR:'Bloquear',BLOQUEADO:'Bloqueado',LIBERAR:'Liberar',LIBERADO:'Liberado pós bloqueio'};
+  const FOLLOWUP_VIEWS=['returns-summary','returns-panel','returns-city','returns-clients','returns-new-clients','returns-sellers','returns-team','returns-reasons'];
   const VIEWS={
     'returns-followup':['Acompanhamentos','Indicadores e análises das devoluções por período.'],
     'returns-summary':['Resumo','Totais, metas e evolução das devoluções.'],
@@ -10,8 +11,10 @@
     'returns-city':['Análise por cidade','Participação e detalhes das cidades.'],
     'returns-clients':['Análise por clientes','Clientes com devoluções, valores e volume no período.'],
     'returns-new-clients':['Clientes novos','Devoluções até 60 dias do cadastro, considerando a data da devolução.'],
+    'returns-sellers':['Análise por Vendedor','Participação, valor e volume das devoluções por vendedor.'],
     'returns-team':['Análise por QLP','Participação dos motoristas e ajudantes nas devoluções.'],
     'returns-recurrence':['Recorrência','Clientes com devoluções em dias distintos no período selecionado.'],
+    'returns-penalties':['Bloqueios por reincidência','Monitore ocorrências nos últimos 60 dias e confirme os bloqueios e liberações.'],
     'returns-reasons':['Análise de motivos','Motivos, valores, volume e comparação da auditoria.'],
     'returns-audited':['Devolução auditada','Acompanhamento e edição das devoluções em tempo real.'],
     'returns-goals':['Metas','Configure as metas de devolução por unidade e mês.'],
@@ -148,5 +151,5 @@
     return {rows,audits,totals:t,newCustomers:{rows:occurrences(fresh),clients:clientGroups(fresh),totals:totals(fresh),unknown:unique(rows.filter(r=>registrationAge(r)===null))},clients:clientGroups(rows),cities:grouped(rows,'city'),drivers:grouped(rows,'driver'),helpers:grouped(helperRows,'helper'),drop:grouped(rows.filter(r=>r.is_drop===true),'driver'),dropUnknown:rows.filter(r=>r.is_drop==null).length,sellers:grouped(rows,'seller'),reasons:grouped(reasons,'reason'),weekdays:grouped(rows,r=>['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'][new Date(r.operation_date+'T12:00:00Z').getUTCDay()]),daily,recurrence,largest:occurrences(rows).sort((a,b)=>b.amount_cents-a.amount_cents).slice(0,10),counts,reversal_rate:ratio(counts.REVERTIDO,counts.REVERTIDO+counts.DEVOLVIDO+counts.PARCIAL),reversal_all:ratio(counts.REVERTIDO,audits.length),driverReasons:grouped(audits.map(r=>({...r,reason:r.driver_reason,amount_cents:r.order_amount_cents})),'reason'),clientReasons:grouped(audits.map(r=>({...r,reason:r.client_reason||'Sem auditoria do cliente',amount_cents:r.order_amount_cents})),'reason'),reasonMatrix:[...matrix.values()].sort((a,b)=>b.count-a.count),route:{days:routes.length,missingDates,scoped,planned_outlets:plannedOutlets,planned_hl:plannedHl,outlet_rate:scoped||missingDates.length||!routes.length?null:ratio(t.outlets,plannedOutlets),hl_rate:scoped||missingDates.length||!routes.length?null:ratio(t.volume_hl,plannedHl)}};
   }
   const toCSV=(headers,rows)=>'\uFEFF'+[headers,...rows].map(row=>row.map(v=>{let s=String(v??'');if(/^[=+@\-]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';}).join(';')).join('\r\n');
-  return {STATUS,VIEWS,FOLLOWUP_VIEWS,text,norm,reasonKey,reasonLabel,cityLabel,labels,esc,identifier,day,number,cents,volume,dateShift,ratio,csv,report,orders,journeys,routeTotals,routeReport,customers,filterRows,totals,occurrences,registrationAge,grouped,analytics,toCSV,customerDay};
+  return {STATUS,PENALTY_STATUS,VIEWS,FOLLOWUP_VIEWS,text,norm,reasonKey,reasonLabel,cityLabel,labels,esc,identifier,day,number,cents,volume,dateShift,ratio,csv,report,orders,journeys,routeTotals,routeReport,customers,filterRows,totals,occurrences,registrationAge,grouped,analytics,toCSV,customerDay};
 });

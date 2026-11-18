@@ -1,1 +1,1 @@
-v1.7.94 - Motivo da devolução na tabela e no CSV de clientes novos.
+v1.7.95 - Bloqueios por reincidencia, penalidades editaveis, analise por vendedor e metas em cores.
