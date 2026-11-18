@@ -1,1 +1,1 @@
-v1.7.95 - Bloqueios por reincidencia, penalidades editaveis, analise por vendedor e metas em cores.
+v1.7.96 - Cores dos status no seletor de bloqueios por reincidencia.
