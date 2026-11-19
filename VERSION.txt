@@ -1,1 +1,1 @@
-v1.7.98 - Corrige contraste dos paineis, itens e historico da edicao FEFO no modo escuro.
+v1.7.99 - Novo modulo Pedidos: fora de rota, bipasse, cliente novo, fila, dashboard e auditoria.

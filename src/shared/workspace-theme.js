@@ -23,7 +23,7 @@
   };
   const icon=name=>`<svg class="ui-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="${paths[name]||paths.list}"/></svg>`;
   function enhance(){
-    const areas={armazem:'warehouse',entrega:'truck',vendas:'sales',formularios:'form',puxada:'truck',configuracoes:'settings'};
+    const areas={armazem:'warehouse',entrega:'truck',vendas:'sales',pedidos:'list',formularios:'form',puxada:'truck',configuracoes:'settings'};
     const modules={nri:'box',conferencia:'check',fefo:'calendar','ativo-giro':'box',refugo:'box',materiais:'warehouse'};
     document.querySelectorAll('.nav-area').forEach(el=>{const span=el.querySelector('.area-icon');if(span)span.innerHTML=icon(areas[el.dataset.area]);});
     document.querySelectorAll('.nav-module').forEach(el=>{const span=el.querySelector('.module-icon');if(span)span.innerHTML=icon(modules[el.dataset.module]||'form');});

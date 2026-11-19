@@ -7,8 +7,8 @@ android {
         applicationId "br.com.disbecol.gestaooperacional"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 260
-        versionName "1.7.98"
+        versionCode 261
+        versionName "1.7.99"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

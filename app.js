@@ -15,6 +15,7 @@ const ROLE_LABELS = {
 };
 
 const PERMISSION_CATALOG = [
+  ['Pedidos','ORDERS_CREATE','Nova solicitação'],['Pedidos','ORDERS_OWN','Minhas solicitações'],['Pedidos','ORDERS_REVIEW','Analisar solicitações'],['Pedidos','ORDERS_VIEW_ALL','Consultar todas'],['Pedidos','ORDERS_MANAGE','Gerenciar análises'],['Pedidos','ORDERS_DASHBOARD','Dashboard gerencial'],['Pedidos','ORDERS_AUDIT','Auditoria'],['Pedidos','ORDERS_CONFIG','Configurar regras'],
   ['Devoluções','RETURNS_VIEW','Consultar devoluções'],['Devoluções','RETURNS_EDIT','Monitorar devoluções'],['Devoluções','RETURNS_IMPORT','Importar relatórios'],
   ['NRI','NRI_PENDING_VIEW','Recebimentos e impressões pendentes'],['NRI','MARKETPLACE_RECEIVE','Recebimento Marketplace'],['NRI','NRI_CREATE','Cadastrar NRI'],['NRI','NRI_PRINT','Imprimir NRI'],['NRI','NRI_HISTORY','Histórico NRI'],['NRI','NRI_DAMAGE_HISTORY','Paletes avariados'],
   ['Avarias de Entrega','DELIVERY_DAMAGE_CREATE','Registrar avaria'],['Avarias de Entrega','DELIVERY_DAMAGE_VIEW_ALL','Visualizar todas'],['Avarias de Entrega','DELIVERY_DAMAGE_REVIEW','Aprovar / reprovar'],['Avarias de Entrega','DELIVERY_DAMAGE_POST','Lançar / entregar'],
@@ -32,6 +33,7 @@ const PERMISSION_CATALOG = [
 ].map(([module,code,name],sort)=>({module,code,name,sort}));
 
 const MODULE_CATALOG = [
+  {name:'Pedidos',icon:'▤',description:'Pedidos fora de rota, bipasse, fila de análise e indicadores.'},
   {name:'Devoluções',icon:'↩',description:'Relatórios, indicadores e monitoramento das devoluções auditadas.'},
   {name:'NRI',icon:'▣',description:'Recebimentos, cadastro, impressões e histórico.'},
   {name:'Conferência',icon:'✓',description:'Conferência de vasilhames e relatórios.'},
@@ -56,6 +58,8 @@ const ROLE_PERMISSION_DEFAULTS = {
   VENDEDOR:['SALES_DAMAGE_CREATE','SALES_DAMAGE_VIEW_OWN','SALES_STOCK_VALIDITY_VIEW','SALES_PRICING_VIEW'],
   GERENTE_VENDAS:['SALES_DAMAGE_CREATE','SALES_DAMAGE_VIEW_OWN','SALES_DAMAGE_VIEW_ALL','SALES_DAMAGE_REVIEW','SALES_STOCK_VALIDITY_VIEW','SALES_PRICING_VIEW']
 };
+for(const role of ['VENDEDOR','GERENTE_VENDAS'])ROLE_PERMISSION_DEFAULTS[role].push('ORDERS_CREATE','ORDERS_OWN');
+ROLE_PERMISSION_DEFAULTS.GERENTE_VENDAS.push('ORDERS_VIEW_ALL','ORDERS_DASHBOARD');
 Object.values(ROLE_PERMISSION_DEFAULTS).forEach(codes=>{for(const code of ['FORMS_FILL','FORMS_REPORT','FORMS_SELF_VIEW'])if(!codes.includes(code))codes.push(code);});
 const VALUE_TYPES = window.DISB_CONFERENCE?.types || [
   {key:'g300',label:'Garrafeiras de 300ml',unitsPerCrate:23,value:69.5,bottleValue:1.5},
@@ -178,6 +182,7 @@ const PRODUCT_REF_LIMIT = 25000;
 const REF_CACHE_KEY = 'ops_ref_cache_v140_customers5000';
 
 const viewMeta = {
+  ...Object.fromEntries(Object.entries(window.DISB_ORDERS?.VIEWS||{})),
   ...Object.fromEntries(Object.entries(window.DISB_RETURNS?.VIEWS||{})),
   'home':['Início','Seus atalhos para o dia a dia'],
   'modulos-config':['Módulos do sistema','Ative ou inative áreas completas do aplicativo'],
@@ -241,7 +246,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.98-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.99-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -974,6 +979,7 @@ function hasPerm(code){
 function hasAnyPerm(codes){return String(codes||'').split(',').map(x=>x.trim()).filter(Boolean).some(hasPerm);}
 
 function moduleNameForPermission(code){
+  if(code.startsWith('ORDERS_'))return 'Pedidos';
   if(code.startsWith('RETURNS_'))return 'Devoluções';
   if(code.startsWith('NRI_')||code==='MARKETPLACE_RECEIVE')return 'NRI';
   if(code.startsWith('CONF_'))return 'Conferência';
@@ -1051,6 +1057,7 @@ async function logout(){
   clearAvariaRequest();
   formsModule?.stop();
   returnsModule?.stop();
+  ordersModule?.stop();
 
   offlineClearIdentityV171();
   salesPricingProducts=[];salesPricingLoaded=false;salesPricingError='';
@@ -1132,6 +1139,7 @@ async function startApp(){
   await loadHomeShortcuts();
   await loadReferences(true);
   void formsModule?.start();
+  void ordersModule?.start();
   prepareSalesDamageForm();
   setupRealtime();
   if(canPull())await initPullModule();
@@ -1318,6 +1326,7 @@ function openView(name,force=false){
   if(name==='home'&&isPullDriver())name='puxada-viagem';
   const v=$(`view-${name}`); if(!v||v.classList.contains('hidden'))return;
   if(activeView.startsWith('returns-')&&activeView!==name&&!returnsModule.canLeave())return;
+  if(activeView.startsWith('orders-')&&activeView!==name&&!ordersModule.canLeave())return;
   if(!force&&activeView===name){toggleSidebar(false);return;}
   activeView=name; document.querySelectorAll('.view').forEach(x=>x.classList.remove('active')); v.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.view===name));
@@ -1339,6 +1348,7 @@ function openView(name,force=false){
   if(name==='sales-pricing')loadSalesPricing(true);
   if(name.startsWith('forms-'))void formsModule?.enter(name);
   if(name.startsWith('returns-'))void returnsModule?.enter(name);
+  if(name.startsWith('orders-'))void ordersModule?.enter(name);
   if(name==='conf-minhas')loadMyConferences();
   if(name==='conf-historico')loadConferenceHistory();
   if(name==='conf-dashboard')loadDashboard();
@@ -8384,12 +8394,15 @@ async function changeActiveUnit(next){
   if(submitAvaria._pending){renderActiveUnitSelector();return toast('Aguarde o registro da avaria ser salvo no aparelho.','');}
   if(formsModule&&!formsModule.canChangeUnit()){renderActiveUnitSelector();return;}
   if(returnsModule&&!returnsModule.canChangeUnit()){renderActiveUnitSelector();return;}
+  if(ordersModule&&!ordersModule.canChangeUnit()){renderActiveUnitSelector();return;}
   returnsModule?.stop();
+  ordersModule?.stop();
   formsModule?.stop();
   activeUnit=next;try{localStorage.setItem(unitAccessKey(),activeUnit);}catch(_e){}
   resetUnitScopedState();renderActiveUnitSelector();refRefreshPromise=null;refs.units=myUnits.map(name=>({name}));populateReferenceInputs();
   await loadReferences(false);
   void formsModule?.start();
+  void ordersModule?.start();
   if(canNri()){await loadPending(true);if(hasPerm('MARKETPLACE_RECEIVE'))await loadMarketplaceModule(true);if(hasPerm('NRI_PENDING_VIEW'))await loadPullNriPending(true);}
   if(canFefo())await refreshFefoBadge(true);
   if(canRotatingAsset()){await loadRotatingAssetProducts(true);if(hasPerm('ROTATING_ASSET_CREATE'))await loadRotatingAssetCurrent(true);}
@@ -13354,6 +13367,19 @@ async function deleteFefoCorrectionItem(itemId){
 // FEFO_COMPLETED_EDITS_END
 
 // FORMULARIOS_MODULE_START
+const ordersModule=window.DISB_ORDERS_UI?.create({
+  context:()=>({client:sb,user:authUser,profile,unit:activeUnit}),hasPermission:hasPerm,toast,openView,
+  modal:({title,subtitle,html})=>openModal(title,subtitle,html,[]),
+  download:async(name,blob)=>{
+    if(isNativeCapacitor()){
+      const cap=window.Capacitor,files=cap.Plugins?.Filesystem||cap.registerPlugin?.('Filesystem'),share=cap.Plugins?.Share||cap.registerPlugin?.('Share');
+      if(!files||!share)throw Error('Atualize o APK para compartilhar o relatório.');
+      const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||'').split(',')[1]||'');reader.onerror=reject;reader.readAsDataURL(blob);});
+      const saved=await files.writeFile({path:name,data,directory:'CACHE'});await share.share({title:'Pedidos',url:saved.uri,dialogTitle:'Salvar ou compartilhar relatório'});return;
+    }
+    const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+  }
+});
 const returnsModule=window.DISB_RETURNS_UI?.create({
   context:()=>({client:sb,user:authUser,profile,unit:activeUnit,units:[...myUnits]}),
   hasPermission:hasPerm,toast,loadScript:loadPullPdfScript,
