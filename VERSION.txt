@@ -1,1 +1,1 @@
-v1.7.99 - Novo modulo Pedidos: fora de rota, bipasse, cliente novo, fila, dashboard e auditoria.
+v1.7.100 - Horarios de pedidos sem excecao, ranking de vendedores, dashboard de avarias e novo padrao visual.

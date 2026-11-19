@@ -182,6 +182,7 @@ const PRODUCT_REF_LIMIT = 25000;
 const REF_CACHE_KEY = 'ops_ref_cache_v140_customers5000';
 
 const viewMeta = {
+  'avaria-dashboard':['Dashboard de avarias','Indicadores de Avarias de Entrega'],
   ...Object.fromEntries(Object.entries(window.DISB_ORDERS?.VIEWS||{})),
   ...Object.fromEntries(Object.entries(window.DISB_RETURNS?.VIEWS||{})),
   'home':['Início','Seus atalhos para o dia a dia'],
@@ -246,7 +247,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.99-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.100-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -1058,6 +1059,7 @@ async function logout(){
   formsModule?.stop();
   returnsModule?.stop();
   ordersModule?.stop();
+  deliveryDamageDashboard?.stop();
 
   offlineClearIdentityV171();
   salesPricingProducts=[];salesPricingLoaded=false;salesPricingError='';
@@ -1327,6 +1329,7 @@ function openView(name,force=false){
   const v=$(`view-${name}`); if(!v||v.classList.contains('hidden'))return;
   if(activeView.startsWith('returns-')&&activeView!==name&&!returnsModule.canLeave())return;
   if(activeView.startsWith('orders-')&&activeView!==name&&!ordersModule.canLeave())return;
+  if(activeView==='avaria-dashboard'&&activeView!==name)deliveryDamageDashboard?.leave();
   if(!force&&activeView===name){toggleSidebar(false);return;}
   activeView=name; document.querySelectorAll('.view').forEach(x=>x.classList.remove('active')); v.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.view===name));
@@ -1340,6 +1343,7 @@ function openView(name,force=false){
   if(name==='nri-historico')loadNriHistory();
   if(name==='nri-avarias-historico')loadNriDamageHistory();
   if(name==='avaria-admin')loadAdminAvarias();
+  if(name==='avaria-dashboard')void deliveryDamageDashboard?.enter();
   if(name==='avaria-minhas')loadDeliveryDamageMy();
   if(name==='sales-avaria-cadastro')prepareSalesDamageForm();
   if(name==='sales-avaria-minhas')loadSalesDamageMy();
@@ -8397,6 +8401,7 @@ async function changeActiveUnit(next){
   if(ordersModule&&!ordersModule.canChangeUnit()){renderActiveUnitSelector();return;}
   returnsModule?.stop();
   ordersModule?.stop();
+  deliveryDamageDashboard?.stop();
   formsModule?.stop();
   activeUnit=next;try{localStorage.setItem(unitAccessKey(),activeUnit);}catch(_e){}
   resetUnitScopedState();renderActiveUnitSelector();refRefreshPromise=null;refs.units=myUnits.map(name=>({name}));populateReferenceInputs();
@@ -13367,6 +13372,17 @@ async function deleteFefoCorrectionItem(itemId){
 // FEFO_COMPLETED_EDITS_END
 
 // FORMULARIOS_MODULE_START
+const deliveryDamageDashboard=window.DISB_DAMAGE_DASHBOARD_UI?.create({
+  context:()=>({client:sb,user:authUser,unit:activeUnit}),
+  canView:()=>hasAnyPerm('DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST'),toast,
+  openRequest:async id=>{
+    const unit=activeUnit;
+    const {data,error}=await sb.from('damage_requests').select('*,damage_items(*,damage_item_photos(*))').eq('unit',unit).eq('id',id).maybeSingle();
+    if(error)throw error;if(unit!==activeUnit)return;if(!data)throw Error('Avaria não encontrada nesta unidade.');
+    const index=adminAvarias.findIndex(r=>r.id===id);if(index<0)adminAvarias.push(data);else adminAvarias[index]=data;
+    await showAvariaDetail(id);
+  }
+});
 const ordersModule=window.DISB_ORDERS_UI?.create({
   context:()=>({client:sb,user:authUser,profile,unit:activeUnit}),hasPermission:hasPerm,toast,openView,
   modal:({title,subtitle,html})=>openModal(title,subtitle,html,[]),

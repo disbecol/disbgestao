@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url),O=require('../src/pedidos/orders.js');
+test('ranking RN/GV agrupa vendedores por identidade e ordena quantidade, respeitando filtros',()=>{
+ const rows=[{created_by:'a',created_by_name:'Ana',requester_role:'VENDEDOR',kind:'FORA_ROTA'},...Array.from({length:3},()=>({created_by:'b',created_by_name:'Beto',requester_role:'GERENTE_VENDAS',kind:'BIPASSE'})),{created_by:'c',created_by_name:'Admin',requester_role:'ADMIN',kind:'FORA_ROTA'}];
+ const ranking=O.sellers(rows);assert.deepEqual(ranking.map(r=>[r.label,r.total]),[['Beto',3],['Ana',1]]);assert.equal(O.sellers(O.filterRows(rows,{kind:'FORA_ROTA'}))[0].label,'Ana');
+});
 test('períodos rápidos respeitam mês, virada de ano e os últimos sete dias',()=>{
  const now='2026-01-03T15:00:00Z';assert.deepEqual(O.period('3m',now),{from:'2025-11-01',to:'2026-01-03'});assert.deepEqual(O.period('7d',now),{from:'2025-12-28',to:'2026-01-03'});assert.deepEqual(O.period('previous',now),{from:'2025-12-01',to:'2025-12-31'});
 });

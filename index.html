@@ -5,28 +5,29 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#142b46">
   <title>Disb Gestão</title>
-  <script src="src/shared/appearance.js?v=1.7.99"></script>
+  <script src="src/shared/appearance.js?v=1.7.100"></script>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="vendor/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=1.7.99-invoice-lots">
+  <link rel="stylesheet" href="styles.css?v=1.7.100-invoice-lots">
   <link rel="stylesheet" href="src/conferencia/conference.css?v=1.7.60">
   <link rel="stylesheet" href="src/shared/visual-refresh.css?v=1.7.1-visual">
   <link rel="stylesheet" href="src/puxada/pull-dashboard.css?v=1.7.1-pull-dashboard">
   <link rel="stylesheet" href="src/avarias/damage-geofence.css?v=2">
-  <link rel="stylesheet" href="src/avarias/damage-entry.css?v=1.7.99">
-  <link rel="stylesheet" href="src/shared/signature-pad.css?v=1.7.99">
+  <link rel="stylesheet" href="src/avarias/damage-entry.css?v=1.7.100">
+  <link rel="stylesheet" href="src/shared/signature-pad.css?v=1.7.100">
   <link rel="stylesheet" href="src/estoque/stock-validity.css?v=1.7.41">
   <link rel="stylesheet" href="src/vendas/sales-pricing.css?v=1.7.52">
-  <link rel="stylesheet" href="src/forms/forms.css?v=1.7.99">
+  <link rel="stylesheet" href="src/forms/forms.css?v=1.7.100">
   <link rel="stylesheet" href="src/estoque/refugo.css?v=1.7.16">
   <link rel="preload" href="assets/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="assets/fonts/manrope-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="src/shared/workspace-theme.css?v=1.7.99">
-  <link rel="stylesheet" href="src/avarias/damage-review.css?v=1.7.99">
-  <link rel="stylesheet" href="src/devolucoes/returns.css?v=1.7.99">
-  <link rel="stylesheet" href="src/pedidos/orders.css?v=1.7.99">
-  <link rel="stylesheet" href="src/shared/professional-ui.css?v=1.7.99">
-  <link rel="stylesheet" href="src/shared/appearance.css?v=1.7.99">
+  <link rel="stylesheet" href="src/shared/workspace-theme.css?v=1.7.100">
+  <link rel="stylesheet" href="src/avarias/damage-review.css?v=1.7.100">
+  <link rel="stylesheet" href="src/devolucoes/returns.css?v=1.7.100">
+  <link rel="stylesheet" href="src/pedidos/orders.css?v=1.7.100">
+  <link rel="stylesheet" href="src/avarias/damage-dashboard.css?v=1.7.100">
+  <link rel="stylesheet" href="src/shared/professional-ui.css?v=1.7.100">
+  <link rel="stylesheet" href="src/shared/appearance.css?v=1.7.100">
 </head>
 <body>
   <section id="loginScreen" class="login-screen">
@@ -35,7 +36,7 @@
         <div class="login-logo"><img src="assets/icon-192.png" alt="Disb Gestão"></div>
         <span class="eyebrow light">ARMAZÉM • ENTREGA • CONFERÊNCIA</span>
         <h1>Disb Gestão</h1>
-        <p>NRI, Ativo de Giro, Refugo, avarias, vendas, conferência, FEFO e Puxada em um único aplicativo.</p><div class="login-version">v1.7.99</div>
+        <p>NRI, Ativo de Giro, Refugo, avarias, vendas, conferência, FEFO e Puxada em um único aplicativo.</p><div class="login-version">v1.7.100</div>
         <div class="feature-list">
           <span>✓ Cadastro por carreta e impressão de NRIs</span>
           <span>✓ Avarias de entrega e vendas com evidências</span>
@@ -64,7 +65,7 @@
   <div id="appShell" class="app-shell hidden">
     <a class="skip-link" href="#mainContent">Ir para o conteúdo</a>
     <aside id="sidebar" class="sidebar" aria-label="Navegação principal">
-      <div class="brand-row brand-disbecol"><img class="brand-logo brand-logo-light" src="assets/disbecol-logo-blue.png" alt="Disbecol"><img class="brand-logo brand-logo-dark" src="assets/disbecol-logo-white.png" alt="Disbecol"></div><div class="app-version-badge">v1.7.99</div>
+      <div class="brand-row brand-disbecol"><img class="brand-logo brand-logo-light" src="assets/disbecol-logo-blue.png" alt="Disbecol"><img class="brand-logo brand-logo-dark" src="assets/disbecol-logo-white.png" alt="Disbecol"></div><div class="app-version-badge">v1.7.100</div>
       <label class="appearance-control"><span>Aparência</span><select data-theme-preference aria-label="Aparência do sistema"><option value="light">Claro</option><option value="dark">Escuro</option><option value="system" selected>Automático</option></select></label>
       <button class="nav-item home-nav-item" data-view="home"><span aria-hidden="true">⌂</span>Início</button>
       <div class="nav-area open" data-area="armazem" data-permission-any="NRI_PENDING_VIEW,MARKETPLACE_RECEIVE,NRI_CREATE,NRI_PRINT,NRI_HISTORY,NRI_DAMAGE_HISTORY,CONF_CREATE,CONF_OWN_HISTORY,CONF_HISTORY,CONF_DASHBOARD,FEFO_CREATE,FEFO_ACTIVE,FEFO_REPORT,ROTATING_ASSET_CREATE,ROTATING_ASSET_HISTORY,MATERIAL_INVENTORY,MATERIAL_STOCK_VIEW,MATERIAL_CATALOG,MATERIAL_MOVEMENT,REFUGO_AFERIR,REFUGO_HISTORICO,REFUGO_CONFIG">
@@ -135,6 +136,7 @@
               <button class="nav-item role-avaria" data-view="avaria-cadastro" data-permission="DELIVERY_DAMAGE_CREATE"><span>＋</span>Registrar avaria</button>
               <button class="nav-item role-avaria" data-view="avaria-minhas" data-permission="DELIVERY_DAMAGE_CREATE"><span>↺</span>Minhas avarias</button>
               <button class="nav-item admin-only" data-view="avaria-admin" data-permission-any="DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST"><span>☑</span>Todas as avarias <b id="badgeAvarias" class="badge">0</b></button>
+              <button class="nav-item" data-view="avaria-dashboard" data-permission-any="DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST"><span>▥</span>Dashboard</button>
             </div>
           </div>
           <div class="nav-module" data-module="devolucoes" data-permission="RETURNS_VIEW">
@@ -272,6 +274,7 @@
         <p id="homeSyncStatus" class="home-sync-status" aria-live="polite"></p>
       </section>
       <section id="view-orders-new" class="view" data-permission="ORDERS_CREATE"></section>
+      <section id="view-avaria-dashboard" class="view" data-permission-any="DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST"></section>
       <section id="view-orders-own" class="view" data-permission="ORDERS_OWN"></section>
       <section id="view-orders-queue" class="view" data-permission-any="ORDERS_REVIEW,ORDERS_MANAGE"></section>
       <section id="view-orders-manage" class="view" data-permission-any="ORDERS_VIEW_ALL,ORDERS_MANAGE"></section>
@@ -1016,19 +1019,21 @@
   <script src="src/vendas/sales-pricing.js?v=1.7.52"></script>
   <script src="src/shared/asset-conversion.js?v=1.7.49"></script>
   <script src="src/conferencia/conference.js?v=1.7.60"></script>
-  <script src="src/forms/forms.js?v=1.7.99"></script>
-  <script src="src/forms/forms-ui.js?v=1.7.99"></script>
-  <script src="src/devolucoes/returns.js?v=1.7.99"></script>
-  <script src="src/devolucoes/returns-google.js?v=1.7.99"></script>
-  <script src="src/devolucoes/returns-file.js?v=1.7.99"></script>
-  <script src="src/devolucoes/returns-ui.js?v=1.7.99"></script>
-  <script src="src/shared/receipt-validation.js?v=1.7.99"></script>
-  <script src="src/shared/table-scroll-dock.js?v=1.7.99"></script>
-  <script src="src/shared/workspace-theme.js?v=1.7.99"></script>
-  <script src="src/shared/signature-pad.js?v=1.7.99"></script>
-  <script src="src/shared/customer-import.js?v=1.7.99"></script>
-  <script src="src/pedidos/orders.js?v=1.7.99"></script>
-  <script src="src/pedidos/orders-ui.js?v=1.7.99"></script>
-  <script src="app.js?v=1.7.99-workspace"></script>
+  <script src="src/forms/forms.js?v=1.7.100"></script>
+  <script src="src/forms/forms-ui.js?v=1.7.100"></script>
+  <script src="src/devolucoes/returns.js?v=1.7.100"></script>
+  <script src="src/devolucoes/returns-google.js?v=1.7.100"></script>
+  <script src="src/devolucoes/returns-file.js?v=1.7.100"></script>
+  <script src="src/devolucoes/returns-ui.js?v=1.7.100"></script>
+  <script src="src/shared/receipt-validation.js?v=1.7.100"></script>
+  <script src="src/shared/table-scroll-dock.js?v=1.7.100"></script>
+  <script src="src/shared/workspace-theme.js?v=1.7.100"></script>
+  <script src="src/shared/signature-pad.js?v=1.7.100"></script>
+  <script src="src/shared/customer-import.js?v=1.7.100"></script>
+  <script src="src/pedidos/orders.js?v=1.7.100"></script>
+  <script src="src/avarias/damage-dashboard.js?v=1.7.100"></script>
+  <script src="src/avarias/damage-dashboard-ui.js?v=1.7.100"></script>
+  <script src="src/pedidos/orders-ui.js?v=1.7.100"></script>
+  <script src="app.js?v=1.7.100-workspace"></script>
 </body>
 </html>

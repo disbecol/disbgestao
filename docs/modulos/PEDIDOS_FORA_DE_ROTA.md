@@ -11,7 +11,7 @@ Implementação própria baseada nos fluxos observados em https://foraderota.com
 | Cliente novo | Código, nome manual e data desejada; não cria um cadastro de cliente na base |
 | Data no BEES e dias de bipasse | Data desejada ou seleção de segunda a sexta |
 | Motivos / observações | Lista de motivos e observações obrigatórias |
-| Horários de envio | 08:30–11:30 e 14:00–16:00, Brasília; Admin pode enviar fora do horário |
+| Horários de envio | 08:30–11:30 e 14:00–16:00, Brasília; vale para todos os perfis |
 | SLA | 30 minutos para Fora de rota / Cliente novo e 48 horas para Bipasse |
 | Minhas solicitações | Status, filtros, detalhes, resposta e histórico do solicitante |
 | Fila de pendentes | Ordem pela proporção de SLA consumido; contador de pendências |
@@ -53,3 +53,5 @@ No banco de produção, a instalação criou zero solicitações e zero eventos 
 ## Verificação
 
 Os testes em PGlite cobrem usuários separados, unidade negada, RLS, escrita direta, anonimato, perfil/módulo inativos, SLA, horário, aprovação, reprovação, retorno à fila, versão conflitante e retry. Testes DOM cobrem oito telas, cadastro, fila, filtros, cliente, exportação e texto malicioso. Testes de cascata CSS conferem contraste de pelo menos 4,5:1 nos temas claro/escuro e larguras 390/1280 px. São verificações automatizadas; não substituem a validação visual no aparelho.
+
+Atualização 1.7.100: o relógio da tela é sincronizado com o servidor e avança por relógio monotônico. As janelas bloqueiam todos os perfis. O formulário abre e fecha sem recarregar, preservando o preenchimento. O ranking RN/GV usa o papel do solicitante gravado na criação e respeita os filtros. Migração complementar `20261119162929_orders_strict_request_hours.sql`.

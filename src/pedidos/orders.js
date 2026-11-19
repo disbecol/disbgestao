@@ -52,6 +52,7 @@
  }
  const daily=rows=>groups(rows,r=>localDate(r.created_at)).sort((a,b)=>a.id.localeCompare(b.id));
  const monthly=rows=>groups(rows,r=>localDate(r.created_at).slice(0,7)).sort((a,b)=>a.id.localeCompare(b.id));
+ const sellers=rows=>groups(rows.filter(r=>['VENDEDOR','GERENTE_VENDAS','RN_GV'].includes(r.requester_role)),r=>r.created_by,r=>r.created_by_name);
  function period(key,now=new Date()){
   const t=localDate(now),[year,month,day]=t.split('-').map(Number),format=d=>d.toISOString().slice(0,10);
   const last=(y,m)=>format(new Date(Date.UTC(y,m,0,12))),first=(y,m)=>format(new Date(Date.UTC(y,m-1,1,12)));
@@ -73,5 +74,5 @@
   const head=['ID','Tipo','Status','Código cliente','Cliente','Cidade','Data desejada','Dias','Motivo','Observações','Solicitante','Analista','Criado em','Assumido em','Resolvido em','Minutos de resolução','Dentro do SLA','Resposta'];
   return '\uFEFF'+[head,...rows.map(r=>[r.id,TYPE[r.kind],STATUS[r.status],r.customer_code,r.customer_name,r.city,r.desired_date,(r.weekdays||[]).join(', '),r.reason,r.notes,r.created_by_name,r.analyst_name,r.created_at,r.claimed_at,r.resolved_at,r.resolution_minutes,r.within_sla==null?'':r.within_sla?'Sim':'Não',r.response])].map(row=>row.map(csvCell).join(';')).join('\r\n');
  }
- return {VIEWS,TYPE,STATUS,EVENTS,REASONS,REJECTIONS,DEFAULTS,esc,norm,localDate,duration,time,timeValue,windowState,sla,filterRows,stats,groups,daily,monthly,period,weekdays,queue,csv};
+ return {VIEWS,TYPE,STATUS,EVENTS,REASONS,REJECTIONS,DEFAULTS,esc,norm,localDate,duration,time,timeValue,windowState,sla,filterRows,stats,groups,daily,monthly,sellers,period,weekdays,queue,csv};
 });

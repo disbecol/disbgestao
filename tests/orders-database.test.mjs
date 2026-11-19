@@ -33,6 +33,7 @@ before(async()=>{
  }
  await q("insert into customers(code,name,city,branch) values('123','Cliente Matriz','Caicó','Caicó'),('123','Cliente Filial','Pau dos Ferros','Pau dos Ferros')");
  await db.exec(await readFile(new URL('../supabase/migrations/20261119143241_orders_requests.sql',import.meta.url),'utf8'));
+ await db.exec(await readFile(new URL('../supabase/migrations/20261119162929_orders_strict_request_hours.sql',import.meta.url),'utf8'));
  for(const id of [analyst,second])await q("insert into user_permissions values($1,'ORDERS_REVIEW',true)",[id]);
  await q("insert into user_permissions values($1,'ORDERS_VIEW_ALL',true)",[viewer]);
  today=(await q("select (now() at time zone 'America/Sao_Paulo')::date::text d"))[0].d;
@@ -41,7 +42,7 @@ before(async()=>{
 after(()=>db.close());
 test('usa identidade do servidor, cliente da unidade e cria histórico sem duplicar em retry',async()=>{
  await as(seller);const op=randomUUID(),d=data();request=await create(d,op);const retry=await create(d,op);
- assert.equal(request.id,retry.id);assert.equal(request.customer_name,'Cliente Matriz');assert.equal(request.created_by,seller);assert.equal(request.created_by_name,'Vendedor');assert.equal(request.status,'PENDENTE');
+ assert.equal(request.id,retry.id);assert.equal(request.customer_name,'Cliente Matriz');assert.equal(request.created_by,seller);assert.equal(request.created_by_name,'Vendedor');assert.equal(request.requester_role,'VENDEDOR');assert.equal(request.status,'PENDENTE');
  assert.equal((await rpc('orders_history',[A,request.id,today,today])).length,1);
  await assert.rejects(()=>create({...d,notes:'Outro conteúdo'},op),/OPERATION_CONFLICT/);
  await assert.rejects(()=>create({...d,customer_code:'inexistente'}),/CUSTOMER_NOT_FOUND/);
@@ -84,11 +85,11 @@ test('regras têm revisão, auditoria e não alteram o SLA de solicitações já
  assert.equal((await q('select sla_minutes from order_requests where id=$1',[request.id]))[0].sla_minutes,30);
  await as(seller);assert.equal((await create()).sla_minutes,45);await assert.rejects(()=>rpc('orders_save_settings',[A,2,randomUUID(),JSON.stringify(changed)]),/FORBIDDEN/);
 });
-test('horários são aplicados no servidor e Admin pode enviar fora das janelas',async()=>{
+test('horários são aplicados no servidor inclusive para Admin',async()=>{
  await as(admin);const current=(await q("select extract(hour from now() at time zone 'America/Sao_Paulo')::int*60+extract(minute from now() at time zone 'America/Sao_Paulo')::int m"))[0].m;
  const closed=current>4?{morning_start:0,morning_end:1,afternoon_start:2,afternoon_end:3}:{morning_start:10,morning_end:11,afternoon_start:12,afternoon_end:13};
  const s=await rpc('orders_settings',[A]);await rpc('orders_save_settings',[A,s.revision,randomUUID(),JSON.stringify({...settingsData,...closed,restricted_hours:true})]);
- await as(seller);await assert.rejects(()=>create(),/OUTSIDE_REQUEST_WINDOW/);await as(admin);assert.equal((await create()).created_by,admin);
+ await as(seller);await assert.rejects(()=>create(),/OUTSIDE_REQUEST_WINDOW/);await as(admin);await assert.rejects(()=>create(),/OUTSIDE_REQUEST_WINDOW/);
 });
 test('isolamento por unidade, perfil ativo, módulo ativo e bloqueio de anônimos são obrigatórios',async()=>{
  await as(viewer);await assert.rejects(()=>rpc('orders_snapshot',[B,today,today,'ALL']),/FORBIDDEN/);await assert.rejects(()=>rpc('orders_snapshot',[A,'2020-01-01',today,'ALL']),/INVALID_PERIOD/);
