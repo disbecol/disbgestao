@@ -1,1 +1,1 @@
-v1.7.100 - Horarios de pedidos sem excecao, ranking de vendedores, dashboard de avarias e novo padrao visual.
+v1.7.101 - Graficos de avarias no padrao visual de Devolucoes.

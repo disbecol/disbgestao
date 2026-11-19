@@ -4,6 +4,8 @@ Menu: **Entrega → Avarias de Entrega → Dashboard**. Consulta apenas os regis
 
 As oito abas compartilham período da ocorrência, motorista, cidade, tipo, motivo, status do produto e pesquisa por cliente, produto, lote ou mapa. Rankings permitem ordenar por ocorrências, itens, unidades ou caixas. O cliente abre suas ocorrências e o botão Ver usa a janela de detalhe existente.
 
+Os gráficos de barras seguem o padrão de Devoluções: nome e valor acima de cada barra, ocupando a largura do card, com altura de 7px e azul adaptado ao tema. Nomes longos podem quebrar linha sem comprimir a barra ou o valor. O padrão é compartilhado entre produtos, cidades, motoristas, clientes e distribuições do resumo.
+
 ## Indicadores
 
 - Resumo: ocorrências com produtos nos filtros, quantidade de itens, clientes, atendimento completo, prazo médio, itens entregues, itens em aberto e quantidades em caixas e unidades.
