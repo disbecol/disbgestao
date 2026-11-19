@@ -4,7 +4,7 @@ import {createRequire} from 'node:module';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {PGlite} from '@electric-sql/pglite';
-const require=createRequire(import.meta.url),C=require('../customer-import.js');
+const require=createRequire(import.meta.url),C=require('../src/shared/customer-import.js');
 const row=(extra={})=>({'Filial':'0001','Cód PDV':'00042','Nome Fantasia':'Loja exemplo','Razão Social':'Empresa exemplo','Cidade':'CAICÓ','Data de Cadastro':'18/09/2026',Documento:'não importar',...extra});
 test('PY050094 reconhece filiais 1 e 6, preserva PDV por filial e ignora outros dados',()=>{
  const p=C.plan([row(),row({Filial:'0006'}),row({Filial:'0002'})]);assert.equal(p.errors.length,0);assert.equal(p.rows.length,2);assert.equal(p.rows[0].branch,'Caicó');assert.equal(p.rows[1].branch,'Pau dos Ferros');assert.equal(p.rows[0].code,'42');assert.equal(p.rows[0].registration_date,'2026-09-18');assert.deepEqual(Object.keys(p.rows[0]).sort(),['branch','city','code','name','registration_date']);assert.equal(p.stats.skippedBranches['2'],1);

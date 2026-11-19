@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {DOMParser} from 'linkedom';
-const require=createRequire(import.meta.url),R=require('../returns.js'),F=require('../returns-file.js'),{zipSync,unzipSync,strToU8}=require('../vendor/fflate.min.js');
+const require=createRequire(import.meta.url),R=require('../src/devolucoes/returns.js'),F=require('../src/devolucoes/returns-file.js'),{zipSync,unzipSync,strToU8}=require('../vendor/fflate.min.js');
 const headers=['Mapa','Data','Unb Nota','Nota','Serie','Unb Cliente','Cod. Cliente','Nome Cliente','Telefone','Area','Setor','Placa','Valor','Volume','Data Devol.','Cod. Motivo','MOTIVO','Orig. Pedido','Usuario','Hora'];
 const reportRow=over=>Object.assign(['12','01/11/2026','47','77','1','47','42','Loja','','','','ABC1234','1.234,56','1,25','02/11/2026','1','Recusa','','Operador','10:00'],over);
 test('datas e números brasileiros não aceitam dias inexistentes e preservam zero',()=>{

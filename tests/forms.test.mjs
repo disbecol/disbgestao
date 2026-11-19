@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import readXlsx from 'read-excel-file/node';
-import F from '../forms.js';
+import F from '../src/forms/forms.js';
 
 const schema={sections:[{id:'data',title:'Dados',fields:[{id:'name',label:'Nome',type:'TEXT',required:true}]},{id:'checks',title:'Condições',fields:[
  {id:'ok',label:'Veículo em condições?',type:'BOOLEAN',scored:true,expected:'YES',required:true,require_note:true,allow_na:true},

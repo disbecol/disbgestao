@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
-import validation from '../receipt-validation.js';
+import validation from '../src/shared/receipt-validation.js';
 const source=readFileSync(new URL('../app.js',import.meta.url),'utf8');
 const code='DGB-11111111-22224444-88889999-AAAAAAAA';
 const searchSource=source.slice(source.indexOf('let damageReceiptSearch=null'),source.indexOf('let damageGeoMapInstance=null'));

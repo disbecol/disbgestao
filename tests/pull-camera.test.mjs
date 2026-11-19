@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
-const {capture,cancelled}=require('../pull-camera.js');
+const {capture,cancelled}=require('../src/puxada/pull-camera.js');
 
 test('captura foto do ciclo pela câmera nativa, sem consultar a galeria',async()=>{
   const calls=[];

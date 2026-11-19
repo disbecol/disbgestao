@@ -6,7 +6,7 @@ import PDFLib from '../vendor/pdf-lib.min.js';
 
 test('Ativo de Giro reúne Pátio, Refugo e Total em um PDF A4', async () => {
   const window = {};
-  vm.runInNewContext(readFileSync(new URL('../share-reports.js', import.meta.url), 'utf8'), { window });
+  vm.runInNewContext(readFileSync(new URL('../src/shared/share-reports.js', import.meta.url), 'utf8'), { window });
   const image = `data:image/png;base64,${readFileSync(new URL('../assets/icon-192.png', import.meta.url)).toString('base64')}`;
   const bytes = await window.DISB_REPORT_IMAGES.assetPdf([
     { dataUrl: image }, { dataUrl: image }, { dataUrl: image },

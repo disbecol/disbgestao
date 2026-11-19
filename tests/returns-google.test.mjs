@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {webcrypto} from 'node:crypto';
-const require=createRequire(import.meta.url),R=require('../returns.js'),G=require('../returns-google.js');
+const require=createRequire(import.meta.url),R=require('../src/devolucoes/returns.js'),G=require('../src/devolucoes/returns-google.js');
 const A='Matriz Caicó',B='Filial Pau dos Ferros';
 const reportHeaders=['Mapa','Data','Unb Nota','Nota','Serie','Unb Cliente','Cod. Cliente','Nome Cliente','Telefone','Area','Setor','Placa','Valor','Volume','Data Devol.','Cod. Motivo','MOTIVO','Orig. Pedido','Usuario','Hora'];
 const inputs={

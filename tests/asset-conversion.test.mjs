@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import conversion from '../asset-conversion.js';
+import conversion from '../src/shared/asset-conversion.js';
 
 const beer = { sap_code: '27983', asset_code: '30491', description: 'CERVEJA 600ML' };
 

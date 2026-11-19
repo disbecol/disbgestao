@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 function pricing(){
   const window={};
-  vm.runInNewContext(fs.readFileSync(new URL('../sales-pricing.js',import.meta.url),'utf8'),
+  vm.runInNewContext(fs.readFileSync(new URL('../src/vendas/sales-pricing.js',import.meta.url),'utf8'),
     {window,Date},{timeout:3000});
   return window.DISB_SALES_PRICING;
 }

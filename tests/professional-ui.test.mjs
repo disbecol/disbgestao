@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import postcss from 'postcss';
 
 const read=name=>fs.readFileSync(new URL('../'+name,import.meta.url),'utf8');
-const css=postcss.parse(read('professional-ui.css'));
+const css=postcss.parse(read('src/shared/professional-ui.css'));
 const tokens={};css.walkRules(':root',rule=>rule.walkDecls(declaration=>{tokens[declaration.prop]=declaration.value;}));
 function luminance(hex){
   const channels=[1,3,5].map(index=>parseInt(hex.slice(index,index+2),16)/255).map(c=>c<=.04045?c/12.92:((c+.055)/1.055)**2.4);
@@ -23,9 +23,9 @@ test('every application stylesheet remains available in the offline precache',()
   const sheets=[...html.matchAll(/<link\b[^>]*rel="stylesheet"[^>]*href="([^"]+)"/g)].map(match=>match[1]);
   assert.ok(sheets.length>10);
   for(const href of sheets){assert.ok(worker.includes(`'${href}'`),`missing precache: ${href}`);assert.ok(fs.existsSync(new URL('../'+href.split('?')[0],import.meta.url)));}
-  assert.ok(sheets.at(-2).startsWith('professional-ui.css'));
-  assert.ok(sheets.at(-1).startsWith('appearance.css'));
-  assert.ok(read('scripts/copy-web.mjs').includes("'professional-ui.css'"),'APK must include the same theme');
+  assert.ok(sheets.at(-2).startsWith('src/shared/professional-ui.css'));
+  assert.ok(sheets.at(-1).startsWith('src/shared/appearance.css'));
+  assert.ok(read('scripts/copy-web.mjs').includes("for(const dir of ['src'])"),'APK must include the src module directories');
 });
 
 test('navigation and synchronization controls remain keyboard accessible',()=>{

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import padApi from '../signature-pad.js';
+import padApi from '../src/shared/signature-pad.js';
 
 test('portrait touch coordinates map to the horizontal signature, including edges',()=>{
   const rect={left:10,top:50,width:300,height:700};

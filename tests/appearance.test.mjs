@@ -12,7 +12,7 @@ function controller({saved=null,dark=false,blocked=false}={}) {
   const document={documentElement:{dataset:{}},querySelector:()=>meta,querySelectorAll:()=>controls,addEventListener(name,fn){documentEvents[name]=fn;}};
   const system={matches:dark,addEventListener(name,fn){systemEvents[name]=fn;}};
   const window={matchMedia:()=>system,localStorage:{getItem(key){if(blocked)throw Error('unavailable');return store.get(key)||null;},setItem(key,value){if(blocked)throw Error('unavailable');store.set(key,value);}},addEventListener(name,fn){events[name]=fn;}};
-  vm.runInNewContext(read('appearance.js'),{document,window});
+  vm.runInNewContext(read('src/shared/appearance.js'),{document,window});
   return {document,events,system,systemEvents,controls,meta,store,ready:()=>documentEvents.DOMContentLoaded(),choose(value){controls[0].value=value;controls[0].change();}};
 }
 
@@ -65,6 +65,6 @@ test('signature stays on white and dark screen colors do not recolor printed doc
 });
 test('appearance controller loads before styles and is packaged for offline and Android',()=>{
   const html=read('index.html'),sw=read('sw.js'),copier=read('scripts/copy-web.mjs');
-  assert.ok(html.indexOf('src="appearance.js?')<html.indexOf('rel="stylesheet"'));
-  for(const name of ['appearance.js','appearance.css']){assert.ok(copier.includes(`'${name}'`));const url=html.match(new RegExp(`(?:src|href)="(${name.replace('.','\\.')}[^\"]+)"`))[1];assert.ok(sw.includes(`'${url}'`));}
+  assert.ok(html.indexOf('src="src/shared/appearance.js?')<html.indexOf('rel="stylesheet"'));
+  for(const name of ['src/shared/appearance.js','src/shared/appearance.css']){assert.ok(copier.includes("for(const dir of ['src'])"));const url=html.match(new RegExp(`(?:src|href)="(${name.replace('.','\\.')}[^\"]+)"`))[1];assert.ok(sw.includes(`'${url}'`));}
 });

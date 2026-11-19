@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {PGlite} from '@electric-sql/pglite';
-import validation from '../receipt-validation.js';
+import validation from '../src/shared/receipt-validation.js';
 
 test('normalização e comparação local recusam PDF modificado e código inválido',async()=>{
  const code='DGB-11111111-22224444-88889999-AAAAAAAA';

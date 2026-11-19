@@ -108,7 +108,7 @@ Acrescentar os indicadores do acompanhamento: aguardando repasse, devolvido, rev
 
 1. Análise estrutural das duas planilhas concluída; seis abas azuis identificadas.
 2. Correções visuais de permissões e disponibilidade de módulos incluídas na camada de aparência.
-3. Domínio/importadores em `returns.js`, leitor seletivo XLSX em `returns-file.js`, interface em `returns-ui.js` e estilos em `returns.css`. Todos são empacotados para web e Android.
+3. Domínio/importadores em `src/devolucoes/returns.js`, leitor seletivo XLSX em `src/devolucoes/returns-file.js`, interface em `src/devolucoes/returns-ui.js` e estilos em `src/devolucoes/returns.css`. Todos são empacotados para web e Android.
 4. Migração 87 preparada e testada em PostgreSQL local (PGlite): acessos por unidade, bloqueio de escrita direta, importação em lotes com publicação atômica, revisão otimista, idempotência e histórico de alterações. Nenhum dado de exemplo foi inserido em produção.
 5. Interface conferida no navegador com dados fictícios, incluindo formulário preservado durante atualização, temas e largura de celular. Capturas ficam em `tmp/`.
 6. A migração 87 foi aplicada no projeto Disb Gestão em 17/11/2026. Conferência em produção: RLS habilitado nas tabelas; acesso anônimo e escrita direta bloqueados; helper interno não exposto; módulo ativo, três permissões iniciais somente para ADMIN. Zero notas ou auditorias de teste criadas. Ela cria as permissões RETURNS_VIEW / RETURNS_EDIT / RETURNS_IMPORT, inicialmente para ADMIN; outros colaboradores devem recebê-las pelo cadastro de usuários, junto das unidades autorizadas. Consultar devoluções é necessário para abrir o módulo.

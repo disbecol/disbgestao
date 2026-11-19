@@ -6,7 +6,7 @@ import {createRequire} from 'node:module';
 import {webcrypto} from 'node:crypto';
 import {parseHTML} from 'linkedom';
 import {cascade,contrast} from './helpers/css-cascade.mjs';
-const require=createRequire(import.meta.url),R=require('../returns.js'),G=require('../returns-google.js'),code=readFileSync(new URL('../returns-ui.js',import.meta.url),'utf8');
+const require=createRequire(import.meta.url),R=require('../src/devolucoes/returns.js'),G=require('../src/devolucoes/returns-google.js'),code=readFileSync(new URL('../src/devolucoes/returns-ui.js',import.meta.url),'utf8');
 const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Fortaleza'}).format(new Date());
 const sample={reports:[{operation_date:today,customer_code:'42',customer_name:'Loja <script>',map_number:'1',city:'Caicó',driver:'Pessoa',helper1:'A',amount_cents:123400,volume_hl:3.5,reason:'Recusa',seller:'Vendedor'}],cases:[],routes:[{operation_date:today,planned_outlets:100,planned_hl:300}],goals:[],penalties:[],penalty_rules:{rules:{'2':7,'3':10,'4':20,'5':30,'6':35,'7':40},revision:0},window_from:R.dateShift(today,-59),window_to:today,imports:[],at:new Date().toISOString()};
 function harness({rpc,permissions=['RETURNS_VIEW','RETURNS_EDIT','RETURNS_IMPORT'],confirm=()=>true}={}){

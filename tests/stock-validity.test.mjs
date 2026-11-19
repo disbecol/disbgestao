@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 function stock(){
   const window={};
-  vm.runInNewContext(fs.readFileSync(new URL('../stock-validity.js',import.meta.url),'utf8'),
+  vm.runInNewContext(fs.readFileSync(new URL('../src/estoque/stock-validity.js',import.meta.url),'utf8'),
     {window,Date,TextDecoder},{timeout:3000});
   return window.DISB_STOCK_VALIDITY;
 }

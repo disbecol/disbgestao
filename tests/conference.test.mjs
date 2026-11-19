@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import conference from '../conference.js';
+import conference from '../src/conferencia/conference.js';
 
 const mapA={map_number:'122357',map_date:'2026-10-09',city:'CURRAIS NOVOS',g300:5,g600_green:0,g600_brown:17,g_litrao:0,keg30:0,keg50:0};
 const mapB={map_number:'122358',map_date:'2026-10-09',city:'DROP',g300:18,g600_green:2,g600_brown:20,g_litrao:1,keg30:0,keg50:0};

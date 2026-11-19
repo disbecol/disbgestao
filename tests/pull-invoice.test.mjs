@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
-const note=require('../invoice-note.js');
+const note=require('../src/puxada/invoice-note.js');
 
 test('soma linhas repetidas da nota antes de converter para paletes',()=>{
   const rows=note.groupLines([
