@@ -3954,7 +3954,7 @@ async function ensurePullPdfLibrary(){
   if(window.PDFLib&&window.DISB_PULL_REPORT)return;
   if(!pullPdfLibraryPromise)pullPdfLibraryPromise=(async()=>{
     if(!window.PDFLib)await loadPullPdfScript('vendor/pdf-lib.min.js');
-    if(!window.DISB_PULL_REPORT)await loadPullPdfScript('pull-report.js?v=2');
+    if(!window.DISB_PULL_REPORT)await loadPullPdfScript('src/puxada/pull-report.js?v=2');
   })().catch(error=>{pullPdfLibraryPromise=null;throw error;});
   await pullPdfLibraryPromise;
 }
