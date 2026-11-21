@@ -47,16 +47,24 @@ test('aba Clientes novos mostra o cadastro e a idade na devolução sem incluir 
 });
 test('Recorrência antiga sai da navegação e seu atalho direciona para o controle de bloqueios',()=>{const html=readFileSync(new URL('../index.html',import.meta.url),'utf8'),app=readFileSync(new URL('../app.js',import.meta.url),'utf8');assert.ok(!html.includes('data-view=\"returns-recurrence\"'));assert.ok(!R.VIEWS['returns-recurrence']);assert.match(html,/Bloqueios por recorrência/);assert.match(app,/if\(name==='returns-recurrence'\)name='returns-penalties'/);});
 for(const theme of ['light','dark'])test(`campos manuais e automáticos ficam distintos e legíveis, sem bloquear correções (${theme})`,async()=>{
- const h=harness();await h.module.enter('returns-audited');await h.click(h.document.querySelector('#view-returns-audited [data-rt-action=new]'));const form=h.document.querySelector('[data-rt-case-form]');const c=cascade({theme,width:390,markup:h.document.documentElement.outerHTML});
+ const h=harness();await h.module.enter('returns-audited');await h.click(h.document.querySelector('#view-returns-audited [data-rt-action=audit-report]'));const form=h.document.querySelector('[data-rt-case-form]');const c=cascade({theme,width:390,markup:h.document.documentElement.outerHTML});
  const manual=c.document.querySelector('.rt-editor [name=driver_reason]'),auto=c.document.querySelector('.rt-editor [name=city]');assert.notEqual(c.background(manual),c.background(auto));
  for(const el of c.document.querySelectorAll('.rt-editor .rt-field :is(input,select,textarea),.rt-field-origin,.rt-field-legend>span')){assert.ok(contrast(c.value(el,'color'),c.background(el))>=4.5,el.outerHTML);}
  assert.match(form.querySelector('[name=city]').closest('label').textContent,/Automático/);assert.match(form.querySelector('[name=driver_reason]').closest('label').textContent,/Manual/);assert.ok(!form.querySelector('[name=city]').hasAttribute('readonly'));assert.ok(!form.querySelector('[name=city]').hasAttribute('disabled'));
 });
 const auditedCase=()=>({id:webcrypto.randomUUID(),revision:7,operation_date:today,customer_code:'42',customer_name:'Loja',map_number:'1',city:'Caicó',branch:'Matriz Caicó',driver:'Pessoa',helper1:'A',helper2:'B',seller:'Vendedor',order_amount_cents:123400,driver_reason:'Recusa',driver_treatment:'Tratativa já registrada',client_reason:'Cancelou',client_statement:'Justificativa preservada',status:'AGUARDANDO_REPASSE',is_drop:false,updated_by_name:'Analista',updated_at:new Date().toISOString()});
+test('devolução real sem aviso prévio aparece para auditoria; quando há monitoramento, reaproveita o relato',async()=>{
+ const report={...sample.reports[0],branch:'MATRIZ'},monitor={operation_date:today,customer_code:'42',map_number:'1',driver:'Motorista da rota',driver_reason:'Recusa',driver_treatment:'Motorista explicou o motivo',found_in_report:true};
+ const h=harness({rpc:async(name)=>name==='returns_monitoring_snapshot'?{data:{monitoring:[monitor]},error:null}:{data:{...sample,reports:[report],cases:[]},error:null}});
+ await h.module.enter('returns-audited');const root=h.document.querySelector('#view-returns-audited');
+ assert.match(root.textContent,/Devoluções importadas para auditoria/);assert.match(root.textContent,/Pendente de auditoria/);assert.match(root.textContent,/Motorista explicou o motivo/);
+ await h.click(root.querySelector('[data-rt-action=audit-report]'));const form=root.querySelector('[data-rt-case-form]');
+ assert.equal(form.querySelector('[name=customer_code]').value,'42');assert.equal(form.querySelector('[name=driver]').value,'Motorista da rota');assert.equal(form.querySelector('[name=driver_treatment]').value,'Motorista explicou o motivo');
+});
 test('auditoria identifica a devolução e aceita o relato do motorista ou do cliente',async()=>{
  const h=harness();h.setData({...sample,cases:[auditedCase()]});await h.module.enter('returns-audited');
  assert.match(h.document.querySelector('.rt-audit-table thead').textContent,/Auditoria da devolução/);
- await h.click(h.document.querySelector('#view-returns-audited [data-rt-action=new]'));
+ await h.click(h.document.querySelector('#view-returns-audited [data-rt-action=edit]'));
  const field=h.document.querySelector('[name=client_statement]').closest('label');
  assert.match(field.textContent,/Auditoria da devolução/);assert.equal(field.querySelector('textarea').getAttribute('placeholder'),'Relato do motorista ou do cliente');
 });
@@ -84,14 +92,13 @@ test('atualização automática preserva filtros digitados antes de aplicar e ao
  await h.click(root.querySelector('[data-tab="returns-panel"]'));assert.equal(root.querySelector('[name=search]').value,'Pedido em análise');assert.equal(root.querySelector('[name=from]').value,'2026-11-01');
  await h.click(root.querySelector('[data-rt-action="clear-filter"]'));assert.equal(root.querySelector('[name=search]').value,'');
 });
-test('atualização periódica preserva formulário aberto; criação exige buscar cliente/data',async()=>{
- const h=harness();await h.module.enter('returns-audited');await h.click(h.document.querySelector('#view-returns-audited [data-rt-action="new"]'));
- const form=h.document.querySelector('[data-rt-case-form]');assert.ok(form);form.querySelector('[name="customer_code"]').value='42';form.querySelector('[name="driver_reason"] option[value=Recusa]').selected=true;
+test('atualização periódica preserva o formulário da devolução importada',async()=>{
+ const h=harness();await h.module.enter('returns-audited');await h.click(h.document.querySelector('#view-returns-audited [data-rt-action="audit-report"]'));
+ const form=h.document.querySelector('[data-rt-case-form]');assert.ok(form);form.querySelector('[name="driver_reason"] option[value=Recusa]').selected=true;
  for(const fn of h.events.input)await fn({target:form.querySelector('[name="driver_reason"]')});
  h.setData({...sample,at:new Date().toISOString()});await h.timers[0]();await new Promise(resolve=>setImmediate(resolve));
  assert.equal(h.document.querySelector('[name="driver_reason"]').value,'Recusa');assert.match(h.document.querySelector('[data-rt-live]').textContent,/formulário aberto foi preservado/);
- for(const fn of h.events.submit)await fn({target:form,preventDefault(){}});
- assert.ok(h.toasts.some(([message])=>message.includes('Buscar informações')));assert.ok(!h.calls.some(c=>c.name==='returns_save_case'));
+ assert.equal(form.querySelector('[name="customer_code"]').value,'42');assert.equal(form.querySelector('[name="operation_date"]').value,today);
 });
 test('falha de servidor informa erro, sem exibir indicadores saudáveis zerados',async()=>{
  const h=harness({rpc:async()=>({error:{message:'FORBIDDEN'},data:null})});await h.module.enter('returns-summary');assert.equal(h.document.querySelectorAll('.rt-kpi').length,0);assert.match(h.document.querySelector('[data-rt-live]').textContent,/não tem acesso/);
@@ -134,7 +141,7 @@ for(const theme of ['light','dark'])test(`cores das metas e penalidades têm con
 });
 
 test('motivo informado é uma lista sem duplicar caixa, acentos, pontuação ou aliases conhecidos',async()=>{
- const h=harness();h.setData({...sample,reason_catalog:[{description:'CLIENTE CANCELOU'},{description:'Cliente Canelou.'},{description:'Cliente Cancelou.'},{description:'Pedido Duplicado'},{description:'(C) Pedidos duplicados'},{description:'SEM VASILHAME'},{description:'Sem Vasilhame.'}]});await h.module.enter('returns-audited');await h.click(h.document.querySelector('[data-rt-action=new]'));const select=h.document.querySelector('[name=driver_reason]');assert.equal(select.tagName,'SELECT');const options=[...select.querySelectorAll('option')].map(o=>o.textContent);assert.equal(options.filter(v=>v==='Cliente cancelou').length,1);assert.equal(options.filter(v=>v==='Pedido duplicado').length,1);assert.equal(options.filter(v=>v==='Sem vasilhame').length,1);assert.ok(select.required||select.hasAttribute('required'));
+ const h=harness();h.setData({...sample,reason_catalog:[{description:'CLIENTE CANCELOU'},{description:'Cliente Canelou.'},{description:'Cliente Cancelou.'},{description:'Pedido Duplicado'},{description:'(C) Pedidos duplicados'},{description:'SEM VASILHAME'},{description:'Sem Vasilhame.'}]});await h.module.enter('returns-audited');await h.click(h.document.querySelector('[data-rt-action=audit-report]'));const select=h.document.querySelector('[name=driver_reason]');assert.equal(select.tagName,'SELECT');const options=[...select.querySelectorAll('option')].map(o=>o.textContent);assert.equal(options.filter(v=>v==='Cliente cancelou').length,1);assert.equal(options.filter(v=>v==='Pedido duplicado').length,1);assert.equal(options.filter(v=>v==='Sem vasilhame').length,1);assert.ok(select.required||select.hasAttribute('required'));
 });
 test('Metas edita responsável por código, com revisão e sem dar edição ao perfil de consulta',async()=>{
  let reasons=[{reason_key:'C:33',reason_code:'33',description:'Nao Fez Pedido',responsible:'VENDAS',revision:2},{reason_key:'C:65',reason_code:'65',description:'NÃO FEZ PEDIDO',responsible:'MERCADO',revision:1},{reason_key:'C:999',reason_code:'999',description:'Novo motivo',responsible:'SEM_RESPONSAVEL',revision:1}];const h=harness({rpc:async(name,args)=>{if(name==='returns_reason_catalog')return {data:reasons,error:null};if(name==='returns_set_reason_owner'){reasons=reasons.map(r=>r.reason_key===args.p_key?{...r,responsible:args.p_owner,revision:r.revision+1}:r);return {data:reasons[0],error:null};}return {data:sample.penalty_rules,error:null};}});await h.module.enter('returns-goals');const select=h.document.querySelector('[data-rt-reason-owner="C:33"]');assert.equal(select.value,'VENDAS');for(const o of select.querySelectorAll('option'))o.selected=false;select.querySelector('[value=MERCADO]').selected=true;for(const fn of h.events.change)await fn({target:select});const saved=h.calls.find(c=>c.name==='returns_set_reason_owner');assert.equal(saved.args.p_key,'C:33');assert.equal(saved.args.p_revision,2);assert.equal(saved.args.p_owner,'MERCADO');assert.equal(h.document.querySelector('[data-rt-reason-owner="C:999"]').value,'SEM_RESPONSAVEL');

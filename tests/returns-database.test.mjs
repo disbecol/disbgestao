@@ -5,6 +5,7 @@ import {randomUUID} from 'node:crypto';
 import {PGlite} from '@electric-sql/pglite';
 const db=new PGlite(),A='Matriz Caicó',B='Filial Pau dos Ferros',admin=randomUUID(),editor=randomUUID(),viewer=randomUUID();
 const migration=await readFile(new URL('../supabase/87_delivery_returns.sql',import.meta.url),'utf8');
+const monitoringMigration=await readFile(new URL('../supabase/90_returns_driver_monitoring.sql',import.meta.url),'utf8');
 const googleMigration=await readFile(new URL('../supabase/88_returns_google_sources.sql',import.meta.url),'utf8');
 const cityMigration=await readFile(new URL('../supabase/migrations/20261117170852_returns_city_names.sql',import.meta.url),'utf8');
 const partialMigration=await readFile(new URL('../supabase/migrations/20261117181315_returns_partial_status.sql',import.meta.url),'utf8');
@@ -32,6 +33,7 @@ before(async()=>{
  await query('insert into units(name) values($1),($2)',[A,B]);
  for(const [id,name,role] of [[admin,'Admin','ADMIN'],[editor,'Analista','CONFERENTE'],[viewer,'Leitura','CONFERENTE']]){await query('insert into profiles(id,name,role) values($1,$2,$3)',[id,name,role]);await query('insert into user_units values($1,$2)',[id,A]);}
  try{await db.exec(migration);}catch(e){throw Error(`${e.message}; linha ${migration.slice(0,Number(e.position||1)).split('\n').length}; ${e.where||''}`);}
+ try{await db.exec(monitoringMigration);}catch(e){throw Error(`${e.message}; linha ${monitoringMigration.slice(0,Number(e.position||1)).split('\n').length}; ${e.where||''}`);}
  for(const code of ['RETURNS_VIEW','RETURNS_EDIT','RETURNS_IMPORT'])await query('insert into user_permissions values($1,$2,true)',[editor,code]);
  await query("insert into user_permissions values($1,'RETURNS_VIEW',true)",[viewer]);
 });
@@ -41,12 +43,25 @@ async function start(kind='REPORT',count=1){const id=randomUUID();await rpc('ret
 async function publish(kind,rows){const id=await start(kind,rows.length);await rpc('returns_stage_import',[id,JSON.stringify(rows)]);await rpc('returns_finish_import',[id]);return id;}
 const caseData=(over={})=>({operation_date:'2026-11-01',customer_code:'42',map_number:'1',customer_name:'Cliente exemplo',driver_reason:'Recusa',driver_treatment:'Retorno solicitado',client_reason:'Preço',client_statement:'Cliente explicou o motivo',status:'AGUARDANDO_REPASSE',order_amount_cents:4200,...over});
 const save=(id,rev,data,op=randomUUID(),unit=A)=>rpc('returns_save_case',[id,unit,rev,op,JSON.stringify(data)]);
+const monitoringData=(over={})=>({operation_date:'2026-11-01',customer_code:'42',map_number:'1',branch:'MATRIZ',customer_name:'Cliente exemplo',city:'Caicó',seller:'Vendedor',driver:'Motorista',driver_reason:'PDV fechado',driver_treatment:'Cliente ausente',...over});
+const saveMonitoring=(id,rev,data,op=randomUUID(),unit=A)=>rpc('returns_save_monitoring',[id,unit,rev,op,JSON.stringify(data)]);
 
 test('RLS e RPC recusam outra unidade inclusive para admin; anon não consulta',async()=>{
  await as();await publish('REPORT',[row()]);
  await assert.rejects(()=>rpc('returns_snapshot',[B,'2026-11-01','2026-11-30']),/FORBIDDEN/);
  await db.exec('reset role');await db.exec('set role anon');await assert.rejects(()=>query('select * from delivery_return_cases'),/permission denied/);
  await as(viewer);await assert.rejects(()=>start(),/FORBIDDEN/);await assert.rejects(()=>save(randomUUID(),0,caseData()),/FORBIDDEN/);
+});
+test('monitoramento mantém apontamentos separados e indica quando a devolução chega pela planilha',async()=>{
+ await as(editor);await publish('REPORT',[row()]);
+ const id=randomUUID(),operation=randomUUID(),created=await saveMonitoring(id,0,monitoringData(),operation);
+ assert.equal(created.id,id);assert.equal(created.driver_reason,'PDV fechado');assert.deepEqual(await saveMonitoring(id,0,monitoringData(),operation),created);
+ const snapshot=await rpc('returns_monitoring_snapshot',[A,'2026-11-01','2026-11-30']);
+ assert.equal(snapshot.monitoring.length,1);assert.equal(snapshot.monitoring[0].found_in_report,true);
+ await assert.rejects(()=>saveMonitoring(randomUUID(),0,monitoringData(),randomUUID(),B),/FORBIDDEN/);
+ await as(viewer);assert.equal((await rpc('returns_monitoring_snapshot',[A,'2026-11-01','2026-11-30'])).monitoring.length,1);
+ await assert.rejects(()=>saveMonitoring(randomUUID(),0,monitoringData()),/FORBIDDEN/);
+ await db.exec('reset role');await db.exec('set role anon');await assert.rejects(()=>query('select * from delivery_return_monitoring'),/permission denied/);
 });
 test('prévia parcial não aparece; publicação e repetição são atômicas e não duplicam',async()=>{
  await as(editor);const id=await start('REPORT',2);

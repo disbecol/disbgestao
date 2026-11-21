@@ -37,7 +37,7 @@
         <div class="login-logo"><img src="assets/icon-192.png" alt="Disb Gestão"></div>
         <span class="eyebrow light">ARMAZÉM • ENTREGA • CONFERÊNCIA</span>
         <h1>Disb Gestão</h1>
-        <p>NRI, Ativo de Giro, Refugo, avarias, vendas, conferência, FEFO e Puxada em um único aplicativo.</p><div class="login-version">v1.7.101</div>
+        <p>NRI, Ativo de Giro, Refugo, avarias, vendas, conferência, FEFO e Puxada em um único aplicativo.</p><div class="login-version">v1.7.103</div>
         <div class="feature-list">
           <span>✓ Cadastro por carreta e impressão de NRIs</span>
           <span>✓ Avarias de entrega e vendas com evidências</span>
@@ -66,7 +66,7 @@
   <div id="appShell" class="app-shell hidden">
     <a class="skip-link" href="#mainContent">Ir para o conteúdo</a>
     <aside id="sidebar" class="sidebar" aria-label="Navegação principal">
-      <div class="brand-row brand-disbecol"><img class="brand-logo brand-logo-light" src="assets/disbecol-logo-blue.png" alt="Disbecol"><img class="brand-logo brand-logo-dark" src="assets/disbecol-logo-white.png" alt="Disbecol"></div><div class="app-version-badge">v1.7.101</div>
+      <div class="brand-row brand-disbecol"><img class="brand-logo brand-logo-light" src="assets/disbecol-logo-blue.png" alt="Disbecol"><img class="brand-logo brand-logo-dark" src="assets/disbecol-logo-white.png" alt="Disbecol"></div><div class="app-version-badge">v1.7.103</div>
       <label class="appearance-control"><span>Aparência</span><select data-theme-preference aria-label="Aparência do sistema"><option value="light">Claro</option><option value="dark">Escuro</option><option value="system" selected>Automático</option></select></label>
       <button class="nav-item home-nav-item" data-view="home"><span aria-hidden="true">⌂</span>Início</button>
       <div class="nav-area open" data-area="armazem" data-permission-any="NRI_PENDING_VIEW,MARKETPLACE_RECEIVE,NRI_CREATE,NRI_PRINT,NRI_HISTORY,NRI_DAMAGE_HISTORY,CONF_CREATE,CONF_OWN_HISTORY,CONF_HISTORY,CONF_DASHBOARD,FEFO_CREATE,FEFO_ACTIVE,FEFO_REPORT,ROTATING_ASSET_CREATE,ROTATING_ASSET_HISTORY,MATERIAL_INVENTORY,MATERIAL_STOCK_VIEW,MATERIAL_CATALOG,MATERIAL_MOVEMENT,REFUGO_AFERIR,REFUGO_HISTORICO,REFUGO_CONFIG">
@@ -145,7 +145,8 @@
             <div class="nav-module-items">
               <button class="nav-item" data-view="returns-followup" data-permission="RETURNS_VIEW"><span>◫</span>Acompanhamentos</button>
               <button class="nav-item" data-view="returns-penalties" data-permission="RETURNS_VIEW"><span>◷</span>Bloqueios por recorrência</button>
-              <button class="nav-item" data-view="returns-audited" data-permission="RETURNS_VIEW"><span>✓</span>Devolução auditada</button>
+              <button class="nav-item" data-view="returns-monitoring" data-permission="RETURNS_VIEW"><span>◉</span>Monitoramento</button>
+              <button class="nav-item" data-view="returns-audited" data-permission="RETURNS_VIEW"><span>✓</span>Devoluções auditadas</button>
               <button class="nav-item" data-view="returns-goals" data-permission="RETURNS_VIEW"><span>◎</span>Metas</button>
               <button class="nav-item" data-view="returns-import" data-permission="RETURNS_IMPORT"><span>↻</span>Bases do Google</button>
             </div>
@@ -301,6 +302,7 @@
       <section id="view-returns-team" class="view" data-permission="RETURNS_VIEW"></section>
       <section id="view-returns-penalties" class="view" data-permission="RETURNS_VIEW"></section>
       <section id="view-returns-reasons" class="view" data-permission="RETURNS_VIEW"></section>
+      <section id="view-returns-monitoring" class="view" data-permission="RETURNS_VIEW"></section>
       <section id="view-returns-audited" class="view" data-permission="RETURNS_VIEW"></section>
       <section id="view-returns-goals" class="view" data-permission="RETURNS_VIEW"></section>
       <section id="view-returns-import" class="view" data-permission="RETURNS_IMPORT"></section>
@@ -1029,10 +1031,10 @@
   <script src="src/conferencia/conference.js?v=1.7.60"></script>
   <script src="src/forms/forms.js?v=1.7.101"></script>
   <script src="src/forms/forms-ui.js?v=1.7.101"></script>
-  <script src="src/devolucoes/returns.js?v=1.7.101"></script>
+  <script src="src/devolucoes/returns.js?v=1.7.103"></script>
   <script src="src/devolucoes/returns-google.js?v=1.7.101"></script>
   <script src="src/devolucoes/returns-file.js?v=1.7.101"></script>
-  <script src="src/devolucoes/returns-ui.js?v=1.7.102"></script>
+  <script src="src/devolucoes/returns-ui.js?v=1.7.103"></script>
   <script src="src/fdr/fdr.js?v=1"></script>
   <script src="src/fdr/fdr-ui.js?v=1"></script>
   <script src="src/shared/receipt-validation.js?v=1.7.101"></script>

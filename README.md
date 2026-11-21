@@ -129,6 +129,13 @@ Conceda as permissões **Consultar apontamentos FDR** e **Registrar
 apontamentos FDR** em Administração > Usuários para os perfis que usarão a
 tela.
 
+Para separar os avisos feitos pelos motoristas da auditoria das devoluções
+reais, aplique `supabase/90_returns_driver_monitoring.sql` depois das
+migrações 87 e 88. A tela **Monitoramento** guarda os relatos prévios; a tela
+**Devoluções auditadas** lista as devoluções reais sincronizadas da aba
+03.02.24, inclusive as que não tiveram aviso prévio. As duas telas usam as
+permissões existentes de Devoluções.
+
 ## 3. Configurar o site
 
 Em **Project Settings > API**, copie:
