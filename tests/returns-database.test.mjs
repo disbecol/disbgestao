@@ -7,6 +7,7 @@ const db=new PGlite(),A='Matriz Caicó',B='Filial Pau dos Ferros',admin=randomUU
 const migration=await readFile(new URL('../supabase/87_delivery_returns.sql',import.meta.url),'utf8');
 const monitoringMigration=await readFile(new URL('../supabase/90_returns_driver_monitoring.sql',import.meta.url),'utf8');
 const prioritiesMigration=await readFile(new URL('../supabase/91_returns_priorities.sql',import.meta.url),'utf8');
+const priorityRoutesMigration=await readFile(new URL('../supabase/92_returns_priority_routes.sql',import.meta.url),'utf8');
 const googleMigration=await readFile(new URL('../supabase/88_returns_google_sources.sql',import.meta.url),'utf8');
 const cityMigration=await readFile(new URL('../supabase/migrations/20261117170852_returns_city_names.sql',import.meta.url),'utf8');
 const partialMigration=await readFile(new URL('../supabase/migrations/20261117181315_returns_partial_status.sql',import.meta.url),'utf8');
@@ -36,6 +37,7 @@ before(async()=>{
  try{await db.exec(migration);}catch(e){throw Error(`${e.message}; linha ${migration.slice(0,Number(e.position||1)).split('\n').length}; ${e.where||''}`);}
  try{await db.exec(monitoringMigration);}catch(e){throw Error(`${e.message}; linha ${monitoringMigration.slice(0,Number(e.position||1)).split('\n').length}; ${e.where||''}`);}
  try{await db.exec(prioritiesMigration);}catch(e){throw Error(`${e.message}; linha ${prioritiesMigration.slice(0,Number(e.position||1)).split('\n').length}; ${e.where||''}`);}
+ try{await db.exec(priorityRoutesMigration);}catch(e){throw Error(`${e.message}; linha ${priorityRoutesMigration.slice(0,Number(e.position||1)).split('\n').length}; ${e.where||''}`);}
  for(const code of ['RETURNS_VIEW','RETURNS_EDIT','RETURNS_IMPORT'])await query('insert into user_permissions values($1,$2,true)',[editor,code]);
  await query("insert into user_permissions values($1,'RETURNS_VIEW',true)",[viewer]);
 });
@@ -78,6 +80,21 @@ test('prioridades são isoladas por unidade, identificadas por data e código e 
  await as(viewer);assert.equal((await rpc('returns_priority_lookup',[A,'2026-11-21','900'])).reason,'Justificativa atualizada');
  await assert.rejects(()=>savePriority(randomUUID(),0,data),/FORBIDDEN/);
  await db.exec('reset role');await db.exec('set role anon');await assert.rejects(()=>query('select * from delivery_return_priorities'),/permission denied/);
+});
+test('consulta em lote cruza todas as prioridades da data com pedidos e jornadas da unidade',async()=>{
+ await as(editor);
+ const day='2026-11-22';
+ await savePriority(randomUUID(),0,priorityData({priority_date:day,customer_code:'990'}));
+ await savePriority(randomUUID(),0,priorityData({priority_date:day,customer_code:'991',customer_name:'Cliente sem rota'}));
+ await publish('ORDERS',[{row_key:'priority-order',operation_date:day,map_number:'9',customer_code:'990',customer_name:'Cliente prioridade',order_amount_cents:12000}]);
+ await publish('JOURNEYS',[{row_key:day+'~9',operation_date:day,map_number:'9',driver:'Motorista confirmado',helper1:'Ajudante'}]);
+ const rows=await rpc('returns_priority_routes',[A,day]);
+ assert.equal(rows.length,2);
+ const assigned=rows.find(row=>row.priority.customer_code==='990');assert.equal(assigned.routes.length,1);assert.equal(assigned.routes[0].map_number,'9');assert.equal(assigned.routes[0].driver,'Motorista confirmado');
+ const pending=rows.find(row=>row.priority.customer_code==='991');assert.equal(pending.routes[0].map_number,'');assert.equal(pending.routes[0].driver,'');
+ await assert.rejects(()=>rpc('returns_priority_routes',[B,day]),/FORBIDDEN/);
+ await as(viewer);assert.equal((await rpc('returns_priority_routes',[A,day])).length,2);
+ await db.exec('reset role');await db.exec('set role anon');await assert.rejects(()=>rpc('returns_priority_routes',[A,day]),/permission denied/);
 });
 test('prévia parcial não aparece; publicação e repetição são atômicas e não duplicam',async()=>{
  await as(editor);const id=await start('REPORT',2);
