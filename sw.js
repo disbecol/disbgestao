@@ -1,5 +1,5 @@
 // Áreas dinâmicas e resultados privados por colaborador.
-const CACHE='disb-gestao-v1.7.104-priorities';
+const CACHE='disb-gestao-v1.7.105-priority-sheet';
 const IMAGE_CACHE=`${CACHE}-images`;
 const IMAGE_CACHE_LIMIT=200;
 const STATIC=['./','index.html','styles.css?v=1.7.101-invoice-lots','src/conferencia/conference.css?v=1.7.60','src/shared/visual-refresh.css?v=1.7.1-visual','src/puxada/pull-dashboard.css?v=1.7.1-pull-dashboard','src/avarias/damage-geofence.css?v=2','src/estoque/refugo.css?v=1.7.16','src/vendas/sales-pricing.css?v=1.7.52','src/vendas/sales-pricing.js?v=1.7.52','src/shared/share-reports.js?v=1.7.60','src/puxada/pull-report.js?v=2','src/puxada/invoice-note.js?v=1.7.31-keg-liters','src/puxada/pull-camera.js?v=1.7.32-pull-camera','src/shared/asset-conversion.js?v=1.7.49','src/conferencia/conference.js?v=1.7.60','vendor/supabase.js','vendor/leaflet.js','vendor/leaflet.css','vendor/images/layers.png','vendor/images/layers-2x.png','vendor/images/marker-icon.png','vendor/images/marker-icon-2x.png','vendor/images/marker-shadow.png','vendor/pdf-lib.min.js','vendor/pdfjs.min.js','vendor/pdfjs.worker.min.js','src/shared/receipt-validation.js?v=1.7.101','src/shared/table-scroll-dock.js?v=1.7.101','app.js?v=1.7.101-workspace','config.js?v=1.7.0','manifest.webmanifest','assets/icon-192.png','assets/icon-512.png'];
@@ -10,7 +10,7 @@ STATIC.push('src/shared/signature-pad.css?v=1.7.101','src/shared/signature-pad.j
 STATIC.push('src/estoque/stock-validity.css?v=1.7.41','src/estoque/stock-validity.js?v=1.7.41','vendor/read-excel-file.min.js');
 STATIC.push('src/forms/forms.css?v=1.7.101','src/forms/forms.js?v=1.7.101','src/forms/forms-ui.js?v=1.7.101');
 STATIC.push('src/shared/workspace-theme.css?v=1.7.101','src/avarias/damage-review.css?v=1.7.101','src/shared/workspace-theme.js?v=1.7.101','assets/fonts/dm-sans-latin.woff2','assets/fonts/dm-sans-latin-ext.woff2','assets/fonts/manrope-latin.woff2','assets/fonts/manrope-latin-ext.woff2');
-STATIC.push('src/devolucoes/returns.js?v=1.7.104','src/devolucoes/returns-google.js?v=1.7.101','src/devolucoes/returns-file.js?v=1.7.101','src/devolucoes/returns-ui.js?v=1.7.104','src/devolucoes/returns.css?v=1.7.104','vendor/fflate.min.js');
+STATIC.push('src/devolucoes/returns.js?v=1.7.105','src/devolucoes/returns-google.js?v=1.7.101','src/devolucoes/returns-file.js?v=1.7.101','src/devolucoes/returns-ui.js?v=1.7.105','src/devolucoes/returns.css?v=1.7.105','vendor/fflate.min.js');
 STATIC.push('src/shared/customer-import.js?v=1.7.101');
 STATIC.push('src/fdr/fdr.js?v=1','src/fdr/fdr-ui.js?v=1','src/fdr/fdr.css?v=1');
 STATIC.push('assets/disbecol-logo-blue.png','assets/disbecol-logo-white.png');

@@ -8,9 +8,10 @@ import {parseHTML} from 'linkedom';
 import {cascade,contrast} from './helpers/css-cascade.mjs';
 const require=createRequire(import.meta.url),R=require('../src/devolucoes/returns.js'),G=require('../src/devolucoes/returns-google.js'),code=readFileSync(new URL('../src/devolucoes/returns-ui.js',import.meta.url),'utf8');
 const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Fortaleza'}).format(new Date());
+const flush=()=>new Promise(resolve=>setImmediate(resolve));
 const sample={reports:[{operation_date:today,customer_code:'42',customer_name:'Loja <script>',map_number:'1',city:'Caicó',driver:'Pessoa',helper1:'A',amount_cents:123400,volume_hl:3.5,reason:'Recusa',seller:'Vendedor'}],cases:[],routes:[{operation_date:today,planned_outlets:100,planned_hl:300}],goals:[],penalties:[],penalty_rules:{rules:{'2':7,'3':10,'4':20,'5':30,'6':35,'7':40},revision:0},window_from:R.dateShift(today,-59),window_to:today,imports:[],at:new Date().toISOString()};
 function harness({rpc,permissions=['RETURNS_VIEW','RETURNS_EDIT','RETURNS_IMPORT'],confirm=()=>true}={}){
- const {document}=parseHTML(`<html><body><main id="appShell">${Object.keys(R.VIEWS).map(v=>`<section id="view-${v}" class="view active"></section>`).join('')}</main></body></html>`),window={},events={},wevents={},calls=[],timers=[],toasts=[];
+ const {document}=parseHTML(`<html><body><main id="appShell">${Object.keys(R.VIEWS).map(v=>`<section id="view-${v}" class="view active"></section>`).join('')}</main></body></html>`),window={},events={},wevents={},calls=[],timers=[],toasts=[];let printCalls=0;window.print=()=>{printCalls++;};
  let unit='Matriz Caicó',data=structuredClone(sample);
  const client={rpc:async(name,args)=>{calls.push({name,args});return rpc?rpc(name,args):{data:structuredClone(name==='returns_penalty_rules'?data.penalty_rules:name==='returns_reason_catalog'?(data.reason_catalog||[]):data),error:null};},from:table=>{const filters={};return {select(){return this;},eq(name,value){filters[name]=value;return this;},order(){return this;},limit(){return this;},then(resolve,reject){calls.push({name:'select:'+table,args:filters});return Promise.resolve({data:structuredClone(table==='delivery_return_penalty_audit'?data.penalty_history||[]:(data.goals||[]).filter(g=>g.month===filters.month)),error:null}).then(resolve,reject);}};},channel:()=>({on(){return this;},subscribe(){return this;}}),removeChannel:()=>{}};
  document.addEventListener=(name,fn)=>{(events[name]||=[]).push(fn);};window.addEventListener=(name,fn)=>{wevents[name]=fn;};window.DISB_RETURNS=R;window.DISB_RETURNS_GOOGLE={...G,create:()=>({sync:async()=>({skipped:true}),stop(){},pending:()=>false})};
@@ -19,9 +20,9 @@ function harness({rpc,permissions=['RETURNS_VIEW','RETURNS_EDIT','RETURNS_IMPORT
  vm.runInContext(code,ctx);
  const module=window.DISB_RETURNS_UI.create({context:()=>({client,user:{id:'u1'},unit}),hasPermission:p=>permissions.includes(p),toast:(...x)=>toasts.push(x),modal:options=>{document.getElementById('test-modal')?.remove();const box=document.createElement('div');box.id='test-modal';box.innerHTML=options.html;document.body.append(box);},closeModal:()=>document.getElementById('test-modal')?.remove(),loadScript:()=>{},download:()=>{}});
  const click=async(el)=>{for(const fn of events.click||[])await fn({target:el});};
- return {module,document,window,events,wevents,calls,timers,toasts,click,setUnit:u=>unit=u,setData:d=>data=d};
+ return {module,document,window,events,wevents,calls,timers,toasts,click,setUnit:u=>unit=u,setData:d=>data=d,get printCalls(){return printCalls;}};
 }
-test('as seis visões, auditoria e importação renderizam sem HTML de dados ou objetos acidentais',async()=>{
+test('as visões, auditoria e importação renderizam sem HTML de dados ou objetos acidentais',async()=>{
  const h=harness();for(const v of Object.keys(R.VIEWS)){await h.module.enter(v);const root=h.document.getElementById('view-'+v);assert.ok(root.querySelector('h1'));assert.ok(!root.innerHTML.includes('[object Object]'),v);assert.equal(root.querySelectorAll('script').length,0);}
  assert.equal(h.document.querySelectorAll('#view-returns-import .rt-source').length,4);assert.equal(h.document.querySelectorAll('#view-returns-import input[type=file]').length,0);
 });
@@ -52,6 +53,42 @@ test('Prioridades permite cadastrar a base manualmente com os campos e valores c
 test('perfil de consulta vê prioridades sem ações de cadastro ou edição',async()=>{
  const h=harness({permissions:['RETURNS_VIEW']});h.setData({...sample,priorities:[{id:'priority-1',priority_date:today,customer_code:'42',customer_name:'Loja prioritária',city:'Caicó',seller:'Valter',order_amount_cents:12345,visit_day:'Sexta-feira',off_route:true,focus_client:true,reason:'Acompanhar',updated_by_name:'Analista',updated_at:new Date().toISOString()}]});
  await h.module.enter('returns-priorities');const root=h.document.querySelector('#view-returns-priorities');assert.match(root.textContent,/Loja prioritária/);assert.ok(!root.querySelector('[data-rt-action=new-priority]'));assert.ok(!root.querySelector('[data-rt-action=edit-priority]'));
+});
+test('folha consulta primeiro a prioridade e libera impressão com rota única consistente',async()=>{
+ const priority={priority_date:today,customer_code:'42',customer_name:'Loja prioritária',city:'Caicó',seller:'Valter',order_amount_cents:12345,visit_day:'Sexta-feira',off_route:true,focus_client:true,reason:'Acompanhar'};
+ const route={operation_date:today,customer_code:'42',map_number:'123',customer_name:'Loja prioritária',city:'Caicó',driver:'Motorista A'};
+ const h=harness({rpc:async(name,args)=>{if(name==='returns_priority_lookup')return {data:priority,error:null};if(name==='returns_lookup')return {data:[route],error:null};return {data:sample,error:null};}});
+ await h.module.enter('returns-priority-sheet');await flush();const root=h.document.querySelector('#view-returns-priority-sheet'),form=root.querySelector('[data-rt-priority-sheet-form]');form.querySelector('[name=customer_code]').value='42';
+ for(const fn of h.events.submit)await fn({target:form,preventDefault(){}});
+ assert.deepEqual(h.calls.filter(c=>['returns_priority_lookup','returns_lookup'].includes(c.name)).map(c=>c.name),['returns_priority_lookup','returns_lookup']);
+ assert.equal(h.calls.find(c=>c.name==='returns_priority_lookup').args.p_date,today);assert.equal(h.calls.find(c=>c.name==='returns_lookup').args.p_customer,'42');
+ assert.match(root.textContent,/Motorista A/);assert.match(root.textContent,/Mapa e motorista encontrados/);assert.ok(root.querySelector('[data-rt-action=print-priority-sheet]'));
+ await h.click(root.querySelector('[data-rt-action=print-priority-sheet]'));assert.equal(h.printCalls,1);
+});
+test('folha exige escolha explícita entre mapas antes de liberar impressão',async()=>{
+ const priority={priority_date:today,customer_code:'42',customer_name:'Loja prioritária',city:'Caicó'};
+ const routes=[{map_number:'123',customer_name:'Loja prioritária',city:'Caicó',driver:'Motorista A'},{map_number:'456',customer_name:'Loja prioritária',city:'Caicó',driver:'Motorista B'}];
+ const h=harness({rpc:async(name)=>name==='returns_priority_lookup'?{data:priority,error:null}:name==='returns_lookup'?{data:routes,error:null}:{data:sample,error:null}});
+ await h.module.enter('returns-priority-sheet');await flush();const root=h.document.querySelector('#view-returns-priority-sheet'),form=root.querySelector('[data-rt-priority-sheet-form]');form.querySelector('[name=customer_code]').value='42';
+ for(const fn of h.events.submit)await fn({target:form,preventDefault(){}});
+ assert.match(root.textContent,/Encontramos 2 mapas/);assert.ok(!root.querySelector('[data-rt-action=print-priority-sheet]'));
+ const picker=root.querySelector('[data-rt-priority-route]');for(const option of picker.querySelectorAll('option'))option.selected=option.value==='1';for(const fn of h.events.change)await fn({target:picker});
+ assert.match(root.textContent,/Motorista B/);assert.ok(root.querySelector('[data-rt-action=print-priority-sheet]'));
+});
+test('folha bloqueia impressão quando não há prioridade, motorista ou dados consistentes',async()=>{
+ const priority={priority_date:today,customer_code:'42',customer_name:'Loja prioritária',city:'Caicó'};
+ let h=harness({rpc:async(name)=>name==='returns_priority_lookup'?{data:null,error:null}:{data:sample,error:null}});
+ await h.module.enter('returns-priority-sheet');await flush();let root=h.document.querySelector('#view-returns-priority-sheet'),form=root.querySelector('[data-rt-priority-sheet-form]');form.querySelector('[name=customer_code]').value='42';
+ for(const fn of h.events.submit)await fn({target:form,preventDefault(){}});
+ assert.match(root.textContent,/não está na base de prioridades/);assert.ok(!h.calls.some(c=>c.name==='returns_lookup'));assert.ok(!root.querySelector('[data-rt-action=print-priority-sheet]'));
+ h=harness({rpc:async(name)=>name==='returns_priority_lookup'?{data:priority,error:null}:name==='returns_lookup'?{data:[{map_number:'123',customer_name:'Loja prioritária',city:'Caicó',driver:''}],error:null}:{data:sample,error:null}});
+ await h.module.enter('returns-priority-sheet');await flush();root=h.document.querySelector('#view-returns-priority-sheet');form=root.querySelector('[data-rt-priority-sheet-form]');form.querySelector('[name=customer_code]').value='42';
+ for(const fn of h.events.submit)await fn({target:form,preventDefault(){}});
+ assert.match(root.textContent,/Motorista não confirmado/);assert.ok(!root.querySelector('[data-rt-action=print-priority-sheet]'));
+ h=harness({rpc:async(name)=>name==='returns_priority_lookup'?{data:priority,error:null}:name==='returns_lookup'?{data:[{map_number:'123',customer_name:'Outro nome',city:'Caicó',driver:'Motorista A'}],error:null}:{data:sample,error:null}});
+ await h.module.enter('returns-priority-sheet');await flush();root=h.document.querySelector('#view-returns-priority-sheet');form=root.querySelector('[data-rt-priority-sheet-form]');form.querySelector('[name=customer_code]').value='42';
+ for(const fn of h.events.submit)await fn({target:form,preventDefault(){}});
+ assert.match(root.textContent,/Divergência entre a prioridade manual/);assert.ok(!root.querySelector('[data-rt-action=print-priority-sheet]'));
 });
 test('Monitoramento avisa quando o código e a data são prioridade do dia',async()=>{
  const priority={priority_date:today,customer_code:'42',customer_name:'Loja prioritária',order_amount_cents:12345,off_route:true,focus_client:true,reason:'Pedido de alto valor'};

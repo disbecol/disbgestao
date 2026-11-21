@@ -141,6 +141,13 @@ no Monitoramento, aplique `supabase/91_returns_priorities.sql` depois da
 migração 90. A tela **Prioridades do dia** usa a permissão existente de edição
 de Devoluções; cada cliente é identificado por unidade, data e código.
 
+A tela **Folha para motorista** consulta essa prioridade e usa `returns_lookup`
+(migração 87) para encontrar o mapa e a equipe da data. Se houver mais de um
+mapa, é necessário escolher um; divergências ou falta de motorista/mapa
+bloqueiam a impressão. Não há envio automático. Esta tela não adiciona tabelas
+nem exige uma nova migração; depende das migrações 87 e 91 já aplicadas e das
+bases de pedidos e jornadas importadas para a unidade.
+
 ## 3. Configurar o site
 
 Em **Project Settings > API**, copie:
