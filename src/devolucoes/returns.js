@@ -17,6 +17,7 @@
     'returns-reasons':['Análise de motivos','Motivos, valores, volume e comparação da auditoria.'],
     'returns-monitoring':['Monitoramento','Registre os apontamentos de devolução feitos pelos motoristas e acompanhe se foram encontrados na base.'],
     'returns-audited':['Devoluções auditadas','Audite as devoluções reais importadas da aba 03.02.24, mesmo que não tenham sido monitoradas.'],
+    'returns-priorities':['Prioridades do dia','Cadastre as prioridades informadas pelo gerente e identifique-as no Monitoramento.'],
     'returns-goals':['Metas','Configure as metas de devolução por unidade e mês.'],
     'returns-import':['Bases do Google','Preencha as abas da unidade no Google Planilhas e acompanhe a atualização.']
   };

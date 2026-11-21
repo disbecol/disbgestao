@@ -136,6 +136,11 @@ migrações 87 e 88. A tela **Monitoramento** guarda os relatos prévios; a tela
 03.02.24, inclusive as que não tiveram aviso prévio. As duas telas usam as
 permissões existentes de Devoluções.
 
+Para cadastrar a base diária informada pelo gerente e sinalizar as prioridades
+no Monitoramento, aplique `supabase/91_returns_priorities.sql` depois da
+migração 90. A tela **Prioridades do dia** usa a permissão existente de edição
+de Devoluções; cada cliente é identificado por unidade, data e código.
+
 ## 3. Configurar o site
 
 Em **Project Settings > API**, copie:
