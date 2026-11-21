@@ -49,6 +49,12 @@ Aplicativo unificado com **NRI + Avarias + Conferência de Vasilhames**, usando 
 - Ranking de motorista e ajudantes.
 - Valores: 300ml R$ 69,50; 600 marrom R$ 71; 600 verde R$ 83; litrão R$ 59; barris 30/50L R$ 400.
 
+### Apontamento Fora do Raio (FDR)
+- Registra e edita entregas em que o motorista não apontou no raio do cliente.
+- Filtra por intervalo de datas, cidade, motorista, revenda e justificativa.
+- Ao informar código do cliente e data, consulta o cadastro de clientes, MAPAS e pedidos importados para preencher os dados disponíveis. Se houver mais de um mapa, permite selecionar a entrega.
+- Os registros e as permissões são isolados por unidade.
+
 ---
 
 # Instalação
@@ -114,6 +120,14 @@ e a atualização de status dos dispositivos necessárias à função de push.
 Em seguida, execute `41_damage_approval_optional_note.sql` no SQL Editor para
 deixar a justificativa opcional na aprovação e obrigatória na reprovação de
 avarias de Entrega e Vendas.
+
+Para habilitar o módulo Apontamento Fora do Raio em uma instalação atualizada,
+aplique primeiro as migrações `87_delivery_returns.sql` e
+`88_returns_google_sources.sql` caso ainda não estejam instaladas; depois,
+execute `supabase/89_apontamento_fora_raio.sql` no SQL Editor do Supabase.
+Conceda as permissões **Consultar apontamentos FDR** e **Registrar
+apontamentos FDR** em Administração > Usuários para os perfis que usarão a
+tela.
 
 ## 3. Configurar o site
 
