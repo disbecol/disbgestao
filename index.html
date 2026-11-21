@@ -28,6 +28,7 @@
   <link rel="stylesheet" href="src/avarias/damage-dashboard.css?v=1.7.101">
   <link rel="stylesheet" href="src/shared/professional-ui.css?v=1.7.101">
   <link rel="stylesheet" href="src/shared/appearance.css?v=1.7.101">
+  <link rel="stylesheet" href="src/fdr/fdr.css?v=1">
 </head>
 <body>
   <section id="loginScreen" class="login-screen">
@@ -127,7 +128,7 @@
           </div>
       </div>
 
-      <div class="nav-area" data-area="entrega" data-permission-any="DELIVERY_DAMAGE_CREATE,DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST,RETURNS_VIEW,RETURNS_EDIT,RETURNS_IMPORT">
+      <div class="nav-area" data-area="entrega" data-permission-any="DELIVERY_DAMAGE_CREATE,DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST,RETURNS_VIEW,RETURNS_EDIT,RETURNS_IMPORT,FDR_VIEW,FDR_EDIT">
         <button type="button" class="nav-area-toggle" aria-expanded="false"><span class="area-icon">⇢</span><span class="area-name">Entrega</span><span class="area-chevron">⌄</span></button>
         <div class="nav-area-items">
           <div class="nav-module role-avaria" data-module="avarias" data-permission-any="DELIVERY_DAMAGE_CREATE,DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST">
@@ -147,6 +148,12 @@
               <button class="nav-item" data-view="returns-audited" data-permission="RETURNS_VIEW"><span>✓</span>Devolução auditada</button>
               <button class="nav-item" data-view="returns-goals" data-permission="RETURNS_VIEW"><span>◎</span>Metas</button>
               <button class="nav-item" data-view="returns-import" data-permission="RETURNS_IMPORT"><span>↻</span>Bases do Google</button>
+            </div>
+          </div>
+          <div class="nav-module" data-module="apontamento-fdr" data-permission="FDR_VIEW">
+            <button type="button" class="nav-module-toggle" aria-expanded="false"><span class="module-icon">⌖</span><span class="module-name">Apontamento Fora do Raio</span><span class="module-chevron">⌄</span></button>
+            <div class="nav-module-items">
+              <button class="nav-item" data-view="fdr-reports" data-permission="FDR_VIEW"><span>◉</span>Apontamentos FDR</button>
             </div>
           </div>
         </div>
@@ -297,6 +304,7 @@
       <section id="view-returns-audited" class="view" data-permission="RETURNS_VIEW"></section>
       <section id="view-returns-goals" class="view" data-permission="RETURNS_VIEW"></section>
       <section id="view-returns-import" class="view" data-permission="RETURNS_IMPORT"></section>
+      <section id="view-fdr-reports" class="view" data-permission="FDR_VIEW"></section>
       <section id="view-forms-self" class="view" data-permission="FORMS_SELF_VIEW"></section>
       <section id="view-forms-fill" class="view" data-permission="FORMS_FILL"></section>
       <section id="view-forms-report" class="view" data-permission-any="FORMS_FILL,FORMS_REPORT,FORMS_MANAGE"></section>
@@ -1025,6 +1033,8 @@
   <script src="src/devolucoes/returns-google.js?v=1.7.101"></script>
   <script src="src/devolucoes/returns-file.js?v=1.7.101"></script>
   <script src="src/devolucoes/returns-ui.js?v=1.7.101"></script>
+  <script src="src/fdr/fdr.js?v=1"></script>
+  <script src="src/fdr/fdr-ui.js?v=1"></script>
   <script src="src/shared/receipt-validation.js?v=1.7.101"></script>
   <script src="src/shared/table-scroll-dock.js?v=1.7.101"></script>
   <script src="src/shared/workspace-theme.js?v=1.7.101"></script>

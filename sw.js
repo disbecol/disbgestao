@@ -12,6 +12,7 @@ STATIC.push('src/forms/forms.css?v=1.7.101','src/forms/forms.js?v=1.7.101','src/
 STATIC.push('src/shared/workspace-theme.css?v=1.7.101','src/avarias/damage-review.css?v=1.7.101','src/shared/workspace-theme.js?v=1.7.101','assets/fonts/dm-sans-latin.woff2','assets/fonts/dm-sans-latin-ext.woff2','assets/fonts/manrope-latin.woff2','assets/fonts/manrope-latin-ext.woff2');
 STATIC.push('src/devolucoes/returns.js?v=1.7.101','src/devolucoes/returns-google.js?v=1.7.101','src/devolucoes/returns-file.js?v=1.7.101','src/devolucoes/returns-ui.js?v=1.7.101','src/devolucoes/returns.css?v=1.7.101','vendor/fflate.min.js');
 STATIC.push('src/shared/customer-import.js?v=1.7.101');
+STATIC.push('src/fdr/fdr.js?v=1','src/fdr/fdr-ui.js?v=1','src/fdr/fdr.css?v=1');
 STATIC.push('assets/disbecol-logo-blue.png','assets/disbecol-logo-white.png');
 STATIC.push('src/pedidos/orders.js?v=1.7.101','src/pedidos/orders-ui.js?v=1.7.101','src/pedidos/orders.css?v=1.7.101');
 STATIC.push('src/avarias/damage-dashboard.js?v=1.7.101','src/avarias/damage-dashboard-ui.js?v=1.7.101','src/avarias/damage-dashboard.css?v=1.7.101');

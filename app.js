@@ -17,6 +17,7 @@ const ROLE_LABELS = {
 const PERMISSION_CATALOG = [
   ['Pedidos','ORDERS_CREATE','Nova solicitação'],['Pedidos','ORDERS_OWN','Minhas solicitações'],['Pedidos','ORDERS_REVIEW','Analisar solicitações'],['Pedidos','ORDERS_VIEW_ALL','Consultar todas'],['Pedidos','ORDERS_MANAGE','Gerenciar análises'],['Pedidos','ORDERS_DASHBOARD','Dashboard gerencial'],['Pedidos','ORDERS_AUDIT','Auditoria'],['Pedidos','ORDERS_CONFIG','Configurar regras'],
   ['Devoluções','RETURNS_VIEW','Consultar devoluções'],['Devoluções','RETURNS_EDIT','Monitorar devoluções'],['Devoluções','RETURNS_IMPORT','Importar relatórios'],
+  ['Apontamento Fora do Raio','FDR_VIEW','Consultar apontamentos FDR'],['Apontamento Fora do Raio','FDR_EDIT','Registrar apontamentos FDR'],
   ['NRI','NRI_PENDING_VIEW','Recebimentos e impressões pendentes'],['NRI','MARKETPLACE_RECEIVE','Recebimento Marketplace'],['NRI','NRI_CREATE','Cadastrar NRI'],['NRI','NRI_PRINT','Imprimir NRI'],['NRI','NRI_HISTORY','Histórico NRI'],['NRI','NRI_DAMAGE_HISTORY','Paletes avariados'],
   ['Avarias de Entrega','DELIVERY_DAMAGE_CREATE','Registrar avaria'],['Avarias de Entrega','DELIVERY_DAMAGE_VIEW_ALL','Visualizar todas'],['Avarias de Entrega','DELIVERY_DAMAGE_REVIEW','Aprovar / reprovar'],['Avarias de Entrega','DELIVERY_DAMAGE_POST','Lançar / entregar'],
   ['Avarias de Vendas','SALES_DAMAGE_CREATE','Cadastrar solicitação'],['Avarias de Vendas','SALES_DAMAGE_VIEW_OWN','Visualizar próprias'],['Avarias de Vendas','SALES_DAMAGE_VIEW_ALL','Visualizar todas'],['Avarias de Vendas','SALES_DAMAGE_REVIEW','Decisão do Gerente de Vendas'],['Avarias de Vendas','SALES_DAMAGE_OVERRIDE','Decisão final'],['Avarias de Vendas','SALES_DAMAGE_POST','Marcar avaria lançada'],
@@ -35,6 +36,7 @@ const PERMISSION_CATALOG = [
 const MODULE_CATALOG = [
   {name:'Pedidos',icon:'▤',description:'Pedidos fora de rota, bipasse, fila de análise e indicadores.'},
   {name:'Devoluções',icon:'↩',description:'Relatórios, indicadores e monitoramento das devoluções auditadas.'},
+  {name:'Apontamento Fora do Raio',icon:'⌖',description:'Registro e consulta de entregas apontadas fora do raio do cliente.'},
   {name:'NRI',icon:'▣',description:'Recebimentos, cadastro, impressões e histórico.'},
   {name:'Conferência',icon:'✓',description:'Conferência de vasilhames e relatórios.'},
   {name:'Contagem FEFO',icon:'▦',description:'Contagens, andamento e relatórios FEFO.'},
@@ -185,6 +187,7 @@ const viewMeta = {
   'avaria-dashboard':['Dashboard de avarias','Indicadores de Avarias de Entrega'],
   ...Object.fromEntries(Object.entries(window.DISB_ORDERS?.VIEWS||{})),
   ...Object.fromEntries(Object.entries(window.DISB_RETURNS?.VIEWS||{})),
+  ...Object.fromEntries(Object.entries(window.DISB_FDR?.VIEWS||{})),
   'home':['Início','Seus atalhos para o dia a dia'],
   'modulos-config':['Módulos do sistema','Ative ou inative áreas completas do aplicativo'],
   'nri-cadastro':['Cadastro por carreta','Cadastre várias NRIs de uma vez'],
@@ -982,6 +985,7 @@ function hasAnyPerm(codes){return String(codes||'').split(',').map(x=>x.trim()).
 function moduleNameForPermission(code){
   if(code.startsWith('ORDERS_'))return 'Pedidos';
   if(code.startsWith('RETURNS_'))return 'Devoluções';
+  if(code.startsWith('FDR_'))return 'Apontamento Fora do Raio';
   if(code.startsWith('NRI_')||code==='MARKETPLACE_RECEIVE')return 'NRI';
   if(code.startsWith('CONF_'))return 'Conferência';
   if(code.startsWith('FEFO_'))return 'Contagem FEFO';
@@ -1060,6 +1064,7 @@ async function logout(){
   returnsModule?.stop();
   ordersModule?.stop();
   deliveryDamageDashboard?.stop();
+  fdrModule?.stop();
 
   offlineClearIdentityV171();
   salesPricingProducts=[];salesPricingLoaded=false;salesPricingError='';
@@ -1330,6 +1335,8 @@ function openView(name,force=false){
   if(activeView.startsWith('returns-')&&activeView!==name&&!returnsModule.canLeave())return;
   if(activeView.startsWith('orders-')&&activeView!==name&&!ordersModule.canLeave())return;
   if(activeView==='avaria-dashboard'&&activeView!==name)deliveryDamageDashboard?.leave();
+  if(activeView==='fdr-reports'&&activeView!==name&&!fdrModule.canLeave())return;
+  if(activeView==='fdr-reports'&&activeView!==name)fdrModule?.stop();
   if(!force&&activeView===name){toggleSidebar(false);return;}
   activeView=name; document.querySelectorAll('.view').forEach(x=>x.classList.remove('active')); v.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.view===name));
@@ -1353,6 +1360,7 @@ function openView(name,force=false){
   if(name.startsWith('forms-'))void formsModule?.enter(name);
   if(name.startsWith('returns-'))void returnsModule?.enter(name);
   if(name.startsWith('orders-'))void ordersModule?.enter(name);
+  if(name.startsWith('fdr-'))void fdrModule?.enter(name);
   if(name==='conf-minhas')loadMyConferences();
   if(name==='conf-historico')loadConferenceHistory();
   if(name==='conf-dashboard')loadDashboard();
@@ -8399,9 +8407,11 @@ async function changeActiveUnit(next){
   if(formsModule&&!formsModule.canChangeUnit()){renderActiveUnitSelector();return;}
   if(returnsModule&&!returnsModule.canChangeUnit()){renderActiveUnitSelector();return;}
   if(ordersModule&&!ordersModule.canChangeUnit()){renderActiveUnitSelector();return;}
+  if(fdrModule&&!fdrModule.canChangeUnit()){renderActiveUnitSelector();return;}
   returnsModule?.stop();
   ordersModule?.stop();
   deliveryDamageDashboard?.stop();
+  fdrModule?.stop();
   formsModule?.stop();
   activeUnit=next;try{localStorage.setItem(unitAccessKey(),activeUnit);}catch(_e){}
   resetUnitScopedState();renderActiveUnitSelector();refRefreshPromise=null;refs.units=myUnits.map(name=>({name}));populateReferenceInputs();
@@ -13409,6 +13419,10 @@ const returnsModule=window.DISB_RETURNS_UI?.create({
     }
     const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
   }
+});
+const fdrModule=window.DISB_FDR_UI?.create({
+  context:()=>({client:sb,user:authUser,profile,unit:activeUnit,units:[...myUnits]}),
+  hasPermission:hasPerm,toast
 });
 const formsModule=window.DISB_FORMS_UI?.create({
   context:()=>({client:sb,user:authUser,profile,unit:activeUnit,units:[...myUnits],roles:ROLE_LABELS}),
