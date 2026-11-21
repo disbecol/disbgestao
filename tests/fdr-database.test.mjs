@@ -70,6 +70,21 @@ test('consulta combina PDV, mapa, motorista e vendedor do dia e mantém alternat
  assert.equal(matches.find(row=>row.map_number==='10').seller,'Maria Vendedora');
 });
 
+test('mapa compartilhado com colisão entre unidades não fornece equipe de outra revenda',async()=>{
+ await db.exec('reset role');
+ await query("insert into public.maps(map_number,map_date,city,driver) values('12','2026-11-22','Cidade','Equipe compartilhada')");
+ for(const [unit,key,map] of [[A,'a',12],[B,'b',12]])await query(
+  "insert into delivery_return_records(unit,kind,row_key,operation_date,data) values($1,'ORDERS',$2,'2026-11-22',$3::jsonb)",
+  [unit,key,JSON.stringify({map_number:String(map),customer_code:'42',seller:'Vendedor'})]);
+ await as('editor');let matches=await rpc('fdr_lookup',[A,'42','2026-11-22']);
+ assert.equal(matches[0].driver,'');
+ await db.exec('reset role');
+ await query("insert into delivery_return_records(unit,kind,row_key,operation_date,data) values($1,'JOURNEYS','a-route','2026-11-22',$2::jsonb)",
+  [A,JSON.stringify({map_number:'12',driver:'Equipe da Matriz'})]);
+ await as('editor');matches=await rpc('fdr_lookup',[A,'42','2026-11-22']);
+ assert.equal(matches[0].driver,'Equipe da Matriz');
+});
+
 test('salvar e editar validam campos, isolamento por unidade e revisão concorrente',async()=>{
  await as('editor');const id=randomUUID(),first=await save(id,0,entry());
  assert.equal(first.revision,1);assert.equal(first.updated_by,ids.editor);

@@ -87,6 +87,9 @@ begin
    coalesce(nullif(j.data->>'driver',''),m.driver,'') as driver
   from order_maps om
   left join public.maps m on m.map_number=om.map_number and m.map_date=p_date
+   and not exists(select 1 from public.delivery_return_records other
+    where other.unit<>p_unit and other.kind in ('REPORT','ORDERS')
+     and other.operation_date=p_date and other.data->>'map_number'=om.map_number)
   left join lateral (
    select r.data from public.delivery_return_records r
    where r.unit=p_unit and r.kind='JOURNEYS' and r.operation_date=p_date
@@ -97,6 +100,12 @@ begin
   from public.maps m
   where m.map_date=p_date and not exists(select 1 from order_maps)
    and (select count(*) from public.maps x where x.map_date=p_date)=1
+   and exists(select 1 from public.delivery_return_records own
+    where own.unit=p_unit and own.kind in ('REPORT','ORDERS')
+     and own.operation_date=p_date and own.data->>'map_number'=m.map_number)
+   and not exists(select 1 from public.delivery_return_records other
+    where other.unit<>p_unit and other.kind in ('REPORT','ORDERS')
+     and other.operation_date=p_date and other.data->>'map_number'=m.map_number)
  )
  select coalesce(jsonb_agg(jsonb_build_object(
   'operation_date',p_date,'customer_code',p_customer,'map_number',c.map_number,
