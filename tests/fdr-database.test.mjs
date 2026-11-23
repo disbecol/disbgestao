@@ -1,12 +1,16 @@
 import test,{before,after} from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
+import {readFile,readdir} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {PGlite} from '@electric-sql/pglite';
 
 const db=new PGlite(),A='Matriz Caicó',B='Filial Pau dos Ferros';
 const ids={admin:randomUUID(),editor:randomUUID(),viewer:randomUUID(),outsider:randomUUID()};
 const migration=await readFile(new URL('../supabase/89_apontamento_fora_raio.sql',import.meta.url),'utf8');
+const migrationDirectory=new URL('../supabase/migrations/',import.meta.url);
+const installationFile=(await readdir(migrationDirectory)).find(name=>name.endsWith('_delivery_radius_reports_installation.sql'));
+assert.ok(installationFile,'Migração de instalação FDR presente');
+const installation=await readFile(new URL(installationFile,migrationDirectory),'utf8');
 const query=async(sql,args=[])=> (await db.query(sql,args)).rows;
 async function as(user='admin'){await db.exec('reset role');await db.query("select set_config('request.jwt.claim.sub',$1,false)",[ids[user]]);await db.exec('set role authenticated');}
 async function rpc(name,args){return (await query(`select public.${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) as value`,args))[0].value;}
@@ -22,6 +26,7 @@ before(async()=>{
  create table public.role_permissions(role text,permission_code text,primary key(role,permission_code));
  create table public.user_permissions(user_id uuid,permission_code text,allowed boolean,primary key(user_id,permission_code));
  create table public.module_settings(module_name text primary key,active boolean default true);
+ insert into public.module_settings values('Pedidos',false),('Formulários',false);
  create table public.customers(id uuid primary key default gen_random_uuid(),code text,name text,city text,branch text);
  create table public.maps(id uuid primary key default gen_random_uuid(),map_number text,map_date date,city text,driver text);
  create table public.delivery_return_records(unit text,kind text,row_key text,operation_date date,data jsonb,updated_at timestamptz default now(),primary key(unit,kind,row_key));
@@ -35,7 +40,7 @@ before(async()=>{
   await query('insert into public.profiles(id,name,role) values($1,$2,$3)',[ids[user],user,role]);
   if(user!=='outsider')await query('insert into public.user_units values($1,$2)',[ids[user],A]);
  }
- await db.exec(migration);
+ await db.exec(installation);
  for(const code of ['FDR_VIEW','FDR_EDIT'])await query('insert into public.user_permissions values($1,$2,true)',[ids.editor,code]);
  await query("insert into public.user_permissions values($1,'FDR_VIEW',true)",[ids.viewer]);
 });
@@ -54,6 +59,8 @@ test('migração pode ser aplicada novamente e conserva permissões e registros'
  await db.exec('reset role');await db.exec(migration);
  assert.equal((await query("select count(*)::int as n from public.permissions where code like 'FDR_%'"))[0].n,2);
  assert.equal((await query('select count(*)::int as n from public.delivery_radius_reports where id=$1',[id]))[0].n,1);
+ assert.deepEqual((await query("select module_name,active from public.module_settings where module_name in ('Pedidos','Formulários') order by module_name")),[{module_name:'Formulários',active:false},{module_name:'Pedidos',active:false}]);
+ assert.equal((await query("select convalidated from pg_constraint where conrelid='public.module_settings'::regclass and conname='module_settings_name_valid'"))[0].convalidated,true);
 });
 
 test('consulta combina PDV, mapa, motorista e vendedor do dia e mantém alternativas de mapa',async()=>{

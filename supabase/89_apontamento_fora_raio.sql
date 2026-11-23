@@ -10,7 +10,7 @@ values ('ADMIN','FDR_VIEW'),('ADMIN','FDR_EDIT') on conflict do nothing;
 
 alter table public.module_settings drop constraint if exists module_settings_name_valid;
 alter table public.module_settings add constraint module_settings_name_valid check(module_name in
- ('NRI','Conferência','Contagem FEFO','Ativo de Giro','Materiais','Refugo','Avarias de Entrega','Avarias de Vendas','Validade do Estoque','Escalonada Digital','Puxada','Formulários','Devoluções','Apontamento Fora do Raio'));
+ ('NRI','Conferência','Contagem FEFO','Ativo de Giro','Materiais','Refugo','Avarias de Entrega','Avarias de Vendas','Validade do Estoque','Escalonada Digital','Puxada','Formulários','Devoluções','Pedidos','Apontamento Fora do Raio'));
 insert into public.module_settings(module_name,active)
 values('Apontamento Fora do Raio',true) on conflict do nothing;
 
