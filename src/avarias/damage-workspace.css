@@ -1,0 +1,40 @@
+#modal .damage-detail-v2{background:var(--bg);padding:20px;--damage-v2-soft:var(--surface-soft,#f6f8fb)}
+#modal .damage-detail-v2 .damage-request-hero{padding:16px 18px;margin:0 0 16px;gap:10px;border-radius:10px;background:var(--card)}
+#modal .damage-detail-v2 .damage-request-hero strong{font-size:19px;font-weight:700;line-height:1.4;letter-spacing:-.3px}
+#modal .damage-detail-v2 .damage-request-hero :is(small,span){font-size:11.5px;color:var(--muted);letter-spacing:0;text-transform:none}
+#modal .damage-detail-v2 small{color:var(--muted)!important}
+.damage-v2-tabs{display:flex;gap:20px;border-bottom:1px solid var(--border);margin:0 0 18px;overflow-x:auto}
+.damage-v2-tabs button{background:transparent;border:0;border-bottom:2px solid transparent;padding:10px 1px 12px;color:var(--muted);font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer}
+.damage-v2-tabs button.active{color:var(--text);border-bottom-color:var(--blue)}.damage-v2-tabs button:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+#modalActions[hidden]{display:none!important}
+#modalActions .btn[hidden]{display:none!important}
+#modal .damage-detail-v2 :is(.damage-v2-products,.damage-v2-information)[hidden]{display:none!important}
+#modal .damage-detail-v2 .damage-admin-item{border:1px solid var(--border);border-radius:12px;background:var(--card);padding:0;margin:0 0 14px;overflow:hidden;box-shadow:none}
+#modal .damage-detail-v2 .damage-product-head{padding:16px;gap:14px;align-items:center;flex-wrap:wrap;background:transparent}
+#modal .damage-detail-v2 .damage-product-head .status{margin-left:auto;font-size:11px;font-weight:600;max-width:none}
+#modal .damage-detail-v2 .damage-product-name small{color:var(--muted)}
+#modal .damage-detail-v2 .damage-photo-card{background:var(--card);border-color:var(--border)}
+#modal .damage-detail-v2 .damage-photo-card :is(strong,small){color:var(--text)}
+#modal .damage-detail-v2 .damage-product-details{display:flex!important;flex-direction:column;padding:0!important;background:var(--card);border:0}
+#modal .damage-detail-v2 .damage-v2-facts{display:grid;grid-template-columns:1fr 2fr;gap:18px;padding:0 16px 14px;margin:0;border:0;background:transparent}
+#modal .damage-detail-v2 .damage-v2-facts>div{border:0;background:transparent;padding:0}
+#modal .damage-detail-v2 .damage-v2-facts small{font-size:10.5px;font-weight:500;letter-spacing:.4px;color:var(--muted)}
+#modal .damage-detail-v2 .damage-v2-facts strong{font-size:13px;font-weight:500;line-height:1.6;color:var(--text)}
+#modal .damage-detail-v2 .damage-v2-lot{padding:3px 0 0;margin:0;font-size:11px;color:var(--muted)}
+.damage-v2-lot-note{font-size:11px;color:var(--muted)}
+.damage-v2-primary-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;padding:0;border:0}
+#modal .damage-detail-v2 .damage-card-action{min-height:38px;font-size:12.5px;font-weight:600;border-radius:8px;padding:9px 15px}
+#modal .damage-detail-v2 .damage-card-action:is(.deliver,.launch,.approve){background:var(--blue);border-color:var(--blue);color:var(--action-text,#fff)}
+#modal .damage-detail-v2 .damage-card-action.reject{background:transparent;border-color:var(--border);color:var(--red)}
+#modal .damage-detail-v2 .damage-evidence{margin:0;border:0;border-top:1px solid var(--border);border-radius:0;background:transparent}
+#modal .damage-detail-v2 .damage-evidence>summary{font-size:12px;font-weight:500;padding:13px 16px;color:var(--muted);background:var(--damage-v2-soft)}
+.damage-v2-no-photos{font-size:11px;margin:0;padding:0 16px 13px;color:var(--muted)}
+.damage-v2-info-section{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;margin:0 0 14px;min-width:0}
+.damage-v2-info-section h3{font-size:13px;font-weight:650;margin:0 0 13px;color:var(--text)}
+.damage-v2-info-section>img{display:block;max-width:100%;max-height:170px;background:#fff;border:1px solid var(--border);border-radius:8px}
+#modal .damage-detail-v2 .damage-request-grid{margin:0;background:transparent;box-shadow:none}.damage-v2-information .detail-card{background:var(--damage-v2-soft);border-color:var(--border)}
+.damage-v2-admin-row{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:10px 0;font-size:12px}.damage-v2-admin-row+.damage-v2-admin-row{border-top:1px solid var(--border)}
+.damage-v2-history-group{border-top:1px solid var(--border);padding:12px 0;color:var(--text)}.damage-v2-history-group>summary{font-size:12px;font-weight:500;cursor:pointer}.damage-v2-history-group .sales-decision{margin:12px 0 0}
+#modal .damage-detail-v2 .delivery-selection-bar{padding:10px 12px;background:var(--damage-v2-soft);border:1px solid var(--border);border-radius:8px;margin:0 0 12px;font-size:12px}
+#modal .damage-detail-v2 .delivery-selection-bar small{color:var(--muted);font-weight:400}
+@media(max-width:600px){#modal .damage-detail-v2{padding:14px}#modal .damage-detail-v2 .damage-request-hero{padding:13px}#modal .damage-detail-v2 .damage-request-hero strong{font-size:17px}#modal .damage-detail-v2 .damage-product-head{padding:13px;gap:10px}#modal .damage-detail-v2 .damage-product-head .status{margin-left:0}.damage-v2-primary-actions{padding:12px}.damage-v2-primary-actions .damage-card-action{flex:1}.damage-v2-admin-row{align-items:flex-start;flex-direction:column}.damage-v2-tabs{gap:18px}}

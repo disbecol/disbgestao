@@ -250,7 +250,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.107-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.108-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -5141,8 +5141,9 @@ function showDamageDecisionPanel({status,count,label,onConfirm,onError}){
   panel.setAttribute('role','region');
   panel.setAttribute('aria-label',`${verb} ${count} produto${count===1?'':'s'}`);
   panel.innerHTML=`<div class="damage-decision-head"><div><small>${esc(label)}</small><strong>${verb} ${count} produto${count===1?'':'s'}</strong></div><button type="button" class="damage-decision-close" data-decision-cancel aria-label="Fechar justificativa">×</button></div><label for="damageDecisionNote">Justificativa ${mandatory?'*':'(opcional)'}</label><textarea id="damageDecisionNote" rows="3" maxlength="500" placeholder="${cancel?'Informe por que a avaria será cancelada.':reject?'Informe o motivo da reprovação.':'Se desejar, informe o motivo da aprovação.'}"></textarea><small class="damage-decision-help">${cancel?'O cancelamento fica registrado no histórico. Se o produto já foi lançado em outro sistema, corrija-o também lá.':'A decisão e a justificativa ficam registradas na auditoria.'}</small><div class="damage-decision-actions"><button type="button" class="btn secondary" data-decision-cancel>Voltar</button><button type="button" class="btn ${mandatory?'danger':'success'}" data-decision-confirm>Confirmar ${cancel?'cancelamento':reject?'reprovação':'aprovação'}</button></div>`;
-  const anchor=body.querySelector('.damage-selection-bar');
-  if(anchor)anchor.after(panel);else body.prepend(panel);
+  const target=body.querySelector('.damage-v2-information:not([hidden])')||body;
+  const anchor=target.querySelector('.damage-selection-bar');
+  if(anchor)anchor.after(panel);else target.prepend(panel);
   panel.querySelectorAll('[data-decision-cancel]').forEach(button=>button.addEventListener('click',()=>{panel.remove();trigger?.focus?.();}));
   const confirmButton=panel.querySelector('[data-decision-confirm]');
   confirmButton.addEventListener('click',async()=>{
@@ -5155,8 +5156,8 @@ function showDamageDecisionPanel({status,count,label,onConfirm,onError}){
   panel.scrollIntoView({block:'nearest',behavior:'smooth'});
   panel.querySelector('textarea')?.focus({preventScroll:true});
 }
-function openModal(title,subtitle,body,actions=[]){cleanupDamageGeoMap();$('modalTitle').textContent=title;$('modalSubtitle').textContent=subtitle||'';$('modalBody').classList.remove('damage-review-workspace','damage-review-delivery');$('modalBody').innerHTML=body||'';const a=$('modalActions');a.hidden=false;a.innerHTML='';actions.forEach(x=>{const b=document.createElement('button');b.className=`btn ${x.class||'secondary'}`;b.textContent=x.label;b.addEventListener('click',x.onClick);a.appendChild(b);});$('modal').classList.add('open');}
-function closeModal(){if(printOperation&&$('modalTitle')?.textContent==='Confirmar impressão'){void finishPrint('CANCELADO');return;}closeDamagePhotoViewer();cleanupPullMaps();cleanupDamageGeoMap();$('modal').classList.remove('open');$('modalBody').onchange=null;$('modalBody').onclick=null;$('modalBody').classList.remove('damage-review-workspace','damage-review-delivery');$('modalBody').innerHTML='';$('modalActions').hidden=false;$('modalActions').innerHTML='';}
+function openModal(title,subtitle,body,actions=[]){cleanupDamageGeoMap();$('modalTitle').textContent=title;$('modalSubtitle').textContent=subtitle||'';$('modalBody').classList.remove('damage-review-workspace','damage-review-delivery','damage-detail-v2');$('modalBody').innerHTML=body||'';const a=$('modalActions');a.hidden=false;a.innerHTML='';actions.forEach(x=>{const b=document.createElement('button');b.className=`btn ${x.class||'secondary'}`;b.textContent=x.label;b.addEventListener('click',x.onClick);a.appendChild(b);});$('modal').classList.add('open');}
+function closeModal(){if(printOperation&&$('modalTitle')?.textContent==='Confirmar impressão'){void finishPrint('CANCELADO');return;}closeDamagePhotoViewer();cleanupPullMaps();cleanupDamageGeoMap();$('modal').classList.remove('open');$('modalBody').onchange=null;$('modalBody').onclick=null;$('modalBody').classList.remove('damage-review-workspace','damage-review-delivery','damage-detail-v2');$('modalBody').innerHTML='';$('modalActions').hidden=false;$('modalActions').innerHTML='';}
 function damageReviewProductIdentity(item,index){
   const raw=String(item?.product_text||'').trim();
   const parts=raw.match(/^([A-Za-z0-9]+)\s*[-–—•]\s*(.+)$/);
@@ -5255,6 +5256,7 @@ function setupDamageReviewWorkspace(kind){
       frame.replaceWith(link);
     });
   });
+  if(kind==='delivery'&&window.DISB_DAMAGE_WORKSPACE){window.DISB_DAMAGE_WORKSPACE.setup(body,cards,actions);return;}
   const resetProducts=kind==='delivery'?setupDeliveryDamageProductDisclosure(cards):()=>{};
   const hero=body.querySelector(':scope > .damage-request-hero');
   const nav=document.createElement('nav');nav.className='damage-stage-nav';nav.setAttribute('aria-label','Etapas da avaria');

@@ -1,0 +1,41 @@
+/* Tipografia e paleta comuns. Tela, documentos e assinatura têm superfícies próprias. */
+@media screen{
+ :root{--bg:#f4f7fa;--card:#fff;--text:#243347;--muted:#65758a;--border:#dce4ed;--blue:#147d87;--blue2:#106c76;--green:#247954;--red:#b73f52;--amber:#8d651d;--shadow:0 4px 16px #213b5910;--surface-soft:#f7f9fc;--chart-blue:#4375a5;--action-text:#fff;--nav:#fff;--nav2:#eff4f8}
+ :root[data-theme="dark"]{--bg:#101722;--card:#192330;--text:#e8eef6;--muted:#a4b3c6;--border:#2b394b;--blue:#68c9c7;--blue2:#81d6d2;--green:#8bd5af;--red:#f3a3ae;--amber:#efd49f;--shadow:0 4px 18px #00000012;--surface-soft:#202d3e;--chart-blue:#a4c8ee;--action-text:#10252d;--nav:#172330;--nav2:#223448;--sidebar-group:#a4b3c6;--sidebar-module:#e8eef6;--sidebar-link:#c0ccda;--sidebar-hover:#223448;--sidebar-line:#35465a;--sidebar-active-bg:#203f48;--sidebar-active-text:#bce8e5;--sidebar-active-border:#39717b;--sidebar-active-icon-bg:#16303a}
+ html{font-size:14px}body{font-family:'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;font-size:1rem;line-height:1.55;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+ button,input,select,textarea{font-family:inherit;letter-spacing:normal}button,input,select{line-height:1.4}h1,h2,h3,h4,.page-title{font-family:'Manrope','DM Sans',system-ui,sans-serif;color:var(--text)}
+ #appShell .page-head h1,#appShell .page-heading h1{font-size:clamp(23px,2.1vw,28px);font-weight:700;line-height:1.3;letter-spacing:-.65px}
+ #appShell :is(.page-head,.page-heading)>div>p{font-size:13px;line-height:1.65;color:var(--muted);max-width:950px}
+ #appShell :is(.breadcrumb,.breadcrumb-path){font-size:11.5px;font-weight:500;color:var(--muted);letter-spacing:.1px}
+ #appShell :is(.section-title,.card h2,.card h3,.rt-panel h2,.fdr-panel h2,.od-panel h2,.ad-panel h2,.fm-card h2,.fm-panel h2){font-size:15.5px;font-weight:650;line-height:1.5;letter-spacing:-.15px;color:var(--text)}
+ #appShell :is(label,.field>label,.rt-field,.fdr-field,.od-field,.ad-field,.fm-field){font-size:12.5px;font-weight:600;line-height:1.5}
+ #appShell :is(.field input,.field select,.field textarea,.rt-field input,.rt-field select,.rt-field textarea,.fdr-field input,.fdr-field select,.fdr-field textarea,.od-field input,.od-field select,.ad-field input,.ad-field select){font-size:13px;font-weight:400;line-height:1.5;border-radius:8px}
+ #appShell input::placeholder,#appShell textarea::placeholder{color:var(--muted);opacity:.85}
+ #appShell :is(.btn,.button){font-size:12.5px;font-weight:600;letter-spacing:.05px;box-shadow:none}
+ #appShell .btn.primary{background:var(--blue);color:var(--action-text);border-color:var(--blue)}
+ #appShell .btn.primary:hover{background:var(--blue2);border-color:var(--blue2)}
+ #appShell .btn.secondary{background:var(--surface-soft);color:var(--text);border-color:var(--border)}
+ #appShell :is(table,.rt-table,.fdr-table,.dashboard-table){font-size:12.5px;line-height:1.55}
+ #appShell table th{font-size:11px;font-weight:650;letter-spacing:.3px;line-height:1.5;color:var(--muted)}
+ #appShell table td{font-size:12.5px;line-height:1.55;font-variant-numeric:tabular-nums}
+ #appShell :is(.rt-kpi,.od-kpi,.ad-kpi,.fdr-kpi,.metric-card,.summary-card) strong{font-family:'Manrope','DM Sans',sans-serif;font-size:clamp(21px,1.7vw,25px);font-weight:750;letter-spacing:-.55px;line-height:1.3}
+ #appShell :is(.rt-kpi,.od-kpi,.ad-kpi,.fdr-kpi,.metric-card,.summary-card) :is(span,small){font-size:11.5px;line-height:1.5}
+ #appShell :is(.muted-text,.helper-text,.help-text,.rt-note,.fdr-dashboard-note,.filter-help,.field-help){font-size:11.5px;line-height:1.7;color:var(--muted)}
+ #appShell :is(.status,.rt-status,.fdr-status,.od-status,.ad-status,.badge){font-size:10.5px;font-weight:600;letter-spacing:.05px;line-height:1.5}
+ #appShell #sidebar.sidebar{background:var(--card)!important;border-right:1px solid var(--border)}
+ #appShell .sidebar .app-version-badge{color:var(--muted)!important}
+ #appShell .topbar{background:var(--card);border-color:var(--border)}
+ #appShell .nav-item{font-size:13px;font-weight:500;line-height:1.5;letter-spacing:0}
+ #appShell .nav-module-toggle{font-size:13px;font-weight:600;line-height:1.5;letter-spacing:0}
+ #appShell .nav-area-toggle{font-size:10.5px;font-weight:700;line-height:1.5;letter-spacing:1px}
+ #appShell :is(.nav-module-toggle,.nav-area-toggle,.nav-item):focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+ #appShell :is(.rt-workspace,.fdr-workspace){--rt-accent:var(--chart-blue);--rt-soft:var(--surface-soft);--fdr-accent:var(--chart-blue);--fdr-soft:var(--surface-soft)}
+ #appShell :is(.rt-field-origin,.rt-origin-label){font-size:10px!important;line-height:1.45;font-weight:600}
+ #appShell .rt-editor{--rt-manual-bg:#fff8e9;--rt-manual-border:#b19459;--rt-manual-label:#795416;--rt-manual-tag:#fff1cf;--rt-auto-bg:#edf5fc;--rt-auto-border:#809db9;--rt-auto-label:#365b7e;--rt-auto-tag:#e0edf8}
+ :root[data-theme="dark"] #appShell .rt-editor{--rt-manual-bg:#332d22;--rt-manual-border:#ab945f;--rt-manual-label:#efd49f;--rt-manual-tag:#493d25;--rt-auto-bg:#1a3043;--rt-auto-border:#7999b6;--rt-auto-label:#c2dbf0;--rt-auto-tag:#263e54}
+ #appShell :is(.rt-track,.fdr-track){height:7px}
+ #appShell :is(.card,.rt-panel,.fdr-panel,.od-panel,.ad-panel){border-color:var(--border);box-shadow:0 2px 8px #13273c04}
+ .modal-box{font-family:'DM Sans',system-ui,sans-serif;font-size:13px;line-height:1.55}.modal-box h2{font-family:Manrope,system-ui,sans-serif;font-size:18px;font-weight:700;letter-spacing:-.25px}
+ .modal-box :is(input,select,textarea){font-family:inherit;font-size:13px}.modal-box :is(.btn,button){font-family:inherit;font-size:12.5px;font-weight:600}
+ @media(max-width:700px){#appShell :is(input,select,textarea){font-size:16px}#appShell :is(.page-head,.page-heading) h1{font-size:23px}#appShell .nav-item{font-size:14px}#appShell .nav-module-toggle{font-size:14px}}
+}

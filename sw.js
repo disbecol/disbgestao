@@ -1,21 +1,22 @@
 // Áreas dinâmicas e resultados privados por colaborador.
-const CACHE='disb-gestao-v1.7.107-radius-sheets';
+const CACHE='disb-gestao-v1.7.108-radius-sheets';
 const IMAGE_CACHE=`${CACHE}-images`;
 const IMAGE_CACHE_LIMIT=200;
-const STATIC=['./','index.html','styles.css?v=1.7.107-invoice-lots','src/conferencia/conference.css?v=1.7.60','src/shared/visual-refresh.css?v=1.7.1-visual','src/puxada/pull-dashboard.css?v=1.7.1-pull-dashboard','src/avarias/damage-geofence.css?v=2','src/estoque/refugo.css?v=1.7.16','src/vendas/sales-pricing.css?v=1.7.52','src/vendas/sales-pricing.js?v=1.7.52','src/shared/share-reports.js?v=1.7.60','src/puxada/pull-report.js?v=2','src/puxada/invoice-note.js?v=1.7.31-keg-liters','src/puxada/pull-camera.js?v=1.7.32-pull-camera','src/shared/asset-conversion.js?v=1.7.49','src/conferencia/conference.js?v=1.7.60','vendor/supabase.js','vendor/leaflet.js','vendor/leaflet.css','vendor/images/layers.png','vendor/images/layers-2x.png','vendor/images/marker-icon.png','vendor/images/marker-icon-2x.png','vendor/images/marker-shadow.png','vendor/pdf-lib.min.js','vendor/pdfjs.min.js','vendor/pdfjs.worker.min.js','src/shared/receipt-validation.js?v=1.7.107','src/shared/table-scroll-dock.js?v=1.7.107','app.js?v=1.7.107-workspace','config.js?v=1.7.0','manifest.webmanifest','assets/icon-192.png','assets/icon-512.png'];
-STATIC.push('src/avarias/damage-entry.css?v=1.7.107');
-STATIC.push('src/shared/professional-ui.css?v=1.7.107');
-STATIC.push('src/shared/appearance.css?v=1.7.107','src/shared/appearance.js?v=1.7.107');
-STATIC.push('src/shared/signature-pad.css?v=1.7.107','src/shared/signature-pad.js?v=1.7.107');
+const STATIC=['./','index.html','styles.css?v=1.7.108-invoice-lots','src/conferencia/conference.css?v=1.7.60','src/shared/visual-refresh.css?v=1.7.1-visual','src/puxada/pull-dashboard.css?v=1.7.1-pull-dashboard','src/avarias/damage-geofence.css?v=2','src/estoque/refugo.css?v=1.7.16','src/vendas/sales-pricing.css?v=1.7.52','src/vendas/sales-pricing.js?v=1.7.52','src/shared/share-reports.js?v=1.7.60','src/puxada/pull-report.js?v=2','src/puxada/invoice-note.js?v=1.7.31-keg-liters','src/puxada/pull-camera.js?v=1.7.32-pull-camera','src/shared/asset-conversion.js?v=1.7.49','src/conferencia/conference.js?v=1.7.60','vendor/supabase.js','vendor/leaflet.js','vendor/leaflet.css','vendor/images/layers.png','vendor/images/layers-2x.png','vendor/images/marker-icon.png','vendor/images/marker-icon-2x.png','vendor/images/marker-shadow.png','vendor/pdf-lib.min.js','vendor/pdfjs.min.js','vendor/pdfjs.worker.min.js','src/shared/receipt-validation.js?v=1.7.108','src/shared/table-scroll-dock.js?v=1.7.108','app.js?v=1.7.108-workspace','config.js?v=1.7.0','manifest.webmanifest','assets/icon-192.png','assets/icon-512.png'];
+STATIC.push('src/shared/design-system.css?v=1.7.108','src/avarias/damage-workspace.css?v=1.7.108','src/avarias/damage-workspace.js?v=1.7.108');
+STATIC.push('src/avarias/damage-entry.css?v=1.7.108');
+STATIC.push('src/shared/professional-ui.css?v=1.7.108');
+STATIC.push('src/shared/appearance.css?v=1.7.108','src/shared/appearance.js?v=1.7.108');
+STATIC.push('src/shared/signature-pad.css?v=1.7.108','src/shared/signature-pad.js?v=1.7.108');
 STATIC.push('src/estoque/stock-validity.css?v=1.7.41','src/estoque/stock-validity.js?v=1.7.41','vendor/read-excel-file.min.js');
-STATIC.push('src/forms/forms.css?v=1.7.107','src/forms/forms.js?v=1.7.107','src/forms/forms-ui.js?v=1.7.107');
-STATIC.push('src/shared/workspace-theme.css?v=1.7.107','src/avarias/damage-review.css?v=1.7.107','src/shared/workspace-theme.js?v=1.7.107','assets/fonts/dm-sans-latin.woff2','assets/fonts/dm-sans-latin-ext.woff2','assets/fonts/manrope-latin.woff2','assets/fonts/manrope-latin-ext.woff2');
-STATIC.push('src/devolucoes/returns.js?v=1.7.107','src/devolucoes/returns-google.js?v=1.7.107','src/devolucoes/returns-file.js?v=1.7.107','src/devolucoes/returns-ui.js?v=1.7.107','src/devolucoes/returns.css?v=1.7.107','vendor/fflate.min.js');
-STATIC.push('src/shared/customer-import.js?v=1.7.107');
-STATIC.push('src/fdr/fdr.js?v=1.7.107','src/fdr/fdr-ui.js?v=1.7.107','src/fdr/fdr.css?v=1.7.107');
+STATIC.push('src/forms/forms.css?v=1.7.108','src/forms/forms.js?v=1.7.108','src/forms/forms-ui.js?v=1.7.108');
+STATIC.push('src/shared/workspace-theme.css?v=1.7.108','src/avarias/damage-review.css?v=1.7.108','src/shared/workspace-theme.js?v=1.7.108','assets/fonts/dm-sans-latin.woff2','assets/fonts/dm-sans-latin-ext.woff2','assets/fonts/manrope-latin.woff2','assets/fonts/manrope-latin-ext.woff2');
+STATIC.push('src/devolucoes/returns.js?v=1.7.108','src/devolucoes/returns-google.js?v=1.7.108','src/devolucoes/returns-file.js?v=1.7.108','src/devolucoes/returns-ui.js?v=1.7.108','src/devolucoes/returns.css?v=1.7.108','vendor/fflate.min.js');
+STATIC.push('src/shared/customer-import.js?v=1.7.108');
+STATIC.push('src/fdr/fdr.js?v=1.7.108','src/fdr/fdr-ui.js?v=1.7.108','src/fdr/fdr.css?v=1.7.108');
 STATIC.push('assets/disbecol-logo-blue.png','assets/disbecol-logo-white.png');
-STATIC.push('src/pedidos/orders.js?v=1.7.107','src/pedidos/orders-ui.js?v=1.7.107','src/pedidos/orders.css?v=1.7.107');
-STATIC.push('src/avarias/damage-dashboard.js?v=1.7.107','src/avarias/damage-dashboard-ui.js?v=1.7.107','src/avarias/damage-dashboard.css?v=1.7.107');
+STATIC.push('src/pedidos/orders.js?v=1.7.108','src/pedidos/orders-ui.js?v=1.7.108','src/pedidos/orders.css?v=1.7.108');
+STATIC.push('src/avarias/damage-dashboard.js?v=1.7.108','src/avarias/damage-dashboard-ui.js?v=1.7.108','src/avarias/damage-dashboard.css?v=1.7.108');
 const STATIC_URLS=new Set(STATIC.map(path=>new URL(path,self.registration.scope).href));
 const EXTERNAL_STATIC_URLS=new Set();
 const IMAGE_PATHS=['assets/','imagens_produtos/'].map(path=>new URL(path,self.registration.scope).pathname);
@@ -94,4 +95,3 @@ self.addEventListener('notificationclick',event=>{
     if(self.clients.openWindow)return self.clients.openWindow(url);
   }));
 });
-
