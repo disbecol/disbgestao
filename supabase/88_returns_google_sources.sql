@@ -1,6 +1,12 @@
 -- Google Planilhas por unidade: publicação das bases em uma única transação.
 -- Não escreve na planilha nem altera a base MAPAS ou auditorias de devolução.
+-- Instalação inicial. Repetir este pacote substituiria funções incrementais.
 begin;
+do $$begin
+ if to_regclass('public.delivery_return_google_sync') is not null then
+  raise exception 'DEVOLUCOES_GOOGLE_JA_INSTALADO: use as migracoes incrementais; nao reexecute o SQL 88.';
+ end if;
+end$$;
 create table if not exists public.delivery_return_google_sync (
  unit text primary key references public.units(name),lease_id uuid,lease_actor uuid,
  lease_until timestamptz,last_attempt_at timestamptz,last_synced_at timestamptz,

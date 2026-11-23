@@ -1,6 +1,6 @@
 import test,{before,after} from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
+import {readFile,readdir} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {PGlite} from '@electric-sql/pglite';
 const db=new PGlite(),A='Matriz Caicó',B='Filial Pau dos Ferros',admin=randomUUID(),editor=randomUUID(),viewer=randomUUID();
@@ -13,6 +13,10 @@ const googleMigration=await readFile(new URL('../supabase/88_returns_google_sour
 const cityMigration=await readFile(new URL('../supabase/migrations/20261117170852_returns_city_names.sql',import.meta.url),'utf8');
 const partialMigration=await readFile(new URL('../supabase/migrations/20261117181315_returns_partial_status.sql',import.meta.url),'utf8');
 const customerMigration=await readFile(new URL('../supabase/migrations/20261117203259_customer_catalog_csv.sql',import.meta.url),'utf8');
+const migrationDirectory=new URL('../supabase/migrations/',import.meta.url);
+const cityRestoreFile=(await readdir(migrationDirectory)).find(name=>name.endsWith('_returns_city_names_restore.sql'));
+assert.ok(cityRestoreFile,'Migração de restauração de cidades presente');
+const cityRestore=await readFile(new URL(cityRestoreFile,migrationDirectory),'utf8');
 async function as(id=admin){await db.exec('reset role');await db.query("select set_config('request.jwt.claim.sub',$1,false)",[id]);await db.exec('set role authenticated');}
 const query=async(s,a=[])=> (await db.query(s,a)).rows;
 const rpc=async(n,a)=> (await query(`select public.${n}(${a.map((_,i)=>'$'+(i+1)).join(',')}) as v`,a))[0].v;
@@ -224,4 +228,33 @@ test('importação do catálogo atualiza cadastro por filial, preserva ID, GPS e
 });
 test('catálogo recusa lote inválido sem alteração parcial e mantém autorização e unidade',async()=>{
  await as(admin);const before=(await query("select name from customers where code='66' and branch='Caicó'"))[0].name;await assert.rejects(()=>rpc('import_customer_catalog',[JSON.stringify([{code:'66',name:'Não deve gravar',city:'Caicó',branch:'Caicó'},{code:'9992',name:'Inválido',city:'Cidade',branch:'2'}])]),/CUSTOMER_IMPORT_INVALID/);assert.equal((await query("select name from customers where code='66' and branch='Caicó'"))[0].name,before);await as(viewer);await assert.rejects(()=>rpc('import_customer_catalog',[JSON.stringify([{code:'9992',name:'Bloqueado',city:'Cidade',branch:'Caicó'}])]),/FORBIDDEN/);await db.exec('reset role');await query("insert into user_permissions values($1,'ADMIN_BASES',true)",[editor]);await as(editor);await assert.rejects(()=>rpc('import_customer_catalog',[JSON.stringify([{code:'9992',name:'Outra unidade',city:'Cidade',branch:'Pau dos Ferros'}])]),/CUSTOMER_IMPORT_UNIT_FORBIDDEN/);
+});
+
+test('restaura nomes na consulta auditada após função legada priorizar código de cidade',async()=>{
+ await as(editor);await publish('ORDERS',[{row_key:'restore-city-order',operation_date:'2026-11-11',customer_code:'66',map_number:'300',invoice_number:'930',order_amount_cents:2100,city:'RN00007148'}]);
+ await publish('REPORT',[row({row_key:'restore-city-report',operation_date:'2026-11-11',customer_code:'66',map_number:'300',invoice_number:'930'})]);
+ await db.exec('reset role');
+ const legacy=googleMigration.match(/create or replace function public\.returns_enrich\([\s\S]*?\$\$;/)[0];await db.exec(legacy);
+ await as(viewer);let snapshot=await rpc('returns_snapshot',[A,'2026-11-01','2026-11-30']);assert.equal(snapshot.reports.find(r=>r.row_key==='restore-city-report').city,'RN00007148');
+ await db.exec('reset role');
+ const before=(await query("select md5(string_agg(to_jsonb(r)::text,',' order by unit,kind,row_key)) hash from delivery_return_records r"))[0].hash;
+ const audit=(await query("select md5(string_agg(to_jsonb(r)::text,',' order by id)) hash from delivery_return_audit r"))[0].hash;
+ await db.exec(cityRestore);await as(viewer);snapshot=await rpc('returns_snapshot',[A,'2026-11-01','2026-11-30']);const restored=snapshot.reports.find(r=>r.row_key==='restore-city-report');assert.equal(restored.city,'Caicó');assert.equal(restored.registration_date,'2026-10-01');
+ assert.equal((await rpc('returns_lookup',[A,'66','2026-11-11']))[0].city,'Caicó');
+ await db.exec('reset role');assert.equal((await query("select md5(string_agg(to_jsonb(r)::text,',' order by unit,kind,row_key)) hash from delivery_return_records r"))[0].hash,before);assert.equal((await query("select md5(string_agg(to_jsonb(r)::text,',' order by id)) hash from delivery_return_audit r"))[0].hash,audit);
+ await db.exec(cityRestore);await as(viewer);assert.equal((await rpc('returns_lookup',[A,'66','2026-11-11']))[0].city,'Caicó');await assert.rejects(()=>rpc('returns_lookup',[B,'66','2026-11-11']),/FORBIDDEN/);
+});
+
+test('repetir SQL 88 é bloqueado antes de remover a correção de cidades e data de cadastro',async()=>{
+ await db.exec('reset role');const hash=(await query("select md5(prosrc) hash from pg_proc where oid='public.returns_enrich(text,jsonb)'::regprocedure"))[0].hash;
+ try{await assert.rejects(()=>db.exec(googleMigration),/DEVOLUCOES_GOOGLE_JA_INSTALADO/);}finally{await db.exec('rollback');}
+ assert.equal((await query("select md5(prosrc) hash from pg_proc where oid='public.returns_enrich(text,jsonb)'::regprocedure"))[0].hash,hash);
+ const grants=(await query("select has_function_privilege('anon','public.returns_enrich(text,jsonb)','EXECUTE') anon,has_function_privilege('authenticated','public.returns_enrich(text,jsonb)','EXECUTE') client"))[0];assert.deepEqual(grants,{anon:false,client:false});
+});
+
+test('correção de cidades recusa uma função modificada sem sobrescrevê-la',async()=>{
+ await db.exec('reset role');const before=(await query("select md5(prosrc) hash from pg_proc where oid='public.returns_enrich(text,jsonb)'::regprocedure"))[0].hash;
+ await db.exec("begin;create or replace function public.returns_enrich(p_unit text,p_data jsonb) returns jsonb language sql as $$select p_data||jsonb_build_object('city','Customizada')$$;");
+ try{await assert.rejects(()=>db.exec(cityRestore),/RETURNS_CITY_SOURCE_CHANGED/);}finally{await db.exec('rollback');}
+ assert.equal((await query("select md5(prosrc) hash from pg_proc where oid='public.returns_enrich(text,jsonb)'::regprocedure"))[0].hash,before);
 });
