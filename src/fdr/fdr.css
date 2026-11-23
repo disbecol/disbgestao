@@ -40,5 +40,12 @@
 :root[data-theme="dark"] .fdr-status.is-no{background:#3a3020;color:#efd39d}
 .fdr-empty{padding:28px;border:1px dashed var(--border);border-radius:8px;background:var(--fdr-soft);color:var(--muted);font-size:13px;text-align:center}
 .fdr-count{margin:10px 0 0;color:var(--muted);font-size:12px;text-align:right}
+.fdr-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:18px}
+.fdr-kpi{display:flex;align-items:center;gap:13px;padding:17px;border:1px solid var(--border);border-radius:12px;background:var(--card);min-width:0}
+.fdr-kpi-icon{display:grid;place-items:center;width:37px;height:37px;flex-shrink:0;border-radius:10px;background:var(--fdr-soft);color:var(--fdr-accent);font-size:19px}
+.fdr-kpi>div{display:grid;gap:5px;min-width:0}.fdr-kpi span,.fdr-kpi small{font-size:11px;color:var(--muted)}.fdr-kpi .fdr-kpi-icon{font-size:19px;color:var(--fdr-accent)}.fdr-kpi strong{color:var(--text);font-size:23px;font-variant-numeric:tabular-nums}.fdr-kpi small{font-size:10px}
+.fdr-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.fdr-dashboard-note{margin:0 0 18px;color:var(--muted);font-size:12px;line-height:1.7}
+.fdr-bars{display:grid;gap:18px}.fdr-bars>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px 16px}.fdr-bars span{font-size:12px;overflow-wrap:anywhere}.fdr-bars strong{font-size:12px;font-variant-numeric:tabular-nums}.fdr-track{grid-column:1/-1;height:7px;border-radius:8px;background:var(--fdr-soft);overflow:hidden}.fdr-track i{display:block;height:100%;border-radius:inherit;background:var(--fdr-accent)}.fdr-bars small{grid-column:1/-1;color:var(--muted);font-size:10px}
+@media(max-width:800px){.fdr-columns{grid-template-columns:1fr}.fdr-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:420px){.fdr-kpi{padding:13px;gap:9px}.fdr-kpi-icon{width:30px;height:30px}.fdr-kpi strong{font-size:20px}}
 @media(max-width:900px){.fdr-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.fdr-grid,.fdr-grid-two{grid-template-columns:1fr}.fdr-filters{grid-template-columns:1fr 1fr;padding:12px}.fdr-panel{padding:14px}.fdr-table-wrap{max-height:60vh}.fdr-actions>.btn{flex:1}}

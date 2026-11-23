@@ -9,11 +9,11 @@
  const button=(action,label,attrs='')=>`<button type="button" class="btn secondary" data-fdr-action="${action}" ${attrs}>${label}</button>`;
 
  function create(adapter){
-  const root=()=>$('view-fdr-reports'),ctx=()=>adapter.context(),canEdit=()=>adapter.hasPermission('FDR_EDIT');
-  let identity='',generation=0,request=0,rows=[],loading=false,busy=false,error='',draft=null,matches=[],lookupTimer=null,lookupKey='';
+  const root=()=>$('view-'+view),ctx=()=>adapter.context(),canEdit=()=>adapter.hasPermission('FDR_EDIT');
+  let view='fdr-reports',identity='',generation=0,request=0,rows=[],loading=false,busy=false,error='',draft=null,matches=[],lookupTimer=null,lookupKey='',clock=null;
   let filters={from:'',to:'',city:'',driver:'',branch:'',justified:''};
   function key(){return `${ctx().user?.id}|${ctx().unit}`;}
-  function stop(){generation++;request++;clearTimeout(lookupTimer);identity='';rows=[];draft=null;matches=[];busy=false;loading=false;error='';lookupKey='';}
+  function stop(){generation++;request++;clearTimeout(lookupTimer);clearInterval(clock);clock=null;identity='';rows=[];draft=null;matches=[];busy=false;loading=false;error='';lookupKey='';for(const name of Object.keys(F.VIEWS))$('view-'+name)?.replaceChildren();}
   function canLeave(){if(busy){adapter.toast('Aguarde a conclusão da operação.','error');return false;}if(draft&&!confirm('Há um apontamento que ainda não foi salvo. Deseja sair desta tela?'))return false;draft=null;matches=[];return true;}
   async function load(){
    if(!ctx().client||!ctx().user||!adapter.hasPermission('FDR_VIEW'))return;
@@ -59,8 +59,19 @@
   }
   function render(){
    const box=root();if(!box)return;
+   const old=box.querySelector('[data-fdr-filter-form]'),pending=old?Object.fromEntries(new FormData(old)):null;
    box.classList.add('fdr-workspace');
-   box.innerHTML=`<div class="page-head"><div><div class="breadcrumb">Entrega / Monitoramento</div><h1>Apontamento Fora do Raio</h1><p>Registre e acompanhe entregas sem apontamento dentro do raio do cliente.</p></div><div class="fdr-actions">${canEdit()?`<button type="button" class="btn primary" data-fdr-action="new">＋ Novo apontamento</button>`:''}${button('refresh',loading?'Atualizando…':'Atualizar',loading?'disabled':'')}</div></div><p class="fdr-live ${error?'has-error':''}" role="status" aria-live="polite">${esc(error||(loading?'Carregando apontamentos…':`${selectedRows().length} registro(s) no filtro atual.`))}</p>${editor()}${filterForm()}<section class="fdr-panel"><header><h2>Apontamentos</h2><p>Os dados exibidos pertencem à unidade selecionada.</p></header>${table()}</section>`;
+   const dashboard=view==='fdr-dashboard',meta=F.VIEWS[view];
+   box.innerHTML=`<div class="page-head"><div><div class="breadcrumb">Entrega / Apontamento Fora do Raio</div><h1>${esc(meta[0])}</h1><p>${esc(meta[1])}</p></div><div class="fdr-actions">${canEdit()&&!dashboard?`<button type="button" class="btn primary" data-fdr-action="new">＋ Novo apontamento</button>`:''}${button('refresh',loading?'Atualizando…':'Atualizar',loading?'disabled':'')}</div></div><p class="fdr-live ${error?'has-error':''}" role="status" aria-live="polite">${esc(error||(loading?'Carregando apontamentos…':`${selectedRows().length} registro(s) no filtro atual. Atualização a cada 30 segundos.`))}</p>${editor()}${filterForm()}${dashboard?error?'<div class="fdr-empty" role="alert">Os indicadores não foram calculados. Atualize a consulta.</div>':loading&&!rows.length?'<div class="fdr-empty">Carregando indicadores…</div>':dashboardView():`<section class="fdr-panel"><header><h2>Apontamentos</h2><p>Os dados exibidos pertencem à unidade selecionada.</p></header>${table()}</section>`}`;
+   if(pending)for(const [name,value] of Object.entries(pending)){const input=box.querySelector(`[data-fdr-filter-form] [name="${name}"]`);if(input?.tagName==='SELECT'){for(const option of input.options)option.selected=option.value===value;}else if(input)input.value=value;}
+  }
+  function dashboardView(){
+   const a=F.analytics(rows,filters),number=n=>Number(n).toLocaleString('pt-BR'),pct=n=>n==null?'Sem base':(100*n).toLocaleString('pt-BR',{maximumFractionDigits:2})+'%';
+   const card=(label,value,detail,icon)=>`<article class="fdr-kpi"><span class="fdr-kpi-icon" aria-hidden="true">${icon}</span><div><span>${label}</span><strong>${esc(value)}</strong><small>${esc(detail)}</small></div></article>`;
+   const panel=(title,body)=>`<section class="fdr-panel"><header><h2>${title}</h2></header>${body}</section>`;
+   const bars=groups=>!groups.length?'<div class="fdr-empty">Nenhum apontamento nos filtros atuais.</div>':`<div class="fdr-bars">${groups.slice(0,10).map(g=>`<div><span>${esc(g.label)}</span><strong>${number(g.total)} · ${pct(g.share)}</strong><div class="fdr-track"><i style="width:${100*g.total/groups[0].total}%"></i></div><small>${number(g.justified)} justificadas · ${number(g.unjustified)} não justificadas</small></div>`).join('')}</div>`;
+   const daily=a.daily.length?`<div class="fdr-table-wrap" tabindex="0" role="region" aria-label="Evolução diária dos apontamentos"><table><thead><tr><th>Data</th><th>Apontamentos</th><th>Justificadas</th><th>Não justificadas</th><th>% justificadas</th></tr></thead><tbody>${a.daily.map(g=>`<tr><td>${date(g.label)}</td><td>${number(g.total)}</td><td>${number(g.justified)}</td><td>${number(g.unjustified)}</td><td>${pct(g.justified/g.total)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="fdr-empty">Nenhum apontamento nos filtros atuais.</div>';
+   return `<div class="fdr-kpis">${card('Apontamentos fora do raio',number(a.total),'Registros nos filtros aplicados','⌖')}${card('Clientes',number(a.customers),'Clientes distintos','♙')}${card('Justificadas',pct(a.justified_share),number(a.justified)+' apontamentos','✓')}${card('Não justificadas',number(a.unjustified),'Dos apontamentos do período','!')}${card('Sem mapa',number(a.missing_maps),'Verifique os vínculos','↗')}</div><p class="fdr-dashboard-note">Este painel analisa os registros de apontamentos fora do raio. Para comparar devoluções dentro e fora do raio, acesse Devoluções → Acompanhamentos → Análise por raio. Os filtros valem para todos os indicadores abaixo.</p><div class="fdr-columns">${panel('Top 10 motoristas',bars(a.drivers))}${panel('Top 10 cidades',bars(a.cities))}</div>${panel('Evolução diária',daily)}`;
   }
   function newDraft(row=null){
    const branch=ctx().unit==='Matriz Caicó'?'MATRIZ':'FILIAL';
@@ -121,7 +132,7 @@
     else if(action==='edit'&&canEdit()){const row=rows.find(item=>item.id===event.target.closest('[data-id]')?.dataset.id);if(row){draft=newDraft(row);matches=[];lookupKey=row.customer_code+'|'+row.report_date;render();}}
     else if(action==='cancel'){draft=null;matches=[];lookupKey='';render();}
     else if(action==='refresh')void load();
-    else if(action==='clear-filters'){filters={from:'',to:'',city:'',driver:'',branch:'',justified:''};render();}
+    else if(action==='clear-filters'){filters={from:'',to:'',city:'',driver:'',branch:'',justified:''};root()?.querySelector('[data-fdr-filter-form]')?.remove();render();}
    });
    box.addEventListener('submit',event=>{
     if(event.target.matches('[data-fdr-filter-form]')){event.preventDefault();filters=Object.fromEntries(new FormData(event.target));render();}
@@ -141,9 +152,11 @@
     if(draft&&['customer_code','report_date'].includes(event.target.name))void lookup();
    });
   }
-  async function enter(view){
-   if(view!=='fdr-reports'||!F.VIEWS[view])return;
+  async function enter(nextView){
+   if(!F.VIEWS[nextView])return;
+   view=nextView;
    const next=key();if(identity!==next){stop();identity=next;filters={from:'',to:'',city:'',driver:'',branch:'',justified:''};}
+   if(!clock)clock=setInterval(()=>{if(root()?.classList.contains('active')&&!busy&&!draft)void load();},30000);
    bind();draft=null;matches=[];lookupKey='';render();await load();
   }
   return {enter,stop,canLeave,canChangeUnit:canLeave};

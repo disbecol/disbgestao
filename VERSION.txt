@@ -1,1 +1,1 @@
-v1.7.101 - Graficos de avarias no padrao visual de Devolucoes.
+v1.7.107 - Analise por raio, dashboard FDR e leitura dos relatorios originais do Google.

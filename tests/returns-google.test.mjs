@@ -4,6 +4,10 @@ import {createRequire} from 'node:module';
 import {webcrypto} from 'node:crypto';
 const require=createRequire(import.meta.url),R=require('../src/devolucoes/returns.js'),G=require('../src/devolucoes/returns-google.js');
 const A='Matriz Caicó',B='Filial Pau dos Ferros';
+test('17.03 com saída diária em A:C prioriza fórmulas e ignora o relatório bruto depois de D',()=>{
+ const rows=[['DATA','PDVS EM ROTA','HL EM ROTA','Filial','Grupo ID','Cod. ID','Dia 01'],['2026-11-01',129,338.54,1,'Logística',697,999],[null,null,null,1,'Vendas',563,888]];
+ const result=G.parse('ROUTES',rows,A);assert.equal(result.errors.length,0);assert.equal(result.rows.length,1);assert.equal(result.rows[0].planned_outlets,129);assert.equal(result.rows[0].planned_hl,338.54);
+});
 const reportHeaders=['Mapa','Data','Unb Nota','Nota','Serie','Unb Cliente','Cod. Cliente','Nome Cliente','Telefone','Area','Setor','Placa','Valor','Volume','Data Devol.','Cod. Motivo','MOTIVO','Orig. Pedido','Usuario','Hora'];
 const inputs={
  REPORT:[reportHeaders,['1','2026-11-17','','10','1','','42','Loja exemplo','','','','','100,00','0,5','2026-11-17','','Recusa','','','10:00']],

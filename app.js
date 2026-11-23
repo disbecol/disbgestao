@@ -250,7 +250,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.101-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.107-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -1335,8 +1335,8 @@ function openView(name,force=false){
   if(activeView.startsWith('returns-')&&activeView!==name&&!returnsModule.canLeave())return;
   if(activeView.startsWith('orders-')&&activeView!==name&&!ordersModule.canLeave())return;
   if(activeView==='avaria-dashboard'&&activeView!==name)deliveryDamageDashboard?.leave();
-  if(activeView==='fdr-reports'&&activeView!==name&&!fdrModule.canLeave())return;
-  if(activeView==='fdr-reports'&&activeView!==name)fdrModule?.stop();
+  if(activeView.startsWith('fdr-')&&activeView!==name&&!fdrModule.canLeave())return;
+  if(activeView.startsWith('fdr-')&&activeView!==name)fdrModule?.stop();
   if(!force&&activeView===name){toggleSidebar(false);return;}
   activeView=name; document.querySelectorAll('.view').forEach(x=>x.classList.remove('active')); v.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.view===name));

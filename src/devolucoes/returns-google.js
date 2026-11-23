@@ -30,6 +30,8 @@
   if(kind==='REPORT')return R.report(rows);
   if(kind==='ORDERS')return R.orders(rows,unit);
   if(kind==='JOURNEYS')return R.journeys(rows);
+  // As três colunas de saída podem coexistir com o 17.03 original a partir de D.
+  if(rows.slice(0,30).some(row=>R.norm(row[0])==='data'&&['pdvs em rota','pdvs','pdv'].includes(R.norm(row[1]))&&['hl em rota','hl','volume'].includes(R.norm(row[2]))))return R.routeTotals(rows.map(row=>row.slice(0,3)),unit);
   const names=rows.slice(0,30).flat().map(R.norm);return names.includes('cod id')||names.includes('codigo id')?R.routeReport(rows,referenceMonth(rows),unit):R.routeTotals(rows,unit);
  }
  const hash=async(value,crypto)=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(value))))].map(v=>v.toString(16).padStart(2,'0')).join('');

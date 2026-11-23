@@ -38,6 +38,18 @@ test('17.03 importa totais diários ou indicadores por filial, valida mês e nã
 });
 const record=(over={})=>({operation_date:'2026-11-01',customer_code:'42',map_number:'1',amount_cents:1000,volume_hl:1,city:'Caicó',driver:'Pessoa',helper1:'A',helper2:'A',reason:'Recusa',...over});
 
+test('raio agrupa notas, soma valores e HL e usa denominadores por ocorrência',()=>{
+ const rows=[record({invoice_number:'1'}),record({invoice_number:'2'}),record({customer_code:'43'}),record({customer_code:'44'})],source={available:true,matches:[{...rows[0],state:'OUTSIDE',justified:true,match_count:2},{...rows[2],state:'INSIDE'},{...rows[3],state:'PENDING'}]};
+ const a=R.radiusAnalysis(rows,source);assert.equal(a.rows.length,3);assert.equal(a.totals.total,3);assert.equal(a.totals.amount_cents,4000);assert.equal(a.totals.volume_hl,4);assert.equal(a.totals.outside_share,1/3);assert.equal(a.totals.justified_share,1);assert.equal(a.drivers[0].outside,1);
+ assert.equal(R.radiusAnalysis(rows,source,'JUSTIFIED').totals.total,1);assert.equal(R.radiusAnalysis(rows,source,'INSIDE').totals.total,1);assert.equal(R.radiusAnalysis(rows,source,'UNJUSTIFIED').totals.total,0);
+ assert.equal(R.radiusAnalysis(rows,{available:false}).available,false);assert.equal(R.radiusAnalysis(rows,{available:true,matches:[]}).totals.pending,3);assert.equal(R.radiusAnalysis([],{available:true,matches:[]}).totals.outside_share,null);
+});
+test('pedidos originais reconhecem cabeçalhos repetidos, filial com zeros e campos automáticos no final',()=>{
+ const h=Array.from({length:96},(_,i)=>'Extra '+i),row=Array(96).fill('');for(const [i,v] of Object.entries({1:'Filial',2:'Mapa .....',3:'Cliente ..',5:'Dt. Operacao',6:'Emissao   ',7:'Nota',8:'Serie',9:'Status',12:'Cliente',13:'Nome',15:'Produto',19:'Qtde',25:'Total',26:'Mapa',94:'Cidade',95:'Vendedor'}))h[+i]=v;
+ for(const [i,v] of Object.entries({1:'0001',2:'999999',3:'999999',5:'31/10/2026',6:'03/11/2026',7:'0000077',8:'004',9:'A',12:'0000042',13:'Exemplo',15:9,19:2,25:'443,50',26:'122.948',94:'Caicó',95:'135'}))row[+i]=v;
+ const parsed=R.orders([h,row],'Matriz Caicó');assert.equal(parsed.errors.length,0);assert.equal(parsed.rows.length,1);assert.equal(parsed.rows[0].operation_date,'2026-11-03');assert.equal(parsed.rows[0].map_number,'122948');assert.equal(parsed.rows[0].customer_code,'42');assert.equal(parsed.rows[0].invoice_series,'4');assert.equal(parsed.rows[0].city,'Caicó');assert.equal(parsed.rows[0].seller,'135');assert.equal(parsed.rows[0].order_amount_cents,44350);assert.equal(R.orders([h,row],'Filial Pau dos Ferros').rows.length,0);
+});
+
 test('cidades com diferenças de caixa e acento têm um único filtro e agrupamento',()=>{
  const rows=[record({city:'SAO JOAO'}),record({city:'São João',customer_code:'43'})];const a=R.analytics({reports:rows});assert.equal(a.cities.length,1);assert.equal(a.cities[0].label,'SÃO JOÃO');assert.equal(a.cities[0].outlets,2);assert.equal(R.labels(rows,'city').length,1);assert.equal(R.filterRows(rows,{city:'sao joao'}).length,2);assert.equal(R.cityLabel('RN00007148'),'');
 });

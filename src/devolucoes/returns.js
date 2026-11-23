@@ -3,7 +3,7 @@
   'use strict';
   const STATUS={AGUARDANDO_REPASSE:'Aguardando repasse',DEVOLVIDO:'Devolvido',PARCIAL:'Devolução parcial',REVERTIDO:'Revertido'};
   const PENALTY_STATUS={BLOQUEAR:'Bloquear',BLOQUEADO:'Bloqueado',LIBERAR:'Liberar',LIBERADO:'Liberado pós bloqueio'};
-  const FOLLOWUP_VIEWS=['returns-summary','returns-panel','returns-city','returns-clients','returns-new-clients','returns-sellers','returns-team','returns-reasons'];
+  const FOLLOWUP_VIEWS=['returns-summary','returns-panel','returns-city','returns-clients','returns-new-clients','returns-sellers','returns-team','returns-reasons','returns-radius'];
   const VIEWS={
     'returns-followup':['Acompanhamentos','Indicadores e análises das devoluções por período.'],
     'returns-summary':['Resumo','Totais, metas e evolução das devoluções.'],
@@ -15,6 +15,7 @@
     'returns-team':['Análise por QLP','Participação dos motoristas e ajudantes nas devoluções.'],
     'returns-penalties':['Bloqueios por recorrência','Monitore ocorrências nos últimos 60 dias e confirme os bloqueios e liberações.'],
     'returns-reasons':['Análise de motivos','Motivos, valores, volume e comparação da auditoria.'],
+    'returns-radius':['Análise por raio','Devoluções dentro e fora do raio, por motorista e justificativa.'],
     'returns-monitoring':['Monitoramento','Registre os apontamentos de devolução feitos pelos motoristas e acompanhe se foram encontrados na base.'],
     'returns-audited':['Devoluções auditadas','Audite as devoluções reais importadas da aba 03.02.24, mesmo que não tenham sido monitoradas.'],
     'returns-priorities':['Prioridades do dia','Cadastre as prioridades informadas pelo gerente e identifique-as no Monitoramento.'],
@@ -84,12 +85,15 @@
   }
   function orders(rows,unit=''){
     const h=header(rows,[['mapa'],['cliente'],['emissao'],['nota'],['total']]);
-    const c={map:column(h.names,'mapa'),code:column(h.names,'cliente'),date:column(h.names,'emissao'),invoice:column(h.names,'nota'),series:column(h.names,'serie'),name:column(h.names,'nome'),amount:column(h.names,'total'),status:column(h.names,'status'),product:column(h.names,'produto'),quantity:column(h.names,'qtde'),driver:column(h.names,'motorista')};
+    // O relatório original repete Mapa/Cliente com pontuação e zeros à esquerda.
+    const at=name=>{const exact=rows[h.index].findIndex(value=>text(value).toLocaleLowerCase('pt-BR')===name);return exact>=0?exact:column(h.names,name);};
+    const id=value=>{const raw=identifier(value);return /^\d[\d.]*$/.test(raw)?raw.replace(/\.(?=\d{3}(?:\.|$))/g,'').replace(/^0+(?=\d)/,''):raw;};
+    const c={map:at('mapa'),code:at('cliente'),date:at('emissao'),invoice:at('nota'),series:at('serie'),name:at('nome'),amount:at('total'),status:at('status'),product:at('produto'),quantity:at('qtde'),driver:at('motorista'),city:at('cidade'),seller:at('vendedor')};
     const errors=[],groups=new Map(),seen=new Set();let duplicates=0,sourceRows=0;
     const branch=column(h.names,'filial'),expected=norm(unit).includes('caico')?'1':norm(unit).includes('pau dos ferros')?'6':'';
     for(let i=h.index+1;i<rows.length;i++){
-      const v=rows[i]||[];if(![c.map,c.code,c.date,c.invoice,c.amount].some(k=>text(v[k])))continue;if(unit&&branch>=0&&identifier(v[branch])!==expected)continue;if(['c','cancelado','cancelada'].includes(norm(v[c.status])))continue;sourceRows++;
-      const r={operation_date:day(v[c.date]),map_number:identifier(v[c.map]),customer_code:identifier(v[c.code]),customer_name:text(v[c.name]),invoice_number:identifier(v[c.invoice]),invoice_series:identifier(v[c.series]),order_amount_cents:cents(v[c.amount]),driver_code:identifier(v[c.driver]),city:text(v[column(h.names,'cidade')]),seller:text(v[column(h.names,'vendedor')])};
+      const v=rows[i]||[];if(![c.map,c.code,c.date,c.invoice,c.amount].some(k=>text(v[k])))continue;if(unit&&branch>=0&&id(v[branch])!==expected)continue;if(['c','cancelado','cancelada'].includes(norm(v[c.status])))continue;sourceRows++;
+      const r={operation_date:day(v[c.date]),map_number:id(v[c.map]),customer_code:id(v[c.code]),customer_name:text(v[c.name]),invoice_number:id(v[c.invoice]),invoice_series:id(v[c.series]),order_amount_cents:cents(v[c.amount]),driver_code:id(v[c.driver]),city:text(v[c.city]),seller:text(v[c.seller])};
       if(!r.operation_date||!r.map_number||!r.customer_code||!r.invoice_number||r.order_amount_cents===null){issue(errors,i+1,'Pedido sem data, mapa, cliente, nota ou total válido.');continue;}
       r.row_key=key(r.operation_date,r.map_number,r.customer_code,r.invoice_number,r.invoice_series);
       const fingerprint=key(r.row_key,text(v[c.product]),text(v[c.quantity]),r.order_amount_cents);if(seen.has(fingerprint)){duplicates++;continue;}seen.add(fingerprint);
@@ -153,5 +157,14 @@
     return {rows,audits,totals:t,newCustomers:{rows:occurrences(fresh),clients:clientGroups(fresh),totals:totals(fresh),unknown:unique(rows.filter(r=>registrationAge(r)===null))},clients:clientGroups(rows),cities:grouped(rows,'city'),drivers:grouped(rows,'driver'),helpers:grouped(helperRows,'helper'),drop:grouped(rows.filter(r=>r.is_drop===true),'driver'),dropUnknown:rows.filter(r=>r.is_drop==null).length,sellers:grouped(rows,'seller'),reasons:grouped(reasons,'reason'),weekdays:grouped(rows,r=>['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'][new Date(r.operation_date+'T12:00:00Z').getUTCDay()]),daily,recurrence,largest:occurrences(rows).sort((a,b)=>b.amount_cents-a.amount_cents).slice(0,10),counts,reversal_rate:ratio(counts.REVERTIDO,counts.REVERTIDO+counts.DEVOLVIDO+counts.PARCIAL),reversal_all:ratio(counts.REVERTIDO,audits.length),driverReasons:grouped(audits.map(r=>({...r,reason:r.driver_reason,amount_cents:r.order_amount_cents})),'reason'),clientReasons:grouped(audits.map(r=>({...r,reason:r.client_reason||'Sem auditoria do cliente',amount_cents:r.order_amount_cents})),'reason'),reasonMatrix:[...matrix.values()].sort((a,b)=>b.count-a.count),route:{days:routes.length,missingDates,scoped,planned_outlets:plannedOutlets,planned_hl:plannedHl,outlet_rate:scoped||missingDates.length||!routes.length?null:ratio(t.outlets,plannedOutlets),hl_rate:scoped||missingDates.length||!routes.length?null:ratio(t.volume_hl,plannedHl)}};
   }
   const toCSV=(headers,rows)=>'\uFEFF'+[headers,...rows].map(row=>row.map(v=>{let s=String(v??'');if(/^[=+@\-]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';}).join(';')).join('\r\n');
-  return {STATUS,PENALTY_STATUS,VIEWS,FOLLOWUP_VIEWS,text,norm,reasonKey,reasonLabel,cityLabel,labels,esc,identifier,day,number,cents,volume,dateShift,ratio,csv,report,orders,journeys,routeTotals,routeReport,customers,filterRows,totals,occurrences,registrationAge,grouped,analytics,toCSV,customerDay};
+  const RADIUS_STATUS={INSIDE:'Dentro do raio',OUTSIDE:'Fora do raio',PENDING:'Vínculo pendente'};
+  function radiusAnalysis(rows,source,selection=''){
+    if(source?.available!==true||!Array.isArray(source.matches))return {available:false,reason:source?.reason||'UNAVAILABLE'};
+    const matches=new Map(source.matches.map(r=>[customerDay(r),r]));
+    const selected=occurrences(rows).map(r=>{const m=matches.get(customerDay(r));return {...r,radius_state:Object.hasOwn(RADIUS_STATUS,m?.state)?m.state:'PENDING',radius_justified:m?.state==='OUTSIDE'?m.justified===true:null,radius_matches:Number(m?.match_count||0)};}).filter(r=>!selection||selection==='JUSTIFIED'&&r.radius_state==='OUTSIDE'&&r.radius_justified||selection==='UNJUSTIFIED'&&r.radius_state==='OUTSIDE'&&!r.radius_justified||r.radius_state===selection);
+    const counts=items=>{const total=items.length,inside=items.filter(r=>r.radius_state==='INSIDE').length,outside=items.filter(r=>r.radius_state==='OUTSIDE').length,pending=total-inside-outside,justified=items.filter(r=>r.radius_state==='OUTSIDE'&&r.radius_justified).length;return {total,inside,outside,pending,justified,unjustified:outside-justified,inside_share:ratio(inside,total),outside_share:ratio(outside,total),pending_share:ratio(pending,total),justified_share:ratio(justified,outside),unjustified_share:ratio(outside-justified,outside),...totals(items)};};
+    const groups=field=>{const map=new Map();for(const r of selected){const label=(field==='city'?cityLabel(r[field]):text(r[field]))||'Não informado',key=norm(label);if(!map.has(key))map.set(key,{label,rows:[]});const g=map.get(key);g.label=preferredLabel(g.label,label);g.rows.push(r);}return [...map.values()].map(g=>({label:g.label,...counts(g.rows)})).sort((a,b)=>b.outside-a.outside||b.total-a.total||a.label.localeCompare(b.label,'pt-BR'));};
+    return {available:true,rows:selected,totals:counts(selected),drivers:groups('driver'),cities:groups('city')};
+  }
+  return {STATUS,PENALTY_STATUS,RADIUS_STATUS,VIEWS,FOLLOWUP_VIEWS,text,norm,reasonKey,reasonLabel,cityLabel,labels,esc,identifier,day,number,cents,volume,dateShift,ratio,csv,report,orders,journeys,routeTotals,routeReport,customers,filterRows,totals,occurrences,registrationAge,grouped,analytics,radiusAnalysis,toCSV,customerDay};
 });

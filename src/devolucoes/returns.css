@@ -66,3 +66,8 @@
  #view-returns-priority-sheet .rt-priority-print-only{display:inline}
  #view-returns-priority-sheet .rt-priority-print-content>footer{margin-top:8px;color:#444;font-size:9px}
 }
+/* Classificação de raio com rótulos além das cores. */
+.rt-workspace .rt-track .rt-radius-fill-inside{background:#2a855e}.rt-workspace .rt-track .rt-radius-fill-outside{background:#bd4857}.rt-workspace .rt-track .rt-radius-fill-pending{background:#a47724}
+.rt-status.rt-radius-INSIDE{background:#e8f5ed;color:#216545}.rt-status.rt-radius-OUTSIDE{background:#fbecef;color:#a32e40}.rt-status.rt-radius-PENDING{background:#fcf3de;color:#806018}
+:root[data-theme="dark"] .rt-workspace .rt-track .rt-radius-fill-inside{background:#79d0a7}:root[data-theme="dark"] .rt-workspace .rt-track .rt-radius-fill-outside{background:#f19ca8}:root[data-theme="dark"] .rt-workspace .rt-track .rt-radius-fill-pending{background:#efd39d}
+:root[data-theme="dark"] .rt-status.rt-radius-INSIDE{background:#1e372d;color:#a8e4c3}:root[data-theme="dark"] .rt-status.rt-radius-OUTSIDE{background:#3d252d;color:#ffc0c7}:root[data-theme="dark"] .rt-status.rt-radius-PENDING{background:#3a3020;color:#efd39d}
