@@ -125,6 +125,15 @@ Para habilitar o módulo Apontamento Fora do Raio em uma instalação atualizada
 aplique primeiro as migrações `87_delivery_returns.sql` e
 `88_returns_google_sources.sql` caso ainda não estejam instaladas; depois,
 execute `supabase/89_apontamento_fora_raio.sql` no SQL Editor do Supabase.
+
+O SQL 87 é apenas para instalação inicial de Devoluções. Reexecutá-lo em uma
+base atualizada poderia sobrescrever funções mais recentes, por isso ele
+interrompe a execução quando o módulo já está instalado. O erro 23514 em
+`module_settings_name_valid` no arquivo antigo ocorre quando a lista de nomes
+não inclui `Pedidos`. Para corrigir somente essa restrição, use
+`supabase/migrations/20261123105236_module_settings_names_compatibility.sql`.
+Essa correção preserva módulos adicionais já aceitos e estados ativo/inativo;
+se a restrição já aceita Devoluções e Pedidos, não altera o esquema.
 Conceda as permissões **Consultar apontamentos FDR** e **Registrar
 apontamentos FDR** em Administração > Usuários para os perfis que usarão a
 tela.

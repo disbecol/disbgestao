@@ -1,6 +1,12 @@
 -- Devoluções: importação atômica, monitoramento editável e isolamento por unidade.
 -- Não altera MAPAS, clientes, avarias ou dados da conferência.
+-- Instalação inicial. Em bancos com Devoluções, use as migrações incrementais.
 begin;
+do $$begin
+ if to_regclass('public.delivery_return_cases') is not null then
+  raise exception 'DEVOLUCOES_JA_INSTALADO: use as migracoes incrementais; para module_settings_name_valid, use supabase/migrations/20261123105236_module_settings_names_compatibility.sql.';
+ end if;
+end$$;
 insert into public.permissions(code,module,name,description,sort_order,active) values
  ('RETURNS_VIEW','Devoluções','Consultar devoluções','Dashboards, acompanhamento e histórico da unidade.',10,true),
  ('RETURNS_EDIT','Devoluções','Monitorar devoluções','Cadastrar e editar a auditoria e as metas da unidade.',20,true),
@@ -10,7 +16,7 @@ insert into public.role_permissions(role,permission_code) values
  ('ADMIN','RETURNS_VIEW'),('ADMIN','RETURNS_EDIT'),('ADMIN','RETURNS_IMPORT') on conflict do nothing;
 alter table public.module_settings drop constraint if exists module_settings_name_valid;
 alter table public.module_settings add constraint module_settings_name_valid check(module_name in
- ('NRI','Conferência','Contagem FEFO','Ativo de Giro','Materiais','Refugo','Avarias de Entrega','Avarias de Vendas','Validade do Estoque','Escalonada Digital','Puxada','Formulários','Devoluções'));
+ ('NRI','Conferência','Contagem FEFO','Ativo de Giro','Materiais','Refugo','Avarias de Entrega','Avarias de Vendas','Validade do Estoque','Escalonada Digital','Puxada','Formulários','Devoluções','Pedidos'));
 insert into public.module_settings(module_name,active) values('Devoluções',true) on conflict do nothing;
 
 create table if not exists public.delivery_return_imports (

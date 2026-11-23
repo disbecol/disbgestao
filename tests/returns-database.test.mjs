@@ -5,6 +5,7 @@ import {randomUUID} from 'node:crypto';
 import {PGlite} from '@electric-sql/pglite';
 const db=new PGlite(),A='Matriz Caicó',B='Filial Pau dos Ferros',admin=randomUUID(),editor=randomUUID(),viewer=randomUUID();
 const migration=await readFile(new URL('../supabase/87_delivery_returns.sql',import.meta.url),'utf8');
+const moduleNamesFix=await readFile(new URL('../supabase/migrations/20261123105236_module_settings_names_compatibility.sql',import.meta.url),'utf8');
 const monitoringMigration=await readFile(new URL('../supabase/90_returns_driver_monitoring.sql',import.meta.url),'utf8');
 const prioritiesMigration=await readFile(new URL('../supabase/91_returns_priorities.sql',import.meta.url),'utf8');
 const priorityRoutesMigration=await readFile(new URL('../supabase/92_returns_priority_routes.sql',import.meta.url),'utf8');
@@ -26,6 +27,7 @@ before(async()=>{
  create table role_permissions(role text,permission_code text,primary key(role,permission_code));
  create table user_permissions(user_id uuid,permission_code text,allowed boolean);
  create table module_settings(module_name text primary key,active boolean default true);
+ insert into module_settings values('Pedidos',false);
  create table customers(id uuid primary key default gen_random_uuid(),code text,name text,city text,branch text);
  create table maps(id uuid primary key default gen_random_uuid(),map_number text,map_date date,driver text,helper1 text,helper2 text);
  create function public.is_admin() returns boolean language sql stable security definer set search_path=public as $$select coalesce((select role='ADMIN' and active from profiles where id=auth.uid()),false)$$;`);
@@ -47,6 +49,20 @@ async function start(kind='REPORT',count=1){const id=randomUUID();await rpc('ret
 async function publish(kind,rows){const id=await start(kind,rows.length);await rpc('returns_stage_import',[id,JSON.stringify(rows)]);await rpc('returns_finish_import',[id]);return id;}
 const caseData=(over={})=>({operation_date:'2026-11-01',customer_code:'42',map_number:'1',customer_name:'Cliente exemplo',driver_reason:'Recusa',driver_treatment:'Retorno solicitado',client_reason:'Preço',client_statement:'Cliente explicou o motivo',status:'AGUARDANDO_REPASSE',order_amount_cents:4200,...over});
 const save=(id,rev,data,op=randomUUID(),unit=A)=>rpc('returns_save_case',[id,unit,rev,op,JSON.stringify(data)]);
+
+test('instalação de Devoluções aceita Pedidos existente e preserva seu estado',async()=>{
+ await db.exec('reset role');
+ assert.equal((await query("select active from module_settings where module_name='Pedidos'"))[0].active,false);
+ await assert.rejects(()=>query("insert into module_settings values('Modulo inexistente',true)"),/module_settings_name_valid/);
+});
+
+test('reexecutar a instalação inicial é bloqueado antes de sobrescrever funções atualizadas',async()=>{
+ await db.exec('reset role');
+ const before=(await query("select md5(prosrc) hash from pg_proc where oid='public.returns_priority_routes(text,date)'::regprocedure"))[0].hash;
+ try{await assert.rejects(()=>db.exec(migration),/DEVOLUCOES_JA_INSTALADO/);}finally{await db.exec('rollback');}
+ assert.equal((await query("select md5(prosrc) hash from pg_proc where oid='public.returns_priority_routes(text,date)'::regprocedure"))[0].hash,before);
+ assert.equal((await query("select active from module_settings where module_name='Pedidos'"))[0].active,false);
+});
 const monitoringData=(over={})=>({operation_date:'2026-11-01',customer_code:'42',map_number:'1',branch:'MATRIZ',customer_name:'Cliente exemplo',city:'Caicó',seller:'Vendedor',driver:'Motorista',driver_reason:'PDV fechado',driver_treatment:'Cliente ausente',...over});
 const saveMonitoring=(id,rev,data,op=randomUUID(),unit=A)=>rpc('returns_save_monitoring',[id,unit,rev,op,JSON.stringify(data)]);
 const priorityData=(over={})=>({priority_date:'2026-11-21',customer_code:'900',customer_name:'Cliente prioridade',city:'Caicó',seller:'Valter',order_amount_cents:12345,visit_day:'Sexta-feira',off_route:true,focus_client:true,reason:'Acompanhar devolução',...over});
@@ -147,7 +163,7 @@ test('mapa compartilhado com colisão entre unidades não fornece equipe ambígu
 test('módulo inativo revoga consultas e mutações, sem apagar dados',async()=>{
  await db.exec('reset role');await db.exec("update module_settings set active=false where module_name='Devoluções'");await as(editor);
  assert.equal((await query('select * from delivery_return_cases')).length,0);await assert.rejects(()=>rpc('returns_snapshot',[A,'2026-11-01','2026-11-30']),/FORBIDDEN/);
- await db.exec('reset role');await db.exec("update module_settings set active=true where module_name='Devoluções'");await db.exec(migration);
+ await db.exec('reset role');await db.exec("update module_settings set active=true where module_name='Devoluções'");await db.exec(moduleNamesFix);
  assert.ok((await query('select * from delivery_return_cases')).length>0);
 });
 
