@@ -34,6 +34,7 @@ STATIC.push(...[
 ]);
 // END GENERATED PUXADA ASSETS
 STATIC.push('src/shared/screen-design.js?v=1.7.112','src/shared/screen-design.css?v=1.7.112','src/shared/screen-warehouse.css?v=1.7.112','src/shared/screen-delivery.css?v=1.7.112','src/shared/screen-office.css?v=1.7.112','assets/fonts/inter-latin.woff2','assets/fonts/inter-latin-ext.woff2');
+STATIC.push('src/estoque/fefo-reports.js?v=1.7.112-fefo-reports');
 const STATIC_URLS=new Set(STATIC.map(path=>new URL(path,self.registration.scope).href));
 const EXTERNAL_STATIC_URLS=new Set();
 const IMAGE_PATHS=['assets/','imagens_produtos/'].map(path=>new URL(path,self.registration.scope).pathname);
