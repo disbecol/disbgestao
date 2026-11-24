@@ -36,6 +36,7 @@ before(async()=>{
  await db.exec(fn(await read('supabase/77_pull_plan_week_optional_when_checklist_off.sql'),'save_pull_trip_plan'));
  legacy=(await sql("insert into public.pull_trips(trip_code,origin_unit,plate,carrier,factory,driver1_id,driver1_name,driver2_id,driver2_name,start_latitude,start_longitude,status) values('PUX-000001',$1,'OLD1234','Antiga','Fábrica exemplo',$2,'Um',$3,'Dois',-6,-35,'ARRIVED') returning *",[A,users.one,users.two]))[0];legacyStamp=legacy.started_at;
  await db.exec(await read('supabase/migrations/20261123171055_puxada_isolated_integration.sql'));
+ await db.exec(await read('supabase/migrations/20261124112300_pull_tma_permission_access.sql'));
  await db.exec('create trigger guard_checklist before insert on public.pull_events for each row execute function public.guard_pull_checklist_step()');
  }catch(error){const at=Number(error.position||error.internalPosition||0);throw Error([error.message,error.detail,error.where,at&&String(error.query||error.internalQuery||'').slice(Math.max(0,at-200),at+200)].filter(Boolean).join('\n'));}
 });
@@ -143,4 +144,10 @@ test('goals are saved only by permitted staff and module deactivation is enforce
  await as('admin');const g=await rpc('PUT','/goals/2026',{tmvOutTargetMinutes:60,tmvOutAdherence:90});assert.equal(g.tmvOutTargetMinutes,60);assert.equal(g.tmvOutAdherence,90);
  await db.exec("reset role;update public.module_settings set active=false where module_name='Puxada'");await as('one');await assert.rejects(rpc('GET','/catalog'),e=>e.detail.includes('MODULE_DISABLED'));
  await db.exec("reset role;update public.module_settings set active=true where module_name='Puxada'");
+});
+
+test('staff with only TMA adjustment can enter history without gaining planning or settings access',async()=>{
+ await db.exec('reset role');await sql('delete from public.test_permissions where user_id=$1',[users.analyst]);await sql('insert into public.test_permissions values($1,$2)',[users.analyst,'PULL_TMA_ADJUST']);await as('analyst');
+ try{const session=await rpc('GET','/auth/session');assert.equal(session.user.allowedPages.includes('history'),true);assert.equal(session.user.allowedPages.includes('plans'),false);assert.ok(await rpc('GET','/catalog'));assert.ok(Array.isArray(await rpc('GET','/trips',{}, {scope:'history'})));await assert.rejects(rpc('PUT','/settings',{checklistRequired:true}),e=>e.detail.includes('FORBIDDEN'));}
+ finally{await db.exec('reset role');await sql('delete from public.test_permissions where user_id=$1',[users.analyst]);await sql('insert into public.test_permissions values($1,$2)',[users.analyst,'PULL_FAROL']);}
 });
