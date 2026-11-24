@@ -13,7 +13,7 @@
     'returns-new-clients':['Clientes novos','Devoluções até 60 dias do cadastro, considerando a data da devolução.'],
     'returns-sellers':['Análise por Vendedor','Participação, valor e volume das devoluções por vendedor.'],
     'returns-team':['Análise por QLP','Participação dos motoristas e ajudantes nas devoluções.'],
-    'returns-penalties':['Bloqueios por recorrência','Monitore ocorrências nos últimos 60 dias e confirme os bloqueios e liberações.'],
+    'returns-penalties':['Devoluções reincidentes','Monitore ocorrências nos últimos 60 dias e confirme os bloqueios e liberações.'],
     'returns-reasons':['Análise de motivos','Motivos, valores, volume e comparação da auditoria.'],
     'returns-radius':['Análise por raio','Devoluções dentro e fora do raio, por motorista e justificativa.'],
     'returns-monitoring':['Monitoramento','Registre os apontamentos de devolução feitos pelos motoristas e acompanhe se foram encontrados na base.'],

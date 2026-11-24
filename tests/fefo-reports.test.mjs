@@ -9,7 +9,7 @@ test('módulo é carregado antes do aplicativo e está no cache offline', () => 
   const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const sw = fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
   const moduleUrl = 'src/estoque/fefo-reports.js?v=1.7.111-fefo-reports';
-  const appUrl = 'app.js?v=1.7.111-fefo-reports';
+  const appUrl = 'app.js?v=1.7.111-devolucoes-reincidentes';
   assert.ok(html.indexOf(moduleUrl) >= 0);
   assert.ok(html.indexOf(moduleUrl) < html.indexOf(appUrl));
   assert.ok(sw.includes(moduleUrl));

@@ -2,7 +2,7 @@
 
 ## Comportamento
 
-- Em **Bloqueios por reincidência**, a contagem usa as devoluções importadas de até 60 dias atrás, incluindo o dia do limite, como na planilha de referência. Unidade, PDV, mapa e data identificam uma ocorrência. Dez notas desse mesmo conjunto contam uma vez; seus valores, volumes e motivos continuam reunidos no botão Ver.
+- Em **Devoluções reincidentes**, a contagem usa as devoluções importadas de até 60 dias atrás, incluindo o dia do limite, como na planilha de referência. Unidade, PDV, mapa e data identificam uma ocorrência. Dez notas desse mesmo conjunto contam uma vez; seus valores, volumes e motivos continuam reunidos no botão Ver.
 - Os padrões são 2 ocorrências/7 dias, 3/10, 4/20, 5/30, 6/35 e 7 ou mais/40. Os dias são configuráveis em **Metas**, por unidade, independentemente do mês das metas percentuais.
 - Clientes elegíveis começam em **Bloquear**. A confirmação manual **Bloqueado** inicia o prazo no horário do servidor e congela a contagem, as notas e a penalidade usados. Alterar uma regra posteriormente não muda esse prazo.
 - O servidor muda para **Liberar** ao término do prazo. O agendador executa a cada cinco minutos, mesmo com o aplicativo fechado; a consulta também atualiza os vencimentos. A confirmação **Liberado pós bloqueio** continua manual. O controle não executa bloqueios ou liberações no sistema comercial.
