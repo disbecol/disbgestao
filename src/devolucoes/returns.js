@@ -18,8 +18,7 @@
     'returns-radius':['Análise por raio','Devoluções dentro e fora do raio, por motorista e justificativa.'],
     'returns-monitoring':['Monitoramento','Registre os apontamentos de devolução feitos pelos motoristas e acompanhe se foram encontrados na base.'],
     'returns-audited':['Devoluções auditadas','Audite as devoluções reais importadas da aba 03.02.24, mesmo que não tenham sido monitoradas.'],
-    'returns-priorities':['Prioridades do dia','Cadastre as prioridades informadas pelo gerente e identifique-as no Monitoramento.'],
-    'returns-priority-sheet':['Prioridades por motorista','Veja as prioridades da data agrupadas pelas rotas e imprima a tabela para encaminhar aos motoristas.'],
+    'returns-priority-sheet':['Prioridades por motorista','Consulte as prioridades da Matriz, agrupadas por motorista, e imprima código, PDV e mapa.'],
     'returns-goals':['Metas','Configure as metas de devolução por unidade e mês.'],
     'returns-import':['Bases do Google','Preencha as abas da unidade no Google Planilhas e acompanhe a atualização.']
   };
@@ -118,6 +117,45 @@
       r.row_key=r.operation_date;const old=groups.get(r.row_key);if(old){issue(errors,i+1,'Data repetida na mesma unidade. Consolide o total diário antes de importar.');continue;}groups.set(r.row_key,r);
     }return {kind:'ROUTES',rows:[...groups.values()],errors,duplicates:0,sourceRows:groups.size};
   }
+  function priorities(rows){
+    const h=header(rows,[['data'],['cod','codigo','cod cliente','codigo cliente'],['nome','nome cliente'],['cidade'],['vendedor'],['valor pedido'],['dia de visita'],['fora de rota'],['cliente foco'],['motivo prioridade']]),at=(...aliases)=>column(h.names,...aliases),c={
+      date:at('data'),code:at('cod','codigo','cod cliente','codigo cliente'),name:at('nome','nome cliente'),
+      city:at('cidade'),seller:at('vendedor'),amount:at('valor pedido'),visit:at('dia de visita'),
+      offRoute:at('fora de rota'),focus:at('cliente foco'),
+      reason:at('motivo prioridade','motivo da prioridade')
+    };
+    const warnings=[],groups=new Map(),errors=[],bool=value=>{
+      const raw=text(value),normalized=norm(raw);
+      if(!raw)return null;
+      if(raw==='-'||['nao','false','0','n'].includes(normalized))return false;
+      if(['sim','true','1','s','yes'].includes(normalized))return true;
+      return null;
+    },sheetError=value=>/^#(?:N\/D|REF!?|VALUE!?|DIV\/0!?|NAME\??|NUM!?|NULL!?)/i.test(text(value));
+    let skippedRows=0;
+    for(let i=h.index+1;i<rows.length;i++){
+      const v=rows[i]||[];
+      if(!v.some(value=>text(value)))continue;
+      const operation_date=day(v[c.date]),customer_code=identifier(v[c.code]);
+      if(!operation_date||!customer_code||sheetError(v[c.date])||sheetError(v[c.code])){
+        skippedRows++;
+        continue;
+      }
+      const row_key=key(operation_date,customer_code);
+      if(groups.has(row_key)){
+        skippedRows++;
+        continue;
+      }
+      groups.set(row_key,{
+        row_key,operation_date,priority_date:operation_date,customer_code,
+        customer_name:text(v[c.name]),city:text(v[c.city]),seller:text(v[c.seller]),
+        order_amount_cents:cents(v[c.amount]),visit_day:text(v[c.visit]),
+        off_route:bool(v[c.offRoute]),focus_client:bool(v[c.focus]),
+        reason:text(v[c.reason])
+      });
+    }
+    if(skippedRows)warnings.push(`${skippedRows} linha(s) ignorada(s): DATA ou COD ausente, inválido ou duplicado.`);
+    return {kind:'PRIORITIES',rows:[...groups.values()],errors,duplicates:skippedRows,sourceRows:groups.size+skippedRows,warnings,skippedRows};
+  }
   function routeReport(rows,month,unit){
     if(!/^\d{4}-\d{2}$/.test(month))throw Error('Informe o mês de referência do relatório 17.03.');
     const h=header(rows,[['cod id','codigo id'],['filial'],['dia 01','dia 1']]),code=column(h.names,'cod id','codigo id'),branch=column(h.names,'filial');
@@ -166,5 +204,5 @@
     const groups=field=>{const map=new Map();for(const r of selected){const label=(field==='city'?cityLabel(r[field]):text(r[field]))||'Não informado',key=norm(label);if(!map.has(key))map.set(key,{label,rows:[]});const g=map.get(key);g.label=preferredLabel(g.label,label);g.rows.push(r);}return [...map.values()].map(g=>({label:g.label,...counts(g.rows)})).sort((a,b)=>b.outside-a.outside||b.total-a.total||a.label.localeCompare(b.label,'pt-BR'));};
     return {available:true,rows:selected,totals:counts(selected),drivers:groups('driver'),cities:groups('city')};
   }
-  return {STATUS,PENALTY_STATUS,RADIUS_STATUS,VIEWS,FOLLOWUP_VIEWS,text,norm,reasonKey,reasonLabel,cityLabel,labels,esc,identifier,day,number,cents,volume,dateShift,ratio,csv,report,orders,journeys,routeTotals,routeReport,customers,filterRows,totals,occurrences,registrationAge,grouped,analytics,radiusAnalysis,toCSV,customerDay};
+  return {STATUS,PENALTY_STATUS,RADIUS_STATUS,VIEWS,FOLLOWUP_VIEWS,text,norm,reasonKey,reasonLabel,cityLabel,labels,esc,identifier,day,number,cents,volume,dateShift,ratio,csv,report,orders,journeys,routeTotals,routeReport,priorities,customers,filterRows,totals,occurrences,registrationAge,grouped,analytics,radiusAnalysis,toCSV,customerDay};
 });

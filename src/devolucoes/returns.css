@@ -52,19 +52,16 @@
  #view-returns-priority-sheet .rt-priority-print-heading{display:block;margin-bottom:12px}
  #view-returns-priority-sheet .rt-priority-print-heading h1{margin:0 0 4px;font-size:20px}
  #view-returns-priority-sheet .rt-priority-print-heading p{margin:0;color:#444;font-size:11px}
- #view-returns-priority-sheet .rt-priority-driver-group,#view-returns-priority-sheet .rt-priority-pending{margin:0 0 12px;padding:0;border:0;border-radius:0;background:#fff;box-shadow:none;break-inside:avoid}
- #view-returns-priority-sheet .rt-priority-driver-group h2,#view-returns-priority-sheet .rt-priority-pending h2{margin:0 0 5px;color:#111;font-size:14px}
- #view-returns-priority-sheet .rt-priority-pending h2,#view-returns-priority-sheet .rt-priority-pending header p{color:#8f222e}
- #view-returns-priority-sheet .rt-priority-driver-group header p,#view-returns-priority-sheet .rt-priority-pending header p{margin:0 0 6px;font-size:10px}
+ #view-returns-priority-sheet .rt-priority-driver-group{margin:0 0 12px;padding:0;border:0;border-radius:0;background:#fff;box-shadow:none;break-inside:avoid}
+ #view-returns-priority-sheet .rt-priority-pending{display:none!important}
+ #view-returns-priority-sheet .rt-priority-driver-group h2{margin:0 0 5px;color:#111;font-size:14px}
+ #view-returns-priority-sheet .rt-priority-driver-group header p{display:none}
  #view-returns-priority-sheet .rt-table-wrap{max-height:none;overflow:visible;border:0;border-radius:0}
  #view-returns-priority-sheet .rt-table-wrap table{font-size:9px}
  #view-returns-priority-sheet .rt-table-wrap th{position:static;background:#e9edf2;color:#111}
  #view-returns-priority-sheet .rt-table-wrap :is(th,td){padding:5px;border:1px solid #c9cdd2}
  #view-returns-priority-sheet .rt-table-wrap td{max-width:none;color:#111}
  #view-returns-priority-sheet .rt-table-wrap td small{margin-top:2px;color:#444;font-size:8px}
- #view-returns-priority-sheet .rt-priority-pending td select{display:none}
- #view-returns-priority-sheet .rt-priority-print-only{display:inline}
- #view-returns-priority-sheet .rt-priority-print-content>footer{margin-top:8px;color:#444;font-size:9px}
 }
 /* Classificação de raio com rótulos além das cores. */
 .rt-workspace .rt-track .rt-radius-fill-inside{background:#2a855e}.rt-workspace .rt-track .rt-radius-fill-outside{background:#bd4857}.rt-workspace .rt-track .rt-radius-fill-pending{background:#a47724}

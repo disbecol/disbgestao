@@ -9,6 +9,7 @@ const moduleNamesFix=await readFile(new URL('../supabase/migrations/202611231052
 const monitoringMigration=await readFile(new URL('../supabase/90_returns_driver_monitoring.sql',import.meta.url),'utf8');
 const prioritiesMigration=await readFile(new URL('../supabase/91_returns_priorities.sql',import.meta.url),'utf8');
 const priorityRoutesMigration=await readFile(new URL('../supabase/92_returns_priority_routes.sql',import.meta.url),'utf8');
+const googlePrioritiesMigration=await readFile(new URL('../supabase/93_returns_google_priorities.sql',import.meta.url),'utf8');
 const googleMigration=await readFile(new URL('../supabase/88_returns_google_sources.sql',import.meta.url),'utf8');
 const cityMigration=await readFile(new URL('../supabase/migrations/20261117170852_returns_city_names.sql',import.meta.url),'utf8');
 const partialMigration=await readFile(new URL('../supabase/migrations/20261117181315_returns_partial_status.sql',import.meta.url),'utf8');
@@ -44,6 +45,8 @@ before(async()=>{
  try{await db.exec(monitoringMigration);}catch(e){throw Error(`${e.message}; linha ${monitoringMigration.slice(0,Number(e.position||1)).split('\n').length}; ${e.where||''}`);}
  try{await db.exec(prioritiesMigration);}catch(e){throw Error(`${e.message}; linha ${prioritiesMigration.slice(0,Number(e.position||1)).split('\n').length}; ${e.where||''}`);}
  try{await db.exec(priorityRoutesMigration);}catch(e){throw Error(`${e.message}; linha ${priorityRoutesMigration.slice(0,Number(e.position||1)).split('\n').length}; ${e.where||''}`);}
+ try{await db.exec(googleMigration);}catch(e){throw Error(`${e.message}; linha ${googleMigration.slice(0,Number(e.position||1)).split('\n').length}; ${e.where||''}`);}
+ try{await db.exec(googlePrioritiesMigration);}catch(e){throw Error(`${e.message}; linha ${googlePrioritiesMigration.slice(0,Number(e.position||1)).split('\n').length}; ${e.where||''}`);}
  for(const code of ['RETURNS_VIEW','RETURNS_EDIT','RETURNS_IMPORT'])await query('insert into user_permissions values($1,$2,true)',[editor,code]);
  await query("insert into user_permissions values($1,'RETURNS_VIEW',true)",[viewer]);
 });
@@ -71,6 +74,7 @@ const monitoringData=(over={})=>({operation_date:'2026-11-01',customer_code:'42'
 const saveMonitoring=(id,rev,data,op=randomUUID(),unit=A)=>rpc('returns_save_monitoring',[id,unit,rev,op,JSON.stringify(data)]);
 const priorityData=(over={})=>({priority_date:'2026-11-21',customer_code:'900',customer_name:'Cliente prioridade',city:'Caicó',seller:'Valter',order_amount_cents:12345,visit_day:'Sexta-feira',off_route:true,focus_client:true,reason:'Acompanhar devolução',...over});
 const savePriority=(id,rev,data,op=randomUUID(),unit=A)=>rpc('returns_save_priority',[id,unit,rev,op,JSON.stringify(data)]);
+const priorityRecord=(over={})=>{const p=priorityData(over),operation_date=p.priority_date;return {row_key:`${operation_date}~${p.customer_code}`,operation_date,priority_date:operation_date,customer_code:p.customer_code,customer_name:p.customer_name,city:p.city,seller:p.seller,order_amount_cents:p.order_amount_cents,visit_day:p.visit_day,off_route:p.off_route,focus_client:p.focus_client,reason:p.reason};};
 
 test('RLS e RPC recusam outra unidade inclusive para admin; anon não consulta',async()=>{
  await as();await publish('REPORT',[row()]);
@@ -89,23 +93,25 @@ test('monitoramento mantém apontamentos separados e indica quando a devolução
  await assert.rejects(()=>saveMonitoring(randomUUID(),0,monitoringData()),/FORBIDDEN/);
  await db.exec('reset role');await db.exec('set role anon');await assert.rejects(()=>query('select * from delivery_return_monitoring'),/permission denied/);
 });
-test('prioridades são isoladas por unidade, identificadas por data e código e protegidas por revisão',async()=>{
+test('prioridades importadas da planilha são isoladas por unidade, data e código',async()=>{
  await as(editor);const id=randomUUID(),operation=randomUUID(),data=priorityData(),first=await savePriority(id,0,data,operation);
  assert.equal(first.id,id);assert.equal(first.order_amount_cents,12345);assert.equal(first.off_route,true);assert.deepEqual(await savePriority(id,0,data,operation),first);
- assert.deepEqual(await rpc('returns_priority_lookup',[A,'2026-11-21','900']),first);
- assert.equal((await rpc('returns_priority_snapshot',[A,'2026-11-21','2026-11-21'])).priorities.length,1);
  await assert.rejects(()=>savePriority(id,0,priorityData({reason:'Outra justificativa'})),/PRIORITY_VERSION_CONFLICT/);
  const second=await savePriority(id,1,priorityData({reason:'Justificativa atualizada'}));assert.equal(second.revision,2);
+ assert.equal(await rpc('returns_priority_lookup',[A,'2026-11-21','900']),null);
+ assert.equal((await rpc('returns_priority_snapshot',[A,'2026-11-21','2026-11-21'])).priorities.length,0);
+ await publish('PRIORITIES',[priorityRecord({reason:'Da planilha'})]);
+ const imported=await rpc('returns_priority_lookup',[A,'2026-11-21','900']);assert.equal(imported.reason,'Da planilha');assert.equal(imported.priority_date,'2026-11-21');
+ assert.equal((await rpc('returns_priority_snapshot',[A,'2026-11-21','2026-11-21'])).priorities.length,1);
  await assert.rejects(()=>savePriority(randomUUID(),0,data,randomUUID(),B),/FORBIDDEN/);
- await as(viewer);assert.equal((await rpc('returns_priority_lookup',[A,'2026-11-21','900'])).reason,'Justificativa atualizada');
+ await as(viewer);assert.equal((await rpc('returns_priority_lookup',[A,'2026-11-21','900'])).reason,'Da planilha');
  await assert.rejects(()=>savePriority(randomUUID(),0,data),/FORBIDDEN/);
  await db.exec('reset role');await db.exec('set role anon');await assert.rejects(()=>query('select * from delivery_return_priorities'),/permission denied/);
 });
 test('consulta em lote cruza todas as prioridades da data com pedidos e jornadas da unidade',async()=>{
  await as(editor);
  const day='2026-11-22';
- await savePriority(randomUUID(),0,priorityData({priority_date:day,customer_code:'990'}));
- await savePriority(randomUUID(),0,priorityData({priority_date:day,customer_code:'991',customer_name:'Cliente sem rota'}));
+ await publish('PRIORITIES',[priorityRecord({priority_date:day,customer_code:'990'}),priorityRecord({priority_date:day,customer_code:'991',customer_name:'Cliente sem rota'})]);
  await publish('ORDERS',[{row_key:'priority-order',operation_date:day,map_number:'9',customer_code:'990',customer_name:'Cliente prioridade',order_amount_cents:12000}]);
  await publish('JOURNEYS',[{row_key:day+'~9',operation_date:day,map_number:'9',driver:'Motorista confirmado',helper1:'Ajudante'}]);
  const rows=await rpc('returns_priority_routes',[A,day]);
@@ -174,7 +180,7 @@ test('módulo inativo revoga consultas e mutações, sem apagar dados',async()=>
 async function stageGoogle(kind,rows,filename,count=rows.length){const id=randomUUID();await rpc('returns_begin_import',[id,A,kind,filename,'c'.repeat(64),count]);await rpc('returns_stage_import',[id,JSON.stringify(rows)]);return id;}
 const sync=(id,action,ids=[],result={})=>rpc('returns_google_sync',[A,id,action,ids,JSON.stringify(result)]);
 test('migração Google preserva os registros existentes e limita concorrência por unidade/autor',async()=>{
- await db.exec('reset role');await db.exec(googleMigration);await as(editor);const id=randomUUID();assert.equal((await sync(id,'START')).acquired,true);
+ await as(editor);const id=randomUUID();assert.equal((await sync(id,'START')).acquired,true);
  await as(admin);assert.equal((await sync(randomUUID(),'START')).acquired,false);await assert.rejects(()=>sync(id,'COMMIT'),/SYNC_LEASE_CONFLICT/);
  await as(viewer);await assert.rejects(()=>sync(randomUUID(),'START'),/FORBIDDEN/);await as(editor);await sync(id,'FAIL',[],{error:'Leitura interrompida'});
  assert.ok((await query('select * from delivery_return_cases')).length>0);await assert.rejects(()=>query("update delivery_return_google_sync set last_error=''"),/permission denied/);
@@ -187,6 +193,20 @@ test('bases Google são publicadas juntas, sem dados parciais após falha',async
  await rpc('returns_stage_import',[orders,JSON.stringify([{row_key:'atomic-order-2',operation_date:'2026-11-01',customer_code:'43',map_number:'1',order_amount_cents:1000}])]);
  const cases=(await query('select count(*)::int as n from delivery_return_cases'))[0].n;const state=await sync(id,'COMMIT',[report,orders],{sources:{REPORT:{state:'OK',count:1},ORDERS:{state:'OK',count:2}}});assert.ok(state.last_synced_at);
  assert.equal((await query("select * from delivery_return_records where row_key='atomic-g-report'")).length,1);assert.equal((await query('select count(*)::int as n from delivery_return_cases'))[0].n,cases);
+});
+test('sincronização publica seis origens da Matriz incluindo prioridade e cadastro de clientes',async()=>{
+ await as(editor);const lease=randomUUID();await sync(lease,'START');
+ const ids=[
+  await stageGoogle('REPORT',[row({row_key:'six-report'})],'Google Planilhas / REPORT / six'),
+  await stageGoogle('ORDERS',[{row_key:'six-order',operation_date:'2026-11-01',customer_code:'42',map_number:'1',order_amount_cents:1000}],'Google Planilhas / ORDERS / six'),
+  await stageGoogle('CUSTOMERS',[{row_key:'six-customer',customer_code:'42',customer_name:'Cliente',city:'Caicó'}],'Google Planilhas / CUSTOMERS / six'),
+  await stageGoogle('JOURNEYS',[{row_key:'six-journey',operation_date:'2026-11-01',map_number:'1',driver:'Motorista'}],'Google Planilhas / JOURNEYS / six'),
+  await stageGoogle('ROUTES',[{row_key:'six-route',operation_date:'2026-11-01',planned_outlets:1,planned_hl:2}],'Google Planilhas / ROUTES / six'),
+  await stageGoogle('PRIORITIES',[priorityRecord({priority_date:'2026-11-01'})],'Google Planilhas / PRIORITIES / six')
+ ];
+ const state=await sync(lease,'COMMIT',ids,{sources:{PRIORITIES:{state:'OK',count:1}}});
+ assert.ok(state.last_synced_at);assert.equal((await query("select count(*)::int n from delivery_return_records where unit=$1 and kind='PRIORITIES' and row_key='2026-11-01~900'",[A]))[0].n,1);
+ assert.equal((await query('select count(*)::int n from delivery_return_imports where id=any($1::uuid[]) and status=\'COMPLETED\'',[ids]))[0].n,6);
 });
 test('edição da planilha substitui apenas a versão da mesma origem Google',async()=>{
  await as(editor);const filename='Google Planilhas / REPORT / snapshot';const first=await stageGoogle('REPORT',[row({row_key:'snapshot-old'}),row({row_key:'snapshot-keep'})],filename);await rpc('returns_finish_import',[first]);

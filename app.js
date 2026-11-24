@@ -1356,6 +1356,7 @@ function onHomeShortcutClick(event){
 }
 function openView(name,force=false){
   if(name==='returns-recurrence')name='returns-penalties';
+  if(name==='returns-priorities')name='returns-priority-sheet';
   if(window.DISB_RETURNS?.FOLLOWUP_VIEWS?.includes(name)){returnsModule?.activateDashboardTab(name);name='returns-followup';}
   if(name==='home'&&isPullDriver())name='puxada-viagem';
   name=window.DISB_PULL_INTEGRATION?.redirect(name)||name;

@@ -24,7 +24,7 @@ function harness({rpc,permissions=['RETURNS_VIEW','RETURNS_EDIT','RETURNS_IMPORT
 }
 test('as visões, auditoria e importação renderizam sem HTML de dados ou objetos acidentais',async()=>{
  const h=harness();for(const v of Object.keys(R.VIEWS)){await h.module.enter(v);const root=h.document.getElementById('view-'+v);assert.ok(root.querySelector('h1'));assert.ok(!root.innerHTML.includes('[object Object]'),v);assert.equal(root.querySelectorAll('script').length,0);}
- assert.equal(h.document.querySelectorAll('#view-returns-import .rt-source').length,4);assert.equal(h.document.querySelectorAll('#view-returns-import input[type=file]').length,0);
+ assert.equal(h.document.querySelectorAll('#view-returns-import .rt-source').length,5);assert.equal(h.document.querySelectorAll('#view-returns-import input[type=file]').length,0);
 });
 test('Análise por raio consulta a unidade e período e exibe resultados por ocorrência',async()=>{
  const h=harness({permissions:['RETURNS_VIEW'],rpc:async(name)=>({data:name==='returns_radius_snapshot'?{available:true,matches:[{operation_date:today,customer_code:'42',map_number:'1',state:'OUTSIDE',justified:false,match_count:2}]}:sample,error:null})});await h.module.enter('returns-followup');await h.click(h.document.querySelector('[data-tab="returns-radius"]'));const root=h.document.querySelector('#view-returns-followup');assert.match(root.textContent,/Dentro e fora do raio por motorista/);assert.match(root.textContent,/Não justificada/);assert.ok(root.querySelector('.rt-radius-OUTSIDE'));assert.equal(root.querySelectorAll('script').length,0);const call=h.calls.find(c=>c.name==='returns_radius_snapshot');assert.equal(call.args.p_unit,'Matriz Caicó');assert.equal(call.args.p_to,today);
@@ -46,19 +46,8 @@ test('Metas permite selecionar outro mês e salva na unidade e no mês exibidos'
  const h=harness();h.setData({...sample,goals:[{month:'2026-02-01',outlet_rate:.02,hl_rate:.01}]});await h.module.enter('returns-goals');let root=h.document.querySelector('#view-returns-goals');let month=root.querySelector('[data-rt-goal-month]');month.value='2026-02';for(const fn of h.events.change)await fn({target:month});assert.ok(root.textContent.includes('2%'));assert.ok(!root.querySelector('[data-rt-filter-form]'));assert.deepEqual(h.calls.at(-1),{name:'select:delivery_return_goals',args:{unit:'Matriz Caicó',month:'2026-02-01'}});
  await h.click(root.querySelector('[data-rt-action=goal]'));const form=h.document.querySelector('[data-rt-goal-form]');form.querySelector('[name=outlet]').value='3,5';form.querySelector('[name=hl]').value='';for(const fn of h.events.submit)await fn({target:form,preventDefault(){}});const saved=h.calls.find(c=>c.name==='returns_save_goal');assert.equal(saved.args.p_unit,'Matriz Caicó');assert.equal(saved.args.p_month,'2026-02-01');assert.equal(saved.args.p_outlet,.035);assert.equal(saved.args.p_hl,null);
 });
-test('Prioridades permite cadastrar a base manualmente com os campos e valores corretos',async()=>{
- let savedArgs;const priority={id:webcrypto.randomUUID(),revision:1,priority_date:today,customer_code:'42',customer_name:'Loja prioritária',city:'Caicó',seller:'Valter',order_amount_cents:12345,visit_day:'Sexta-feira',off_route:true,focus_client:true,reason:'Acompanhar a devolução',updated_by_name:'Analista',updated_at:new Date().toISOString()};
- const h=harness({rpc:async(name,args)=>{if(name==='returns_priority_snapshot')return {data:{priorities:savedArgs?[priority]:[],at:new Date().toISOString()},error:null};if(name==='returns_save_priority'){savedArgs=args;return {data:priority,error:null};}return {data:sample,error:null};}});
- await h.module.enter('returns-priorities');const root=h.document.querySelector('#view-returns-priorities');assert.match(root.textContent,/Prioridades de hoje/);
- await h.click(root.querySelector('[data-rt-action=new-priority]'));const form=root.querySelector('[data-rt-priority-form]');
- for(const [name,value] of Object.entries({priority_date:today,customer_code:'42',customer_name:'Loja prioritária',city:'Caicó',seller:'Valter',order_amount:'123,45',visit_day:'Sexta-feira',reason:'Acompanhar a devolução',off_route:'true',focus_client:'true'})){const input=form.querySelector(`[name="${name}"]`);if(input.tagName==='SELECT'){for(const option of input.querySelectorAll('option'))option.selected=false;input.querySelector(`[value="${value}"]`).selected=true;}else input.value=value;}
- for(const fn of h.events.submit)await fn({target:form,preventDefault(){}});
- assert.ok(savedArgs,JSON.stringify(h.toasts));assert.equal(savedArgs.p_unit,'Matriz Caicó');assert.deepEqual(JSON.parse(JSON.stringify(savedArgs.p_data)),{priority_date:today,customer_code:'42',customer_name:'Loja prioritária',city:'Caicó',seller:'Valter',order_amount_cents:12345,visit_day:'Sexta-feira',off_route:true,focus_client:true,reason:'Acompanhar a devolução'});
- assert.match(root.textContent,/Loja prioritária/);assert.match(root.textContent,/Acompanhar a devolução/);
-});
-test('perfil de consulta vê prioridades sem ações de cadastro ou edição',async()=>{
- const h=harness({permissions:['RETURNS_VIEW']});h.setData({...sample,priorities:[{id:'priority-1',priority_date:today,customer_code:'42',customer_name:'Loja prioritária',city:'Caicó',seller:'Valter',order_amount_cents:12345,visit_day:'Sexta-feira',off_route:true,focus_client:true,reason:'Acompanhar',updated_by_name:'Analista',updated_at:new Date().toISOString()}]});
- await h.module.enter('returns-priorities');const root=h.document.querySelector('#view-returns-priorities');assert.match(root.textContent,/Loja prioritária/);assert.ok(!root.querySelector('[data-rt-action=new-priority]'));assert.ok(!root.querySelector('[data-rt-action=edit-priority]'));
+test('a base manual sai da navegação e só permanece a impressão por motorista',async()=>{
+ const h=harness();assert.equal(R.VIEWS['returns-priorities'],undefined);assert.equal(h.document.querySelector('[data-view="returns-priorities"]'),null);await h.module.enter('returns-priority-sheet');const root=h.document.querySelector('#view-returns-priority-sheet');assert.ok(root.querySelector('[data-rt-priority-sheet-form]'));assert.ok(!root.querySelector('[data-rt-priority-form]'));
 });
 test('folha carrega automaticamente as prioridades do dia agrupadas por motorista e imprime a tabela',async()=>{
  const entries=[
@@ -70,7 +59,8 @@ test('folha carrega automaticamente as prioridades do dia agrupadas por motorist
  await h.module.enter('returns-priority-sheet');await flush();const root=h.document.querySelector('#view-returns-priority-sheet');
  assert.deepEqual(h.calls.filter(c=>c.name==='returns_priority_routes').map(c=>c.args.p_date),[today]);
  assert.equal(root.querySelectorAll('.rt-priority-driver-group').length,2);assert.match(root.textContent,/Motorista A/);assert.match(root.textContent,/Motorista B/);
- assert.match(root.textContent,/42 · Loja prioritária/);assert.match(root.textContent,/125/);assert.match(root.textContent,/Matriz/);assert.equal(root.querySelectorAll('[data-rt-priority-sheet-form]').length,1);
+ assert.match(root.textContent,/42/);assert.match(root.textContent,/Loja prioritária/);assert.match(root.textContent,/125/);assert.match(root.textContent,/Matriz/);assert.equal(root.querySelectorAll('[data-rt-priority-sheet-form]').length,1);
+ const printed=root.querySelector('.rt-priority-print-content'),styles=readFileSync(new URL('../src/devolucoes/returns.css',import.meta.url),'utf8');assert.deepEqual([...printed.querySelector('.rt-priority-driver-group table thead').querySelectorAll('th')].map(th=>th.textContent),['Código do PDV','Nome do PDV','Mapa']);assert.ok(!printed.textContent.includes('Valter'));assert.match(styles,/#view-returns-priority-sheet \.rt-priority-pending\{display:none!important\}/);
  assert.ok(root.querySelector('[data-rt-action=print-priority-sheet]'));await h.click(root.querySelector('[data-rt-action=print-priority-sheet]'));assert.equal(h.printCalls,1);
 });
 test('folha deixa mapas ambíguos e motoristas ausentes em seção de confirmação',async()=>{
