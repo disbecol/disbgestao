@@ -5,8 +5,9 @@ import vm from 'node:vm';
 
 const app = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
 const moduleSource = fs.readFileSync(new URL('../src/estoque/fefo-completed-edits.js', import.meta.url), 'utf8');
+const reportsSource = fs.readFileSync(new URL('../src/estoque/fefo-reports.js', import.meta.url), 'utf8');
 
-function createFeature({ isAdmin = false, reports = [], calls = [], notices = [] } = {}) {
+function createFeature({ isAdmin = false, reports = [], calls = [], notices = [], openedReports = [], modals = [] } = {}) {
   const count = {
     id: 'count-id', status: 'COMPLETED', count_code: 'FEFO-000016',
     unit: 'Matriz Caicó', counter_id: 'person-id',
@@ -51,7 +52,8 @@ function createFeature({ isAdmin = false, reports = [], calls = [], notices = []
     getClient: () => client, getActiveUnit: () => 'Matriz Caicó', timeZone: 'America/Fortaleza',
     isAdmin: () => isAdmin, hasPermission: () => true, sortItems: () => 0,
     loadReports: async () => {}, fetchItemsForCount: async () => [], rememberItems() {}, renderReports() {},
-    openModal() {}, closeModal() {}, toast: (...args) => notices.push(args),
+    openModal: (...args) => modals.push(args), openFefoReport: id => openedReports.push(id),
+    closeModal() {}, toast: (...args) => notices.push(args),
     humanError: error => error.message, escapeHtml: value => String(value ?? ''),
     formatDate: value => String(value ?? ''), formatDateTime: value => String(value ?? ''),
     confirm: () => true
@@ -69,6 +71,7 @@ test('aplicativo principal oferece edição somente ao abrir um relatório final
   const context = vm.createContext({ document, navigator: { onLine: true }, addEventListener() {}, setInterval() {}, setTimeout() {} });
   context.window = context;
   vm.runInContext(moduleSource, context);
+  vm.runInContext(reportsSource, context);
   const hooked = app.replace(/\}\)\(\);\s*$/, `window.fefoEditSmoke=()=>{
     profile={role:'ADMIN'};
     fefoReports=[{id:'count-id',status:'COMPLETED',count_code:'FEFO-000016',unit:'Matriz Caicó',counter_name:'José Alves',started_at:'2026-10-19T12:05:14Z',completed_at:'2026-10-19T12:05:29Z'}];
@@ -111,4 +114,12 @@ test('cabeçalho exige justificativa e envia horário local corretamente ao back
   assert.equal(calls[0].args.p_completed_at, '2026-10-14T19:32:00.000Z');
   assert.equal(calls[0].args.p_reason, 'Correção do relatório');
   assert.ok(notices.some(([message]) => message.includes('Cabeçalho corrigido')));
+});
+
+test('edição permite voltar ao relatório original', async () => {
+  const openedReports = [], modals = [];
+  const { feature } = createFeature({ isAdmin: true, openedReports, modals });
+  await feature.openCorrection('count-id');
+  modals.at(-1)[3][0].onClick();
+  assert.deepEqual(openedReports, ['count-id']);
 });
