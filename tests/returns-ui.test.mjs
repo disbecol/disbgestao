@@ -49,21 +49,21 @@ test('Metas permite selecionar outro mês e salva na unidade e no mês exibidos'
 test('a base manual sai da navegação e só permanece a impressão por motorista',async()=>{
  const h=harness();assert.equal(R.VIEWS['returns-priorities'],undefined);assert.equal(h.document.querySelector('[data-view="returns-priorities"]'),null);await h.module.enter('returns-priority-sheet');const root=h.document.querySelector('#view-returns-priority-sheet');assert.ok(root.querySelector('[data-rt-priority-sheet-form]'));assert.ok(!root.querySelector('[data-rt-priority-form]'));
 });
-test('folha carrega automaticamente as prioridades do dia agrupadas por motorista e imprime a tabela',async()=>{
+test('folha carrega as prioridades em uma tabela única ordenada por mapa e imprime a lista',async()=>{
  const entries=[
+  {priority:{priority_date:today,customer_code:'44',customer_name:'Loja Filial',city:'Pau dos Ferros',seller:'Ana',order_amount_cents:9900,visit_day:'Sexta-feira',off_route:true,focus_client:false,reason:'Visita'},routes:[{map_number:'125',customer_name:'Loja Filial',city:'Pau dos Ferros',driver:'Motorista B'}]},
   {priority:{priority_date:today,customer_code:'42',customer_name:'Loja prioritária',city:'Caicó',seller:'Valter',order_amount_cents:12345,visit_day:'Sexta-feira',off_route:true,focus_client:true,reason:'Acompanhar'},routes:[{map_number:'123',customer_name:'Loja prioritária',city:'Caicó',driver:'Motorista A'}]},
-  {priority:{priority_date:today,customer_code:'43',customer_name:'Mercado Central',city:'Caicó',seller:'João',order_amount_cents:23400,visit_day:'Sexta-feira',off_route:false,focus_client:false,reason:'Cliente foco'},routes:[{map_number:'124',customer_name:'Mercado Central',city:'Caicó',driver:'Motorista A'}]},
-  {priority:{priority_date:today,customer_code:'44',customer_name:'Loja Filial',city:'Pau dos Ferros',seller:'Ana',order_amount_cents:9900,visit_day:'Sexta-feira',off_route:true,focus_client:false,reason:'Visita'},routes:[{map_number:'125',customer_name:'Loja Filial',city:'Pau dos Ferros',driver:'Motorista B'}]}
+  {priority:{priority_date:today,customer_code:'43',customer_name:'Mercado Central',city:'Caicó',seller:'João',order_amount_cents:23400,visit_day:'Sexta-feira',off_route:false,focus_client:false,reason:'Cliente foco'},routes:[{map_number:'123',customer_name:'Mercado Central',city:'Caicó',driver:'Motorista B'}]}
  ];
  const h=harness({rpc:async(name)=>name==='returns_priority_routes'?{data:entries,error:null}:{data:sample,error:null}});
  await h.module.enter('returns-priority-sheet');await flush();const root=h.document.querySelector('#view-returns-priority-sheet');
  assert.deepEqual(h.calls.filter(c=>c.name==='returns_priority_routes').map(c=>c.args.p_date),[today]);
- assert.equal(root.querySelectorAll('.rt-priority-driver-group').length,2);assert.match(root.textContent,/Motorista A/);assert.match(root.textContent,/Motorista B/);
+ assert.equal(root.querySelectorAll('.rt-priority-table').length,1);assert.equal(root.querySelectorAll('.rt-priority-table tbody tr').length,3);assert.match(root.textContent,/Motorista A/);assert.match(root.textContent,/Motorista B/);
  assert.match(root.textContent,/42/);assert.match(root.textContent,/Loja prioritária/);assert.match(root.textContent,/125/);assert.match(root.textContent,/Matriz/);assert.equal(root.querySelectorAll('[data-rt-priority-sheet-form]').length,1);
- const printed=root.querySelector('.rt-priority-print-content'),styles=readFileSync(new URL('../src/devolucoes/returns.css',import.meta.url),'utf8');assert.deepEqual([...printed.querySelector('.rt-priority-driver-group table thead').querySelectorAll('th')].map(th=>th.textContent),['Código do PDV','Nome do PDV','Mapa']);assert.ok(!printed.textContent.includes('Valter'));assert.match(styles,/#view-returns-priority-sheet \.rt-priority-pending\{display:none!important\}/);
+ const printed=root.querySelector('.rt-priority-print-content'),styles=readFileSync(new URL('../src/devolucoes/returns.css',import.meta.url),'utf8'),rows=[...printed.querySelectorAll('.rt-priority-table tbody tr')];assert.equal(printed.querySelectorAll('table').length,1);assert.deepEqual([...printed.querySelector('.rt-priority-table thead').querySelectorAll('th')].map(th=>th.textContent),['Mapa','Motorista','Código do PDV','Nome do PDV','Revenda','Conferência']);assert.deepEqual(rows.map(row=>row.querySelector('td').textContent),['123','123','125']);assert.deepEqual(rows.map(row=>row.querySelectorAll('td')[2].textContent),['42','43','44']);assert.ok(!printed.textContent.includes('Valter'));assert.match(styles,/#view-returns-priority-sheet \.rt-priority-table-panel/);
  assert.ok(root.querySelector('[data-rt-action=print-priority-sheet]'));await h.click(root.querySelector('[data-rt-action=print-priority-sheet]'));assert.equal(h.printCalls,1);
 });
-test('folha deixa mapas ambíguos e motoristas ausentes em seção de confirmação',async()=>{
+test('folha mantém pendências na tabela e permite confirmar mapas ambíguos',async()=>{
  const entries=[
   {priority:{priority_date:today,customer_code:'42',customer_name:'Loja prioritária',city:'Caicó'},routes:[{map_number:'123',customer_name:'Loja prioritária',city:'Caicó',driver:'Motorista A'},{map_number:'456',customer_name:'Loja prioritária',city:'Caicó',driver:'Motorista B'}]},
   {priority:{priority_date:today,customer_code:'43',customer_name:'Loja sem motorista',city:'Caicó'},routes:[{map_number:'789',customer_name:'Loja sem motorista',city:'Caicó',driver:''}]},
@@ -71,9 +71,9 @@ test('folha deixa mapas ambíguos e motoristas ausentes em seção de confirmaç
  ];
  const h=harness({rpc:async(name)=>name==='returns_priority_routes'?{data:entries,error:null}:{data:sample,error:null}});
  await h.module.enter('returns-priority-sheet');await flush();const root=h.document.querySelector('#view-returns-priority-sheet');
- assert.equal(root.querySelectorAll('.rt-priority-driver-group').length,0);assert.match(root.textContent,/Confirmar antes de encaminhar/);assert.match(root.textContent,/Selecione um mapa/);assert.match(root.textContent,/motorista não confirmado/);
+ assert.equal(root.querySelectorAll('.rt-priority-table').length,1);assert.equal(root.querySelectorAll('.rt-priority-table tbody tr').length,3);assert.match(root.textContent,/A confirmar/);assert.match(root.textContent,/Selecione um mapa/);assert.match(root.textContent,/motorista não confirmado/);
  const picker=root.querySelector('[data-rt-priority-route]');for(const option of picker.querySelectorAll('option'))option.selected=option.value==='456';for(const fn of h.events.change)await fn({target:picker});
- assert.match(root.querySelector('.rt-priority-driver-group').textContent,/Motorista B/);assert.match(root.textContent,/Confirmar antes de encaminhar/);
+ assert.match(root.querySelector('.rt-priority-table').textContent,/Motorista B/);assert.equal(root.querySelectorAll('.rt-priority-table').length,1);assert.match(root.textContent,/Não encaminhar/);
 });
 test('folha mostra estado vazio quando não há prioridades na data',async()=>{
  const h=harness({rpc:async(name)=>name==='returns_priority_routes'?{data:[],error:null}:{data:sample,error:null}});

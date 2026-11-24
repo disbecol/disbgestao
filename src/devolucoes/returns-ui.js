@@ -162,23 +162,29 @@
    for(const item of entries.filter(entry=>entry.confirmed)){const driver=item.route.driver,key=R.norm(driver);if(!groups.has(key))groups.set(key,{driver,items:[]});groups.get(key).items.push(item);}
    return [...groups.values()].sort((a,b)=>a.driver.localeCompare(b.driver,'pt-BR'));
   }
-  function prioritySheetRow(item){
-   const p=item.priority;
-   return [E(p.customer_code),E(p.customer_name||'—'),E(item.route.map_number)];
+  function prioritySheetSort(entries){
+   return [...entries].sort((a,b)=>{
+    const left=R.number(a.route?.map_number),right=R.number(b.route?.map_number);
+    if(left!==null&&right!==null&&left!==right)return left-right;
+    if(left!==null&&right===null)return -1;
+    if(left===null&&right!==null)return 1;
+    return R.text(a.route?.map_number).localeCompare(R.text(b.route?.map_number),'pt-BR',{numeric:true})||R.text(a.priority.customer_code).localeCompare(R.text(b.priority.customer_code),'pt-BR',{numeric:true});
+   });
   }
-  function prioritySheetPendingRow(item){
+  function prioritySheetRow(item){
    const p=item.priority,route=item.route,routeCell=item.routes.length>1?`<select data-rt-priority-route data-code="${E(p.customer_code)}" aria-label="Escolher mapa para ${E(p.customer_name)}"><option value="">Selecione o mapa</option>${item.routes.map((match,index)=>`<option value="${E(match.map_number)}" ${item.selected===index?'selected':''}>${E(match.map_number||'Mapa não informado')} · ${E(match.driver||'Motorista não confirmado')}</option>`).join('')}</select>`:E(route?.map_number||'Não localizado');
-   return [`<strong>${E(p.customer_code)} · ${E(p.customer_name)}</strong>`,E(p.city||'Não informada'),routeCell,E(route?.driver||'Não confirmado'),E(ctx().unit==='Matriz Caicó'?'Matriz':ctx().unit==='Filial Pau dos Ferros'?'Filial':ctx().unit),E(item.issue)];
+   const branch=ctx().unit==='Matriz Caicó'?'Matriz':ctx().unit==='Filial Pau dos Ferros'?'Filial':ctx().unit;
+   const status=item.confirmed?'<span class="rt-status">Confirmada</span>':`<span class="rt-status">A confirmar</span><small>Não encaminhar: ${E(item.issue)}.</small>`;
+   return [routeCell,E(route?.driver||'Não confirmado'),E(p.customer_code),E(p.customer_name||'—'),E(branch),status];
   }
   function prioritySheetView(data=snapshot){
-   const entries=prioritySheetEntries(data),groups=prioritySheetGroups(entries),pending=entries.filter(item=>!item.confirmed),headers=['Código do PDV','Nome do PDV','Mapa'],pendingHeaders=['Código do PDV','Nome do PDV','Mapa / opções','Motorista','Revenda','Conferência'];
-   const groupsHtml=groups.map(group=>`<section class="rt-panel rt-priority-driver-group"><header><h2>${E(group.driver)}</h2><p>${group.items.length} prioridade(s)</p></header>${table(headers,group.items.map(prioritySheetRow))}</section>`).join('');
-   const pendingHtml=pending.length?`<section class="rt-panel rt-priority-pending"><header><h2>Confirmar antes de encaminhar</h2><p>Estas prioridades ainda não foram atribuídas a um motorista. Não as envie até resolver a pendência.</p></header>${table(pendingHeaders,pending.map(prioritySheetPendingRow))}</section>`:'';
+   const entries=prioritySheetEntries(data),groups=prioritySheetGroups(entries),pending=entries.filter(item=>!item.confirmed),sorted=prioritySheetSort(entries),headers=['Mapa','Motorista','Código do PDV','Nome do PDV','Revenda','Conferência'];
+   const priorityTable=table(headers,sorted.map(prioritySheetRow),{size:sorted.length,className:'rt-priority-table'});
    const dateForm=`<form class="rt-filters rt-priority-sheet-controls" data-rt-priority-sheet-form>${field('Data das prioridades','operation_date',prioritySheet.operation_date,'type="date" required')}<button class="btn primary" type="submit" ${busy||loading||syncing?'disabled':''}>${loading?'Carregando…':syncing?'Atualizando bases…':'Atualizar prioridades'}</button></form>`;
    if(!data&&error)return `${dateForm}<p class="rt-error" role="alert">${E(error)}</p>`;
    if(!data)return `${dateForm}${empty('Carregando prioridades e rotas da unidade…')}`;
    if(!entries.length)return `${dateForm}${empty('Não há prioridades cadastradas para esta data e unidade.')}`;
-   return `${dateForm}<div class="rt-kpis">${card('Prioridades do dia',num(entries.length))}${card('Motoristas identificados',num(groups.length))}${card('Prioridades atribuídas',num(entries.length-pending.length))}${card('A confirmar',num(pending.length))}</div><div class="rt-priority-print-content"><header class="rt-priority-print-heading"><h1>Prioridades por motorista</h1><p>${E(date(prioritySheet.operation_date))} · ${E(ctx().unit)}</p></header>${groupsHtml}${pendingHtml}</div>`;
+   return `${dateForm}<div class="rt-kpis">${card('Prioridades do dia',num(entries.length))}${card('Motoristas identificados',num(groups.length))}${card('Prioridades atribuídas',num(entries.length-pending.length))}${card('A confirmar',num(pending.length))}</div><div class="rt-priority-print-content"><header class="rt-priority-print-heading"><h1>Prioridades por motorista</h1><p>${E(date(prioritySheet.operation_date))} · ${E(ctx().unit)}</p></header><section class="rt-panel rt-priority-table-panel"><header><h2>Prioridades por mapa</h2><p>Os registros estão em uma única tabela, em ordem crescente de mapa. Resolva as pendências antes de encaminhar.</p></header>${priorityTable}</section></div>`;
   }
   function monitorEditorView(){
    const d=monitorDraft,routeOptions=monitorMatches.length>1?`<label class="rt-field rt-field-auto"><span>Mapa encontrado<small class="rt-field-origin">Automático</small></span><select data-rt-monitor-match><option value="">Selecione o mapa</option>${monitorMatches.map((r,i)=>`<option value="${i}" ${d.map_number===r.map_number?'selected':''}>${E(r.map_number)} · ${E(r.driver||'Motorista não informado')}</option>`).join('')}</select></label>`:'';
