@@ -18,8 +18,7 @@
     'returns-radius':['Análise por raio','Devoluções dentro e fora do raio, por motorista e justificativa.'],
     'returns-monitoring':['Monitoramento','Registre os apontamentos de devolução feitos pelos motoristas e acompanhe se foram encontrados na base.'],
     'returns-audited':['Devoluções auditadas','Audite as devoluções reais importadas da aba 03.02.24, mesmo que não tenham sido monitoradas.'],
-    'returns-priorities':['Prioridades do dia','Cadastre as prioridades informadas pelo gerente e identifique-as no Monitoramento.'],
-    'returns-priority-sheet':['Prioridades por motorista','Veja as prioridades da data agrupadas pelas rotas e imprima a tabela para encaminhar aos motoristas.'],
+    'returns-priority-sheet':['Prioridades por motorista','Consulte as prioridades da Matriz, agrupadas por motorista, e imprima código, PDV e mapa.'],
     'returns-goals':['Metas','Configure as metas de devolução por unidade e mês.'],
     'returns-import':['Bases do Google','Preencha as abas da unidade no Google Planilhas e acompanhe a atualização.']
   };
@@ -39,8 +38,8 @@
     if(typeof value==='number'){if(!Number.isFinite(value)||value<20000||value>80000)return null;return new Date(Date.UTC(1899,11,30)+Math.floor(value)*86400000).toISOString().slice(0,10);}
     const raw=text(value);let y,m,d,match;
     if((match=/^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/.exec(raw)))[,y,m,d]=match;
-    else if((match=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(raw)))[,d,m,y]=match;else return null;
-    const date=new Date(Date.UTC(+y,+m-1,+d));return date.getUTCFullYear()===+y&&date.getUTCMonth()===+m-1&&date.getUTCDate()===+d?`${y}-${m}-${d}`:null;
+    else if((match=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(raw)))[,d,m,y]=match;else return null;
+    const date=new Date(Date.UTC(+y,+m-1,+d));return date.getUTCFullYear()===+y&&date.getUTCMonth()===+m-1&&date.getUTCDate()===+d?`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`:null;
   }
   function number(value){
     if(value===null||value===undefined||text(value)==='')return null;
@@ -74,7 +73,7 @@
     for(let index=h.index+1;index<rows.length;index++){
       const v=(rows[index]||[]).slice(start,start+20);if(!v.some(x=>text(x)))continue;if(norm(v[0]).startsWith('total'))continue;sourceRows++;
       const r={operation_date:day(v[1]),return_date:day(v[14]),map_number:identifier(v[0]),invoice_number:identifier(v[3]),invoice_series:identifier(v[4]),customer_code:identifier(v[6]),customer_name:text(v[7]),amount_cents:cents(v[12]),volume_hl:volume(v[13]),reason_code:identifier(v[15]),reason:text(v[16]),plate:text(v[11]).toUpperCase(),return_time:text(v[19]),report_user:text(v[18]),source:{unb_note:text(v[2]),unb_customer:text(v[5]),phone:text(v[8]),area:text(v[9]),sector:text(v[10]),order_origin:text(v[17])}};
-      if(!r.operation_date||!r.map_number||!r.invoice_number||!r.customer_code||r.amount_cents===null||r.volume_hl===null||!r.return_date){issue(errors,index+1,'Confira data, mapa, nota, cliente, valor e volume.');continue;}
+      if(!r.operation_date||!r.map_number||!r.invoice_number||!r.customer_code||r.amount_cents===null||r.volume_hl===null||!r.return_date){issue(errors,index+1,'Confira data, mapa, nota, cliente, valor, volume e data da devolução.');continue;}
       const fingerprint=JSON.stringify(r);if(seen.has(fingerprint)){duplicates++;continue;}seen.add(fingerprint);
       r.row_key=key(r.operation_date,r.map_number,r.invoice_number,r.invoice_series,r.customer_code,r.return_date,r.return_time);
       const previous=groups.get(r.row_key);
@@ -117,6 +116,45 @@
       if(!r.operation_date||r.planned_outlets===null||!Number.isSafeInteger(r.planned_outlets)||r.planned_outlets<0||r.planned_hl===null){issue(errors,i+1,'Preencha uma data válida e os dois totais (PDVs e HL). Zero é permitido.');continue;}
       r.row_key=r.operation_date;const old=groups.get(r.row_key);if(old){issue(errors,i+1,'Data repetida na mesma unidade. Consolide o total diário antes de importar.');continue;}groups.set(r.row_key,r);
     }return {kind:'ROUTES',rows:[...groups.values()],errors,duplicates:0,sourceRows:groups.size};
+  }
+  function priorities(rows){
+    const h=header(rows,[['data'],['cod','codigo','cod cliente','codigo cliente'],['nome','nome cliente'],['cidade'],['vendedor'],['valor pedido'],['dia de visita'],['fora de rota'],['cliente foco'],['motivo prioridade']]),at=(...aliases)=>column(h.names,...aliases),c={
+      date:at('data'),code:at('cod','codigo','cod cliente','codigo cliente'),name:at('nome','nome cliente'),
+      city:at('cidade'),seller:at('vendedor'),amount:at('valor pedido'),visit:at('dia de visita'),
+      offRoute:at('fora de rota'),focus:at('cliente foco'),
+      reason:at('motivo prioridade','motivo da prioridade')
+    };
+    const warnings=[],groups=new Map(),errors=[],bool=value=>{
+      const raw=text(value),normalized=norm(raw);
+      if(!raw)return null;
+      if(raw==='-'||['nao','false','0','n'].includes(normalized))return false;
+      if(['sim','true','1','s','yes'].includes(normalized))return true;
+      return null;
+    },sheetError=value=>/^#(?:N\/D|REF!?|VALUE!?|DIV\/0!?|NAME\??|NUM!?|NULL!?)/i.test(text(value));
+    let skippedRows=0;
+    for(let i=h.index+1;i<rows.length;i++){
+      const v=rows[i]||[];
+      if(!v.some(value=>text(value)))continue;
+      const operation_date=day(v[c.date]),customer_code=identifier(v[c.code]);
+      if(!operation_date||!customer_code||sheetError(v[c.date])||sheetError(v[c.code])){
+        skippedRows++;
+        continue;
+      }
+      const row_key=key(operation_date,customer_code);
+      if(groups.has(row_key)){
+        skippedRows++;
+        continue;
+      }
+      groups.set(row_key,{
+        row_key,operation_date,priority_date:operation_date,customer_code,
+        customer_name:text(v[c.name]),city:text(v[c.city]),seller:text(v[c.seller]),
+        order_amount_cents:cents(v[c.amount]),visit_day:text(v[c.visit]),
+        off_route:bool(v[c.offRoute]),focus_client:bool(v[c.focus]),
+        reason:text(v[c.reason])
+      });
+    }
+    if(skippedRows)warnings.push(`${skippedRows} linha(s) ignorada(s): DATA ou COD ausente, inválido ou duplicado.`);
+    return {kind:'PRIORITIES',rows:[...groups.values()],errors,duplicates:skippedRows,sourceRows:groups.size+skippedRows,warnings,skippedRows};
   }
   function routeReport(rows,month,unit){
     if(!/^\d{4}-\d{2}$/.test(month))throw Error('Informe o mês de referência do relatório 17.03.');
@@ -166,5 +204,5 @@
     const groups=field=>{const map=new Map();for(const r of selected){const label=(field==='city'?cityLabel(r[field]):text(r[field]))||'Não informado',key=norm(label);if(!map.has(key))map.set(key,{label,rows:[]});const g=map.get(key);g.label=preferredLabel(g.label,label);g.rows.push(r);}return [...map.values()].map(g=>({label:g.label,...counts(g.rows)})).sort((a,b)=>b.outside-a.outside||b.total-a.total||a.label.localeCompare(b.label,'pt-BR'));};
     return {available:true,rows:selected,totals:counts(selected),drivers:groups('driver'),cities:groups('city')};
   }
-  return {STATUS,PENALTY_STATUS,RADIUS_STATUS,VIEWS,FOLLOWUP_VIEWS,text,norm,reasonKey,reasonLabel,cityLabel,labels,esc,identifier,day,number,cents,volume,dateShift,ratio,csv,report,orders,journeys,routeTotals,routeReport,customers,filterRows,totals,occurrences,registrationAge,grouped,analytics,radiusAnalysis,toCSV,customerDay};
+  return {STATUS,PENALTY_STATUS,RADIUS_STATUS,VIEWS,FOLLOWUP_VIEWS,text,norm,reasonKey,reasonLabel,cityLabel,labels,esc,identifier,day,number,cents,volume,dateShift,ratio,csv,report,orders,journeys,routeTotals,routeReport,priorities,customers,filterRows,totals,occurrences,registrationAge,grouped,analytics,radiusAnalysis,toCSV,customerDay};
 });

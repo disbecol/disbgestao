@@ -1,5 +1,14 @@
 # Devoluções
 
+## Prioridades da Matriz pelo Google Planilhas
+
+- A guia `prioridades - matriz` (gid `641675492`) passa a ser a origem da lista de prioridades. Ela exige `DATA`, `COD`, `NOME`, `CIDADE`, `VENDEDOR`, `VALOR PEDIDO`, `DIA DE VISITA`, `FORA DE ROTA?`, `CLIENTE FOCO?` e `MOTIVO PRIORIDADE`.
+- A migração incremental `supabase/93_returns_google_priorities.sql` deve ser aplicada depois das migrações 91 e 92. A sincronização usa a mesma leitura e publicação atômica das demais bases, preservando a última publicação válida quando houver falha.
+- DATA + COD identificam uma prioridade. Linhas com DATA/COD ausente ou inválido, inclusive erros `#N/D` nesses campos, e linhas duplicadas são ignoradas; a tela **Bases do Google** informa a quantidade ignorada. Erros em campos textuais opcionais permanecem como aparecem na origem; valor e indicadores inválidos ficam sem valor.
+- A Filial não tem guia de prioridades. **Prioridades por motorista** continua disponível, mas sem itens para a Filial; para a Matriz cruza prioridade, pedido e jornada por unidade, data e cliente.
+- A impressão para o motorista contém somente código do PDV, nome do PDV e mapa, agrupados pelo motorista. Itens pendentes de confirmação ficam visíveis no sistema, mas não são impressos.
+- O antigo cadastro **Prioridades do dia** foi removido da navegação. Dados salvos anteriormente na tabela de prioridades não são apagados, mas deixam de ser a origem consultada. Não há envio automático ao motorista.
+
 ## Atualização 1.7.93 — cadastro de clientes e novos clientes
 
 - Configurações > Bases e importações > CLIENTES aceita o relatório PY050094 em CSV Windows-1252 e o formato anterior de referências. Filial 1/0001 corresponde a Caicó (Matriz Caicó); 6/0006 corresponde a Pau dos Ferros (Filial Pau dos Ferros). Outras filiais são ignoradas e contadas na prévia.

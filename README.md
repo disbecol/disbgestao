@@ -151,19 +151,22 @@ migrações 87 e 88. A tela **Monitoramento** guarda os relatos prévios; a tela
 03.02.24, inclusive as que não tiveram aviso prévio. As duas telas usam as
 permissões existentes de Devoluções.
 
-Para cadastrar a base diária informada pelo gerente e sinalizar as prioridades
-no Monitoramento, aplique `supabase/91_returns_priorities.sql` depois da
-migração 90. A tela **Prioridades do dia** usa a permissão existente de edição
-de Devoluções; cada cliente é identificado por unidade, data e código.
+As prioridades da Matriz são lidas da guia **prioridades - matriz** (gid
+`641675492`) no Google Planilhas. Depois das migrações 91 e 92, aplique
+`supabase/93_returns_google_priorities.sql` para habilitar a sincronização e
+fazer **Prioridades por motorista** consultar essa origem. A guia deve conter
+`DATA`, `COD`, `NOME`, `CIDADE`, `VENDEDOR`, `VALOR PEDIDO`, `DIA DE VISITA`,
+`FORA DE ROTA?`, `CLIENTE FOCO?` e `MOTIVO PRIORIDADE`. A data e o código
+identificam cada cliente; linhas sem data/código válido ou duplicadas são
+ignoradas e contabilizadas como aviso. A Filial não tem base de prioridades.
 
-A tela **Prioridades por motorista** lista automaticamente as prioridades da
-data selecionada (hoje por padrão), agrupadas pelos motoristas encontrados nos
-pedidos e jornadas importados. A migração
-`supabase/92_returns_priority_routes.sql`, aplicada depois da 91, fornece essa
-consulta em lote usando o mesmo vínculo seguro de unidade/data da busca de
-pedidos. Mapa ambíguo, motorista ausente ou divergência de fantasia/cidade fica
-em **Confirmar antes de encaminhar**, sem atribuição automática. A impressão
-inclui essas pendências separadas; não há envio automático.
+**Prioridades por motorista** cruza a guia com pedidos e jornadas importados,
+usando unidade, data e código do cliente. Mapas ambíguos, motorista ausente ou
+divergências ficam em **Confirmar antes de encaminhar**, sem atribuição
+automática. A impressão encaminhada ao motorista mostra somente código do PDV,
+nome do PDV e mapa, agrupados por motorista; as pendências ficam fora da
+impressão. A sincronização é automática para usuários com permissão de
+importação, como nas demais bases Google.
 
 ## 3. Configurar o site
 

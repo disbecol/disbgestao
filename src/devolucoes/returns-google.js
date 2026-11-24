@@ -2,9 +2,9 @@
 (function(root,factory){const api=factory(typeof module==='object'&&module.exports?require('./returns.js'):root.DISB_RETURNS);if(typeof module==='object'&&module.exports)module.exports=api;else root.DISB_RETURNS_GOOGLE=api;})(typeof globalThis!=='undefined'?globalThis:this,R=>{
  'use strict';
  const SPREADSHEET='1hYle_7TyEitARZOYgYPoO5hUcxHsj0xxhTP7YCccGTM',INTERVAL=120000;
- const LABELS={REPORT:'Devoluções',ORDERS:'Pedidos',JOURNEYS:'Equipe',ROUTES:'Totais em rota'};
+ const LABELS={REPORT:'Devoluções',ORDERS:'Pedidos',JOURNEYS:'Equipe',ROUTES:'Totais em rota',PRIORITIES:'Prioridades'};
  const SHEETS={
-  'Matriz Caicó':[['REPORT','03.02.24 - MATRIZ',17030001],['ORDERS','PEDIDOS - MATRIZ',17030002],['JOURNEYS','BASE JORNADA LIQ - MATRIZ',17030003],['ROUTES','17.03 - MATRIZ',1816877762]],
+  'Matriz Caicó':[['REPORT','03.02.24 - MATRIZ',17030001],['ORDERS','PEDIDOS - MATRIZ',17030002],['JOURNEYS','BASE JORNADA LIQ - MATRIZ',17030003],['ROUTES','17.03 - MATRIZ',1816877762],['PRIORITIES','prioridades - matriz',641675492]],
   'Filial Pau dos Ferros':[['REPORT','03.02.24 - FILIAL',17030005],['ORDERS','PEDIDOS - FILIAL',17030006],['JOURNEYS','BASE JORNADA LIQ - FILIAL',17030007],['ROUTES','17.03 - FILIAL',17030008]]
  };
  const sources=unit=>(SHEETS[unit]||[]).map(([kind,title,gid])=>({kind,title,gid,label:LABELS[kind],url:`https://docs.google.com/spreadsheets/d/${SPREADSHEET}/edit#gid=${gid}`,filename:`Google Planilhas / ${kind} / ${gid}`}));
@@ -12,7 +12,7 @@
   const first=raw.indexOf('{'),last=raw.lastIndexOf('}');if(first<0||last<first)throw Error('A resposta do Google Planilhas não contém dados legíveis.');
   const response=JSON.parse(raw.slice(first,last+1));if(response.status==='error'||!Array.isArray(response.table?.cols)||!Array.isArray(response.table?.rows))throw Error('O Google Planilhas não disponibilizou esta aba para leitura.');
   if(response.table.rows.length>100000)throw Error('A base ultrapassa 100 mil linhas.');
-  const cell=value=>{const v=value?.v;if(v==null)return null;if(typeof v==='string'){const date=/^Date\((\d+),(\d+),(\d+)(?:,(\d+),(\d+),(\d+)(?:,(\d+))?)?\)$/.exec(v);if(date){const [,y,m,d,h=0,min=0,s=0,ms=0]=date;return (Date.UTC(+y,+m,+d,+h,+min,+s,+ms)-Date.UTC(1899,11,30))/86400000;}}if(Array.isArray(v))return v.slice(0,3).map(n=>String(n).padStart(2,'0')).join(':');return v;};
+  const cell=value=>{const v=value?.v;if(v==null)return typeof value?.f==='string'?value.f:null;if(typeof v==='string'){const date=/^Date\((\d+),(\d+),(\d+)(?:,(\d+),(\d+),(\d+)(?:,(\d+))?)?\)$/.exec(v);if(date){const [,y,m,d,h=0,min=0,s=0,ms=0]=date;return (Date.UTC(+y,+m,+d,+h,+min,+s,+ms)-Date.UTC(1899,11,30))/86400000;}}if(Array.isArray(v))return v.slice(0,3).map(n=>String(n).padStart(2,'0')).join(':');return v;};
   return [response.table.cols.map(c=>c.label||''),...response.table.rows.map(r=>response.table.cols.map((_,i)=>cell(r.c?.[i])))];
  }
  function referenceMonth(rows){
@@ -30,6 +30,7 @@
   if(kind==='REPORT')return R.report(rows);
   if(kind==='ORDERS')return R.orders(rows,unit);
   if(kind==='JOURNEYS')return R.journeys(rows);
+  if(kind==='PRIORITIES')return R.priorities(rows);
   // As três colunas de saída podem coexistir com o 17.03 original a partir de D.
   if(rows.slice(0,30).some(row=>R.norm(row[0])==='data'&&['pdvs em rota','pdvs','pdv'].includes(R.norm(row[1]))&&['hl em rota','hl','volume'].includes(R.norm(row[2]))))return R.routeTotals(rows.map(row=>row.slice(0,3)),unit);
   const names=rows.slice(0,30).flat().map(R.norm);return names.includes('cod id')||names.includes('codigo id')?R.routeReport(rows,referenceMonth(rows),unit):R.routeTotals(rows,unit);
@@ -64,7 +65,7 @@
       if(!valid())throw Error('Contexto de sincronização alterado.');
       return {...source,...data,extra:source.kind==='ORDERS'?directory(data.rows,unit):[]};
      }catch(e){throw Error(`${source.title}: ${e?.name==='AbortError'?'a leitura ultrapassou 20 segundos. Tente novamente.':String(e?.message||e).replace(source.title+': ','')}`);}}));clearTimeout(timeout);
-     const failed=[];for(let i=0;i<fetched.length;i++){const f=fetched[i];if(f.status==='rejected'){statuses[defs[i].kind]={state:'ERROR',message:String(f.reason?.message||f.reason)};failed.push(statuses[defs[i].kind].message);}else statuses[defs[i].kind]={state:f.value.rows.length?'OK':'EMPTY',count:f.value.rows.length};}
+     const failed=[];for(let i=0;i<fetched.length;i++){const f=fetched[i];if(f.status==='rejected'){statuses[defs[i].kind]={state:'ERROR',message:String(f.reason?.message||f.reason)};failed.push(statuses[defs[i].kind].message);}else statuses[defs[i].kind]={state:f.value.rows.length?'OK':'EMPTY',count:f.value.rows.length,...(f.value.warnings?.length?{warning:f.value.warnings.join(' ')}:{})};}
      if(failed.length)throw Error(failed.join('\n'));
      const imports=adapter.imports?.()||[],jobs=[];
      for(const result of fetched){const source=result.value;if(!source.rows.length)continue;

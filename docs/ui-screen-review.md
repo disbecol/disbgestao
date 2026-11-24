@@ -1,4 +1,4 @@
-# Revisão das telas — 1.7.110
+# Revisão das telas — 1.7.111
 
 Referência: Disbecol ERP observado em 24/11/2026. Direção: Inter local, superfícies neutras, índigo discreto nas ações, cores semânticas nos estados. Os estilos têm tratamento por área, além da camada compartilhada. As telas usam os renderizadores do aplicativo em uma prévia isolada, com registros fictícios e sem gravações.
 

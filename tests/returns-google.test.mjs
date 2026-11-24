@@ -13,7 +13,8 @@ const inputs={
  REPORT:[reportHeaders,['1','2026-11-17','','10','1','','42','Loja exemplo','','','','','100,00','0,5','2026-11-17','','Recusa','','','10:00']],
  ORDERS:[['Mapa','Cliente','Nome','Emissao','Nota','Serie','Status','Total','Cidade','Vendedor'],['1','42','Loja exemplo','2026-11-17','10','1','A','100,00','Caicó','Vendedor A']],
  JOURNEYS:[['DATA','MAPA','MOTORISTA','AJUDANTE 1','AJUDANTE 2','ROTA'],['2026-11-17','1','Motorista','Ajudante A','Ajudante B','Caicó']],
- ROUTES:[['DATA','PDVS EM ROTA','HL EM ROTA'],['2026-11-17','100','200']]
+ ROUTES:[['DATA','PDVS EM ROTA','HL EM ROTA'],['2026-11-17','100','200']],
+ PRIORITIES:[['DATA','COD','NOME','CIDADE','VENDEDOR','VALOR PEDIDO','DIA DE VISITA','FORA DE ROTA?','CLIENTE FOCO?','MOTIVO PRIORIDADE'],['03/11/2026',2434,'BAR DO COQUEIRO','TIMBAUBA DOS BATISTAS','132',5281.66,'1.SEG','SIM','-','Cobertura SCORE 5 - Faturado pro Mês']]
 };
 function harness({empty=false,invalid=false,permission=true,rpc:custom,fetch:customFetch}={}){
  const calls=[],urls=[],status=[];let unit=A,imports=[],clock=1000;const defs=[...G.sources(A),...G.sources(B)];
@@ -21,25 +22,43 @@ function harness({empty=false,invalid=false,permission=true,rpc:custom,fetch:cus
  const sync=G.create({context:()=>({client,user:{id:'user-a'},unit}),canSync:()=>permission,imports:()=>imports,crypto:webcrypto,now:()=>clock,onStatus:s=>status.push(s),fetch:async(url,opts)=>{urls.push(url);if(customFetch)return customFetch(url,opts);const source=defs.find(d=>String(d.gid)===new URL(url).searchParams.get('gid'));return {ok:true,text:async()=>invalid&&source.kind==='REPORT'?'Cabeçalho incorreto':'google.visualization.Query.setResponse('+JSON.stringify({status:'ok',table:{cols:inputs[source.kind][0].map(label=>({label})),rows:(empty?[]:inputs[source.kind].slice(1)).map(row=>({c:row.map(v=>({v}))}))}})+');'};}});
  return {sync,calls,urls,status,setUnit:u=>unit=u,setImports:v=>imports=v,advance:n=>clock+=n};
 }
-test('origens fixas usam oito abas por unidade e nunca a aba MAPAS',()=>{
- const a=G.sources(A),b=G.sources(B);assert.equal(a.length,4);assert.equal(b.length,4);assert.equal(new Set([...a,...b].map(s=>s.gid)).size,8);assert.ok(a.every(s=>s.title.endsWith('MATRIZ')));assert.ok(b.every(s=>s.title.endsWith('FILIAL')));assert.ok([...a,...b].every(s=>s.gid!==0));assert.deepEqual(G.sources('Unidade desconhecida'),[]);
+test('origens incluem prioridades somente na guia informada da Matriz',()=>{
+ const a=G.sources(A),b=G.sources(B);assert.equal(a.length,5);assert.equal(b.length,4);assert.equal(new Set([...a,...b].map(s=>s.gid)).size,9);assert.equal(a.at(-1).title,'prioridades - matriz');assert.equal(a.at(-1).gid,641675492);assert.ok(b.every(s=>s.title.endsWith('FILIAL')));assert.ok([...a,...b].every(s=>s.gid!==0));assert.deepEqual(G.sources('Unidade desconhecida'),[]);
 });
-test('quatro bases e dados de cliente são publicados juntos após a validação',async()=>{
- const h=harness();const result=await h.sync.sync();assert.equal(result.changed,true);assert.equal(h.urls.length,4);const begins=h.calls.filter(c=>c.name==='returns_begin_import');assert.equal(begins.length,5);assert.equal(h.calls.filter(c=>c.name==='returns_finish_import').length,0);const commit=h.calls.find(c=>c.name==='returns_google_sync'&&c.args.p_action==='COMMIT');assert.equal(commit.args.p_import_ids.length,5);assert.ok(h.calls.filter(c=>c.name==='returns_stage_import').length>=5);
+test('prioridades leem o cabeçalho da planilha, normalizam valores e ignoram chaves inválidas',()=>{
+ const parsed=G.parse('PRIORITIES',[
+  ['DATA','COD','NOME','CIDADE','VENDEDOR','VALOR PEDIDO','DIA DE VISITA','FORA DE ROTA?','CLIENTE FOCO?','MOTIVO PRIORIDADE'],
+  ['03/11/2026',2434,'BAR DO COQUEIRO','TIMBAUBA DOS BATISTAS','132','R$ 5.281,66','1.SEG','SIM','-','Cobertura SCORE 5 - Faturado pro Mês'],
+  ['#N/D','#N/D','#N/D','','','','','','',''],
+  ['03/11/2026',2435,'Mercado','','','','','','',''],
+  ['03/11/2026',2434,'Duplicado','','','','','','','']
+ ],A);
+ assert.equal(parsed.rows.length,2);assert.equal(parsed.rows[0].operation_date,'2026-11-03');assert.equal(parsed.rows[0].customer_code,'2434');assert.equal(parsed.rows[0].order_amount_cents,528166);assert.equal(parsed.rows[0].off_route,true);assert.equal(parsed.rows[0].focus_client,false);assert.equal(parsed.skippedRows,2);assert.match(parsed.warnings[0],/2 linha/);
+});
+test('quatro bases e prioridades e dados de cliente são publicados juntos após a validação',async()=>{
+ const h=harness();const result=await h.sync.sync();assert.equal(result.changed,true);assert.equal(h.urls.length,5);const begins=h.calls.filter(c=>c.name==='returns_begin_import');assert.equal(begins.length,6);assert.ok(begins.some(c=>c.args.p_kind==='PRIORITIES'));assert.equal(h.calls.filter(c=>c.name==='returns_finish_import').length,0);const commit=h.calls.find(c=>c.name==='returns_google_sync'&&c.args.p_action==='COMMIT');assert.equal(commit.args.p_import_ids.length,6);assert.ok(h.calls.filter(c=>c.name==='returns_stage_import').length>=6);
  const directory=h.calls.find(c=>c.name==='returns_stage_import'&&c.args.p_rows[0]?.seller==='Vendedor A'&&c.args.p_rows[0]?.branch===A);assert.equal(directory.args.p_rows[0].city,'Caicó');
 });
 test('bases vazias não apagam dados nem iniciam importações',async()=>{
  const h=harness({empty:true});const result=await h.sync.sync();assert.equal(result.changed,false);assert.ok(!h.calls.some(c=>c.name==='returns_begin_import'));const commit=h.calls.find(c=>c.args.p_action==='COMMIT');assert.ok(Object.values(commit.args.p_result.sources).every(s=>s.state==='EMPTY'));
 });
+test('linhas de prioridade sem data ou código não bloqueiam as demais bases e geram aviso',async()=>{
+ const customFetch=async url=>{
+  const gid=new URL(url).searchParams.get('gid'),source=G.sources(A).find(item=>String(item.gid)===gid),rows=source.kind==='PRIORITIES'?[inputs.PRIORITIES[0],['#N/D','#N/D','#N/D','','','','','','','']]:inputs[source.kind];
+  return {ok:true,text:async()=>`google.visualization.Query.setResponse(${JSON.stringify({status:'ok',table:{cols:rows[0].map(label=>({label})),rows:rows.slice(1).map(row=>({c:row.map(v=>({v}))}))}})});`};
+ };
+ const h=harness({fetch:customFetch});await h.sync.sync();const commit=h.calls.find(c=>c.name==='returns_google_sync'&&c.args.p_action==='COMMIT');
+ assert.equal(commit.args.p_result.sources.PRIORITIES.state,'EMPTY');assert.match(commit.args.p_result.sources.PRIORITIES.warning,/1 linha/);assert.ok(!h.calls.some(c=>c.name==='returns_begin_import'&&c.args.p_kind==='PRIORITIES'));assert.ok(!h.calls.some(c=>c.args.p_action==='FAIL'));
+});
 test('erro em uma aba cancela o grupo inteiro e indica a origem',async()=>{
  const h=harness({invalid:true});await assert.rejects(()=>h.sync.sync(),/03\.02\.24 - MATRIZ/);assert.ok(!h.calls.some(c=>c.name==='returns_begin_import'));assert.ok(h.calls.some(c=>c.args.p_action==='FAIL'));assert.ok(!h.calls.some(c=>c.args.p_action==='COMMIT'));
 });
 test('usa apenas a versão mais recente do hash, inclusive quando uma edição é desfeita',async()=>{
- const h=harness();await h.sync.sync();const latest=h.calls.filter(c=>c.name==='returns_begin_import').map(c=>({kind:c.args.p_kind,filename:c.args.p_filename,file_hash:c.args.p_hash}));h.setImports(latest);h.calls.length=0;await h.sync.sync({force:true});assert.ok(!h.calls.some(c=>c.name==='returns_begin_import'));
+ const h=harness();await h.sync.sync(); const latest=h.calls.filter(c=>c.name==='returns_begin_import').map(c=>({kind:c.args.p_kind,filename:c.args.p_filename,file_hash:c.args.p_hash}));h.setImports(latest);h.calls.length=0;await h.sync.sync({force:true});assert.ok(!h.calls.some(c=>c.name==='returns_begin_import'));
  h.setImports([{...latest[0],file_hash:'b'.repeat(64)},...latest]);h.calls.length=0;await h.sync.sync({force:true});assert.equal(h.calls.filter(c=>c.name==='returns_begin_import').length,1);
 });
 test('intervalo evita leituras repetidas; perfil sem permissão não grava',async()=>{
- const h=harness();await h.sync.sync();const n=h.urls.length;assert.equal((await h.sync.sync()).skipped,true);assert.equal(h.urls.length,n);h.advance(G.INTERVAL);await h.sync.sync();assert.equal(h.urls.length,n+4);
+ const h=harness();await h.sync.sync();const n=h.urls.length;assert.equal((await h.sync.sync()).skipped,true);assert.equal(h.urls.length,n);h.advance(G.INTERVAL);await h.sync.sync();assert.equal(h.urls.length,n+5);
  const viewer=harness({permission:false});assert.equal((await viewer.sync.sync()).skipped,true);assert.equal(viewer.calls.length,0);
 });
 test('troca de unidade aborta a leitura antiga sem publicar dados na nova unidade',async()=>{
@@ -56,5 +75,6 @@ test('17.03 original usa referência explícita da própria aba, sem presumir m�
 test('leitura usa valores brutos e preserva datas e números apesar do formato visual da célula',()=>{
  const raw='/*O_o*/ google.visualization.Query.setResponse('+JSON.stringify({status:'ok',table:{cols:[{label:'DATA'},{label:'TOTAL'},{label:'FILIAL'}],rows:[{c:[{v:'Date(2026,10,17)',f:'17/11/2026'},{v:1234.56,f:'R$ 1.234,56'},{v:'Date(1899,11,31)',f:'31/12/1899'}]}]}})+');';
  const rows=G.readResponse(raw);assert.equal(R.day(rows[1][0]),'2026-11-17');assert.equal(rows[1][1],1234.56);assert.equal(rows[1][2],1);
+ const errorRow=G.readResponse('google.visualization.Query.setResponse('+JSON.stringify({status:'ok',table:{cols:[{label:'COD'}],rows:[{c:[{v:null,f:'#N/D'}]}]}})+');');assert.equal(errorRow[1][0],'#N/D');
  assert.throws(()=>G.readResponse('<html>Login</html>'));assert.throws(()=>G.readResponse('{"status":"error"}'));
 });
