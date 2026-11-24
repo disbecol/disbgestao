@@ -8,14 +8,14 @@ As orientações de [Frontend Design](https://github.com/anthropics/skills/blob/
 
 | Papel | Claro | Escuro |
 |---|---|---|
-| Fundo | `#f6f7f9` | `#101319` |
-| Superfície | `#ffffff` | `#1b2029` |
-| Texto | `#28313d` | `#e6eaf0` |
-| Texto auxiliar | `#626e7e` | `#a8b2c1` |
-| Ação principal | `#147d87` | `#68c9c7` |
-| Borda | `#dce1e7` | `#303947` |
+| Fundo | `#f6f7f9` | `#0f1117` |
+| Superfície | `#ffffff` | `#191d26` |
+| Texto | `#242833` | `#e6e8ee` |
+| Texto auxiliar | `#626976` | `#aab0bd` |
+| Ação principal | `#5552c9` | `#b5afff` |
+| Borda | `#dfe2e8` | `#303541` |
 
-DM Sans para leitura e controles; Manrope para títulos e indicadores. Corpo de 15 px, campos de 14 px no computador e 16 px no celular. Tabelas usam uma escala compacta apropriada para dados; títulos variam de 23 a 28 px. Fontes locais, disponíveis offline, com `font-display: swap`.
+Inter variável, hospedada no próprio aplicativo, para leitura, controles, títulos e indicadores. Corpo de 15 px, campos de 14 px no computador e 16 px no celular. Tabelas usam uma escala compacta apropriada para dados; títulos variam de 23 a 28 px. Fontes locais, disponíveis offline, com `font-display: swap`.
 
 Verde, vermelho e âmbar indicam situações acompanhadas de texto. Os gráficos podem distinguir séries com cores adicionais. A assinatura permanece branca e os documentos impressos têm estilo próprio.
 
@@ -28,8 +28,10 @@ Avaria: Produtos e ações | Dados e documentos
 NRI: Carreta > lista de produtos em código decrescente
 ```
 
-Alinhamento à esquerda e espaços recorrentes de 4, 8, 12, 16, 24 e 32 px. Listas densas ficam em seus contêineres de rolagem; a página não deve ganhar rolagem lateral. Controles principais de toque têm altura mínima de 48 px. Estados mantêm nomes, foco visível e semântica de botão. Ícones novos usam traços vetoriais consistentes. Movimento reduzido é respeitado.
+Alinhamento à esquerda e espaços recorrentes de 4, 8, 12, 16, 24 e 32 px. Listas densas ficam em seus contêineres de rolagem; a página não deve ganhar rolagem lateral. Campos no celular têm altura mínima de 48 px e botões de ação, 46 px. Estados mantêm nomes, foco visível e semântica de botão. Ícones novos usam traços vetoriais consistentes. Movimento reduzido é respeitado.
 
 ## Evidência e limites
 
-Testes de contraste cobrem navegação, formulários, tabelas, estados, detalhes de avarias, dashboard e configurações da Puxada nos dois temas. As páginas principais da nova Puxada, o detalhe de avaria e a lista expansível de NRI foram revisados no navegador, inclusive em largura de celular. Os demais módulos são atendidos pela camada compartilhada e pelos testes representativos; não foi feita uma revisão manual de cada combinação de dados e permissões. Não houve teste físico de acessibilidade ou de tamanho de fonte do Android.
+Na versão 1.7.111 foram inventariados os 73 destinos atuais e revisadas suas telas, além do login e da análise por raio. As oito rotas de análises de Devoluções são apresentadas como abas de Acompanhamentos. Sete rotas antigas da Puxada apenas redirecionam para as seis páginas atuais e não são telas adicionais. A revisão usa os renderizadores reais, dados fictícios e bloqueio de gravações/conexão com produção. O registro por página está em [ui-screen-review.md](ui-screen-review.md).
+
+Foram verificados temas claro/escuro, computador/celular, contagens em andamento, relatórios, consultas, configurações e janelas de edição. Testes cobrem contraste, preservação dos controles e permissões, disponibilidade offline dos estilos/fontes e os fluxos existentes. Isso não constitui teste de todas as combinações possíveis de dados ou de instalação/acessibilidade em aparelho físico. Nenhum registro ou esquema de produção foi alterado nesta revisão visual.

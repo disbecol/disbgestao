@@ -1,0 +1,102 @@
+@media screen{
+ /* Recebimento: dados da carreta, inclusão de produtos e conferência da requisição. */
+ #appShell #view-nri-cadastro>form.card{padding:24px;max-width:1500px}
+ #appShell #view-nri-cadastro .form-block+.form-block{padding-top:22px;border-top:1px solid var(--screen-border)}
+ #appShell #view-nri-cadastro .nri-batch-summary{background:var(--screen-soft);border:1px solid var(--screen-border);border-radius:8px;padding:15px}
+ #appShell #view-nri-cadastro :is(.multi-lot-list,.nri-item-list){background:var(--screen-soft);border-color:var(--screen-border);border-radius:8px}
+ #appShell #view-nri-cadastro .nri-draft-card{border:1px solid var(--screen-border);border-radius:9px;background:var(--screen-surface);padding:16px;box-shadow:none}
+ #appShell #view-nri-cadastro :is(.nri-draft-card h3,.nri-item-head strong){font-size:14px;font-weight:600;color:var(--screen-text)}
+ #appShell #view-nri-cadastro :is(.nri-draft-card small,.nri-item-meta){font-size:12px;line-height:1.6;color:var(--screen-muted)}
+ #appShell #view-nri-cadastro .nri-form-footer{border-top:1px solid var(--screen-border);padding-top:18px}
+ #appShell #view-nri-cadastro .multi-lot-list.empty{font-size:11.5px;background:var(--screen-soft);color:var(--screen-muted)}
+ #appShell #view-nri-carretas #pullNriCards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:18px}
+ #appShell #view-nri-carretas .pull-card{border:1px solid var(--screen-border);background:var(--screen-surface);border-radius:12px;box-shadow:var(--screen-shadow)}
+ #appShell #view-nri-carretas :is(.pull-card-head,.pull-card-body){padding:18px;background:transparent;color:var(--screen-text)}
+ #appShell #view-nri-carretas .pull-card-head{border-color:var(--screen-border);align-items:center}
+ #appShell #view-nri-carretas .pull-card-head strong{font-size:18px;font-weight:650}
+ #appShell #view-nri-carretas .pull-card-body{display:grid;gap:9px;font-size:13px;line-height:1.6}
+ #appShell #view-nri-carretas .pending-nri-actions{display:flex;flex-wrap:wrap;padding:0 18px 18px;gap:9px}
+ #appShell #view-nri-carretas .pending-nri-actions .btn{flex:1}
+ #appShell #view-marketplace-recebimento :is(.marketplace-active,.marketplace-active-card){padding:22px;border:1px solid var(--screen-border);border-radius:11px;background:var(--screen-surface);box-shadow:none}
+ #appShell #view-marketplace-recebimento :is(.market-timer,.marketplace-timer){font-size:34px;font-weight:650;letter-spacing:-1px;color:var(--screen-text)}
+ #appShell #view-marketplace-recebimento .compact-list{margin-top:18px;display:grid;gap:10px}
+ #appShell #view-marketplace-recebimento .compact-row{padding:14px;background:var(--screen-soft);border-color:var(--screen-border);border-radius:8px;color:var(--screen-text);font:400 13px/1.5 Inter,system-ui,sans-serif}
+ #appShell #view-marketplace-recebimento .compact-row strong{color:var(--screen-text);font-size:13px;font-weight:550}
+ #appShell #view-marketplace-recebimento .compact-row :is(small,span){color:var(--screen-muted);font-size:12px}
+ #appShell #view-nri-pendentes .toolbar{padding:0 0 18px;border-bottom:1px solid var(--screen-border)}
+ #appShell #view-nri-pendentes .nri-pending-truck{border-radius:10px;background:var(--screen-surface);border-color:var(--screen-border);box-shadow:none}
+ #appShell #view-nri-pendentes .nri-pending-truck>summary{padding:18px 20px;background:var(--screen-surface);color:var(--screen-text)}
+ #appShell #view-nri-pendentes .nri-pending-truck[open]>summary{border-bottom:1px solid var(--screen-border);background:var(--screen-soft)}
+ #appShell #view-nri-pendentes .nri-pending-truck-label strong{font-size:14px;font-weight:600}
+ #appShell #view-nri-pendentes .nri-pending-truck-label small{font-size:12px;color:var(--screen-muted)}
+ #appShell #view-nri-pendentes .nri-pending-count{background:var(--screen-selected);color:var(--screen-accent);padding:4px 9px;border-radius:6px;font-size:11.5px}
+ #appShell :is(#view-nri-historico,#view-nri-avarias-historico) .filters{grid-template-columns:repeat(4,minmax(0,1fr))}
+ #appShell #view-nri-historico #histNriResultCount{font-size:12px;font-weight:450;color:var(--screen-muted);padding:12px 0}
+ /* Conferência: a contagem é o foco; metadados e venda ficam subordinados. */
+ #appShell #view-conf-cadastro #formConferencia{padding:24px}
+ #appShell #view-conf-cadastro .live-info{gap:14px;margin-bottom:24px}
+ #appShell #view-conf-cadastro .live-info>div{border:1px solid var(--screen-border);border-radius:8px;padding:13px 16px;background:var(--screen-soft);gap:5px}
+ #appShell #view-conf-cadastro .live-info small{font-size:11px;color:var(--screen-muted);font-weight:500;text-transform:none}
+ #appShell #view-conf-cadastro .live-info strong{font-size:13px;font-weight:550;color:var(--screen-text)}
+ #appShell #view-conf-cadastro :is(.conference-map-row,.map-line){background:transparent;padding:0;border:0;gap:12px}
+ #appShell #view-conf-cadastro :is(.conference-qty-card,.qty-card){padding:18px;border:1px solid var(--screen-border);border-radius:10px;background:var(--screen-surface);gap:12px;box-shadow:none}
+ #appShell #view-conf-cadastro :is(.conference-qty-card h3,.conference-qty-card label,.qty-card label){font-size:13px;line-height:1.5;font-weight:550;color:var(--screen-text)}
+ #appShell #view-conf-cadastro :is(.conference-qty-card input,.qty-card input){height:48px;background:var(--screen-soft);font-size:18px;font-weight:550;color:var(--screen-text);border-radius:8px;border-color:var(--screen-border)}
+ #appShell #view-conf-cadastro .conference-sale-panel{padding:14px;border-radius:8px;background:var(--screen-soft);border-color:var(--screen-border)}
+ #appShell #view-conf-dashboard .kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+ #appShell #view-conf-dashboard .conf-outcome-layout{gap:32px;align-items:center}
+ #appShell #view-conf-dashboard .conf-outcome-donut{max-width:190px;max-height:190px}
+ #appShell #view-conf-dashboard .conf-outcome-donut>div{background:var(--screen-surface);color:var(--screen-text)}
+ #appShell #view-conf-dashboard .conf-outcome-donut strong{font-size:30px;letter-spacing:-1px;font-weight:650}
+ #appShell #view-conf-dashboard .conf-outcome-donut span{font-size:11.5px;color:var(--screen-muted)}
+ #appShell #view-conf-dashboard .conf-outcome-row{font-size:13px;color:var(--screen-text)}
+ #appShell :is(#view-conf-minhas,#view-conf-historico) .filters{grid-template-columns:repeat(3,minmax(0,1fr))}
+ /* FEFO e Ativo de Giro: início enxuto e estação de contagem bem delimitada. */
+ #appShell :is(#view-fefo-contagem,#view-ativo-giro-contagem) :is(#fefoStartCard,#assetStartCard){max-width:1100px;padding:24px}
+ #appShell :is(#view-fefo-contagem,#view-ativo-giro-contagem) :is(.fefo-hero,.asset-count-header){padding:20px;border:1px solid var(--screen-border);border-radius:11px;background:var(--screen-surface);color:var(--screen-text);margin-bottom:18px}
+ #appShell :is(#view-fefo-contagem,#view-ativo-giro-contagem) :is(.fefo-hero h2,.asset-count-header h2){font-size:20px;font-weight:650}
+ #appShell :is(#view-fefo-contagem,#view-ativo-giro-contagem) :is(.fefo-hero p,.asset-count-header p){font-size:12px;line-height:1.6;color:var(--screen-muted)}
+ #appShell #view-fefo-contagem .operational-product-selected{border:1px solid var(--screen-border);border-radius:9px;background:var(--screen-soft);padding:14px}
+ #appShell #view-fefo-contagem .field input[type=number]{font-variant-numeric:tabular-nums}
+ #appShell #view-fefo-contagem :is(.fefo-totals,.fefo-count-summary){padding:16px;background:var(--screen-soft);border:1px solid var(--screen-border);border-radius:9px;gap:16px}
+ #appShell :is(#view-fefo-andamento,#view-fefo-relatorios,#view-ativo-giro-historico) .page-head{margin-bottom:22px}
+ #appShell #view-ativo-giro-contagem .asset-running-total{border:1px solid var(--screen-border);border-radius:8px;background:var(--screen-soft);padding:10px;margin:0}
+ #appShell #view-ativo-giro-contagem :is(.asset-count-row,.asset-entry-card){padding:16px;background:var(--screen-surface);border:1px solid var(--screen-border);border-radius:9px;margin-bottom:10px}
+ #appShell #view-ativo-giro-contagem :is(.asset-count-row strong,.asset-entry-card strong){font-size:14px;color:var(--screen-text)}
+ /* Materiais: cadastro separado do catálogo e saldo com leitura numérica clara. */
+ #appShell :is(#view-materiais-cadastro,#view-materiais-movimentacoes) .mat-form-card{padding:24px;border-radius:12px}
+ #appShell #view-materiais-contagem .mat-start-card{padding:24px;max-width:1200px}
+ #appShell #view-materiais-contagem .mat-active-head{display:flex;justify-content:space-between;align-items:center;gap:18px;background:var(--screen-surface)}
+ #appShell #view-materiais-contagem .mat-active-head h2{font-size:20px;font-weight:650}
+ #appShell #view-materiais-estoque .mat-kpi-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+ #appShell .screen-workspace[data-screen-area=materiais] .mat-identifier-box{padding:18px;background:var(--screen-soft);border:1px solid var(--screen-border);border-radius:9px;margin:20px 0}
+ #appShell .screen-workspace[data-screen-area=materiais] :is(.mat-id-chip,.mat-id-row){border:1px solid var(--screen-border);border-radius:7px;background:var(--screen-surface);color:var(--screen-text);font-size:12px;padding:8px 11px}
+ #appShell .screen-workspace[data-screen-area=materiais] .mat-badge.neutral{background:var(--screen-soft);color:var(--screen-muted);font-size:11px}
+ #appShell #view-materiais-contagem .mat-inventory-table td:nth-child(3),#appShell #view-materiais-estoque td:nth-child(4){font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+ /* Refugo: mapa, aferição em curso e histórico não competem visualmente. */
+ #appShell #view-refugo-afericao :is(.refugo-start,.refugo-start-card){max-width:1100px;border-radius:11px;background:var(--screen-surface);border-color:var(--screen-border);padding:22px}
+ #appShell #view-refugo-afericao :is(.refugo-session-head,.refugo-item-card,.refugo-open-card){border:1px solid var(--screen-border);background:var(--screen-surface);border-radius:10px;box-shadow:none;padding:18px}
+ #appShell #view-refugo-afericao .refugo-session-head{border:0;border-radius:0;padding:0 0 18px}
+ #appShell #view-refugo-afericao :is(.refugo-clock,.refugo-timer){font-size:30px;font-weight:650;letter-spacing:-.8px;color:var(--screen-text)}
+ #appShell #view-refugo-afericao .refugo-timer small{font-size:12px;font-weight:500;letter-spacing:0;color:var(--screen-muted)}
+ #appShell #view-refugo-afericao .refugo-timer strong{font-size:36px;line-height:1.3;font-weight:650}
+ #appShell #view-refugo-afericao .refugo-timer span{font-size:12px;font-weight:400;letter-spacing:0;color:var(--screen-muted)}
+ #appShell #view-refugo-afericao .refugo-total>span{background:var(--screen-soft);color:var(--screen-text);font-size:12px}
+ #appShell #view-refugo-afericao .refugo-total>span.refugo-rejected{background:#fcf0f1;color:#a8353d}
+ :root[data-theme=dark] #appShell #view-refugo-afericao .refugo-total>span.refugo-rejected{background:#492b34;color:#ffc0c7}
+ #appShell #view-refugo-afericao :is(.refugo-kind-grid,.refugo-open-grid){gap:14px}
+ #appShell #view-refugo-afericao .refugo-kind-button{background:var(--screen-surface);border:1px solid var(--screen-border);border-radius:9px;padding:15px;color:var(--screen-text)}
+ #appShell #view-refugo-afericao .refugo-kind-button.active{background:var(--screen-selected);border-color:var(--screen-ring);color:var(--screen-accent)}
+ #appShell #view-refugo-cadastros .refugo-catalog-card{padding:22px;background:var(--screen-surface);border:1px solid var(--screen-border);border-radius:11px}
+ #appShell #view-refugo-cadastros .refugo-catalog-group{margin:22px 0 12px;font-size:14px;font-weight:600;color:var(--screen-text)}
+ #appShell #view-refugo-cadastros .refugo-catalog-card small{font-size:12px;line-height:1.6;color:var(--screen-muted)}
+ #appShell #view-refugo-historico .table-wrap{margin-top:18px}
+ /* Todos os seletores de produto do armazém compartilham um resultado legível. */
+ #appShell .screen-workspace :is(.operational-product-options,.sales-product-options){background:var(--screen-surface);border-color:var(--screen-border);border-radius:9px;box-shadow:0 8px 24px #10182a14}
+ #appShell .screen-workspace :is(.operational-product-option,.sales-product-option){padding:12px;gap:12px;background:var(--screen-surface);border-color:var(--screen-border);color:var(--screen-text)}
+ #appShell .screen-workspace :is(.operational-product-option,.sales-product-option):hover{background:var(--screen-soft)}
+ #appShell .screen-workspace :is(.operational-product-option,.sales-product-option) strong{font-size:13px;font-weight:550;color:var(--screen-text)}
+ #appShell .screen-workspace :is(.operational-product-option,.sales-product-option) small{font-size:11px;color:var(--screen-muted)}
+ @media(max-width:1000px){#appShell #view-materiais-estoque .mat-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#appShell :is(#view-nri-historico,#view-nri-avarias-historico) .filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+ @media(max-width:700px){#appShell #view-nri-cadastro>form.card,#appShell #view-conf-cadastro #formConferencia,#appShell :is(#view-fefo-contagem,#view-ativo-giro-contagem) :is(#fefoStartCard,#assetStartCard),#appShell .screen-workspace[data-screen-area=materiais] .mat-form-card{padding:16px}#appShell #view-conf-cadastro :is(.qty-grid,.conference-qty-grid){grid-template-columns:1fr}#appShell #view-conf-cadastro .live-info{grid-template-columns:1fr 1fr;gap:10px}#appShell #view-conf-dashboard .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#appShell #view-nri-pendentes .nri-pending-truck>summary{padding:15px 13px}#appShell :is(#view-nri-historico,#view-nri-avarias-historico,#view-conf-minhas,#view-conf-historico) .filters{grid-template-columns:1fr}#appShell #view-materiais-contagem .mat-active-head{align-items:stretch;flex-direction:column}}
+}

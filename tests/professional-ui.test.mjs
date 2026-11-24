@@ -22,9 +22,9 @@ test('every application stylesheet remains available in the offline precache',()
   const html=read('index.html'),worker=read('sw.js');
   const sheets=[...html.matchAll(/<link\b[^>]*rel="stylesheet"[^>]*href="([^"]+)"/g)].map(match=>match[1]);
   assert.ok(sheets.length>10);
-  for(const href of sheets){assert.ok(worker.includes(`'${href}'`),`missing precache: ${href}`);assert.ok(fs.existsSync(new URL('../'+href.split('?')[0],import.meta.url)));}
-  assert.ok(sheets.at(-2).startsWith('src/shared/professional-ui.css'));
-  assert.ok(sheets.at(-1).startsWith('src/shared/appearance.css'));
+  for(const href of sheets){assert.ok(worker.includes(`'${href}'`)||worker.includes(JSON.stringify(href)),`missing precache: ${href}`);assert.ok(fs.existsSync(new URL('../'+href.split('?')[0],import.meta.url)));}
+  assert.ok(sheets.indexOf(sheets.find(s=>s.startsWith('src/shared/appearance.css')))<sheets.indexOf(sheets.find(s=>s.startsWith('src/shared/screen-design.css'))));
+  assert.ok(sheets.at(-1).startsWith('src/shared/screen-office.css'));
   assert.ok(read('scripts/copy-web.mjs').includes("for(const dir of ['src'])"),'APK must include the src module directories');
 });
 
