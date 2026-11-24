@@ -100,3 +100,20 @@
  @media(max-width:1000px){#appShell #view-materiais-estoque .mat-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#appShell :is(#view-nri-historico,#view-nri-avarias-historico) .filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
  @media(max-width:700px){#appShell #view-nri-cadastro>form.card,#appShell #view-conf-cadastro #formConferencia,#appShell :is(#view-fefo-contagem,#view-ativo-giro-contagem) :is(#fefoStartCard,#assetStartCard),#appShell .screen-workspace[data-screen-area=materiais] .mat-form-card{padding:16px}#appShell #view-conf-cadastro :is(.qty-grid,.conference-qty-grid){grid-template-columns:1fr}#appShell #view-conf-cadastro .live-info{grid-template-columns:1fr 1fr;gap:10px}#appShell #view-conf-dashboard .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#appShell #view-nri-pendentes .nri-pending-truck>summary{padding:15px 13px}#appShell :is(#view-nri-historico,#view-nri-avarias-historico,#view-conf-minhas,#view-conf-historico) .filters{grid-template-columns:1fr}#appShell #view-materiais-contagem .mat-active-head{align-items:stretch;flex-direction:column}}
 }
+
+@media screen{
+ /* O relatório aberto em janela usa as superfícies do tema, sem faixas brancas no escuro. */
+ :root[data-theme] #modal :is(.asset-history-total-card,.asset-total-location,.asset-history-view-caption){background:var(--screen-soft);border-color:var(--screen-border);color:var(--screen-text);box-shadow:none}
+ :root[data-theme] #modal .asset-history-total-card :is(strong,small,span),:root[data-theme] #modal .asset-history-view-caption :is(strong,span){color:inherit}
+ :root[data-theme] #modal .asset-history-total-card>small{font-size:11.5px;font-weight:450;color:var(--screen-muted)}
+ :root[data-theme] #modal .asset-history-total-card.patio{border-left:4px solid var(--screen-good-text)}
+ :root[data-theme] #modal .asset-history-total-card.refugo{border-left:4px solid var(--screen-bad-text)}
+ :root[data-theme] #modal .asset-history-view-tabs{background:var(--screen-soft);border-color:var(--screen-border);border-radius:9px;gap:6px}
+ :root[data-theme] #modal .asset-history-view-tab{background:transparent;border:1px solid transparent;color:var(--screen-muted);font:550 12px/1.5 Inter,system-ui,sans-serif;min-height:44px;border-radius:6px;letter-spacing:0;box-shadow:none}
+ :root[data-theme] #modal .asset-history-view-tab:hover{background:var(--screen-surface);color:var(--screen-text);border-color:var(--screen-border)}
+ :root[data-theme] #modal .asset-history-view-tab.active{background:var(--screen-selected);color:var(--screen-accent);border-color:var(--screen-ring);box-shadow:none}
+ :root[data-theme] #modal .asset-history-view-tab.patio:not(.active){color:var(--screen-good-text)}
+ :root[data-theme] #modal .asset-history-view-tab.refugo:not(.active){color:var(--screen-bad-text)}
+ :root[data-theme] #modal .asset-history-view-tab.patio.active{background:var(--screen-good-bg);color:var(--screen-good-text);border-color:var(--screen-good-text)}
+ :root[data-theme] #modal .asset-history-view-tab.refugo.active{background:var(--screen-bad-bg);color:var(--screen-bad-text);border-color:var(--screen-bad-text)}
+}

@@ -71,8 +71,8 @@
  #appShell #view-forms-manage .fm-model p{font-size:12px;line-height:1.7;color:var(--screen-muted)}
  #appShell #view-forms-manage .fm-model-meta{border-color:var(--screen-border);font-size:11.5px;color:var(--screen-muted)}
  #appShell #view-forms-manage .fm-question-editor{border:1px solid var(--screen-border);border-radius:10px;background:var(--screen-surface);padding:18px;box-shadow:none;margin-bottom:13px}
- #appShell #view-forms-manage .fm-question-heading{padding:0 0 13px;border-bottom:1px solid var(--screen-border);gap:12px}
- #appShell #view-forms-manage .fm-question-heading{background:var(--screen-soft);padding:12px;border-radius:7px}
+ #appShell #view-forms-manage .fm-question-heading{gap:12px;background:var(--screen-soft);padding:12px;border-radius:7px;border-bottom:1px solid var(--screen-border)}
+ #appShell #view-forms-manage .fm-question-heading>button{background:transparent;border:0;color:var(--screen-text);padding:4px;min-height:40px;border-radius:5px}
  #appShell #view-forms-manage .fm-question-dot{background:var(--screen-selected);color:var(--screen-accent);font-size:12px}
  #appShell #view-forms-manage :is(.fm-question-heading small,.fm-builder-bottom p,.fm-preview-question small,.fm-archive-row p){font-size:12px;line-height:1.6;color:var(--screen-muted)}
  #appShell #view-forms-manage .fm-question-heading strong{font-size:13px;font-weight:550;color:var(--screen-text)}
@@ -134,6 +134,29 @@
  #modal .fm-answer-card,#modal .fm-detail-section{padding:18px;background:var(--screen-surface);border:1px solid var(--screen-border);border-radius:10px;color:var(--screen-text)}
  @media(max-width:1100px){#appShell #view-usuarios .admin-grid{grid-template-columns:1fr}#appShell #view-forms-manage .fm-model-grid{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}}
  @media(max-width:700px){#loginScreen.login-screen{padding:16px}#loginScreen .login-brand-panel{padding:24px;border-right:0;border-bottom:1px solid var(--screen-border)}#loginScreen .login-brand-panel h1{font-size:25px;max-width:none}#loginScreen .login-form-panel{padding:24px}#loginScreen .feature-list{display:none}#loginScreen :is(input,select){font-size:16px;min-height:48px}#appShell #view-home .home-hero{padding:20px}#appShell #view-home .home-shortcut-grid{grid-template-columns:1fr}#appShell #view-home .home-shortcut-card{min-height:100px;padding:18px}#appShell #view-orders-new .od-types{grid-template-columns:1fr;gap:10px}#appShell #view-orders-new .od-type{padding:15px 16px}#appShell :is(#view-orders-own,#view-orders-queue,#view-orders-manage) .od-request{padding:16px}#appShell #view-forms-manage .fm-model-grid{grid-template-columns:1fr}#appShell #view-forms-manage .fm-question-editor,#appShell #view-forms-fill .fm-answer-card,#appShell #view-forms-self .fm-self-card,#appShell #view-forms-schedule .fm-schedule-editor{padding:16px}#appShell #view-forms-fill .fm-application-bar{padding:15px}#appShell #view-forms-fill .fm-answer-buttons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}#appShell #view-forms-fill .fm-answer-buttons button{padding-inline:12px}#appShell #view-forms-report .fm-report-tabs{flex-wrap:nowrap}#appShell #view-modulos-config .module-setting-card{padding:16px}#appShell #view-bases .geo-admin-card{padding:16px}}
+}
+
+@media screen{
+ /* A célula e seus conteúdos usam a mesma cor semântica, inclusive nos botões de detalhamento. */
+ :root[data-theme] :is(#appShell,#modal) :is(.fm-cell-good,.fm-farol-OK){--fm-cell-bg:var(--screen-good-bg);--fm-cell-text:var(--screen-good-text)}
+ :root[data-theme] :is(#appShell,#modal) :is(.fm-cell-bad,.fm-farol-NOK){--fm-cell-bg:var(--screen-bad-bg);--fm-cell-text:var(--screen-bad-text)}
+ :root[data-theme] :is(#appShell,#modal) :is(.fm-cell-warn,.fm-farol-NA){--fm-cell-bg:var(--screen-warn-bg);--fm-cell-text:var(--screen-warn-text)}
+ :root[data-theme] :is(#appShell #view-forms-report,#appShell #view-forms-self,#modal) :is(.fm-matrix,.fm-farol) td:is(.fm-cell-good,.fm-cell-bad,.fm-cell-warn,.fm-farol-OK,.fm-farol-NOK,.fm-farol-NA){background:var(--fm-cell-bg);color:var(--fm-cell-text)}
+ :root[data-theme] :is(#appShell #view-forms-report,#appShell #view-forms-self,#modal) :is(.fm-matrix,.fm-farol) td:is(.fm-cell-good,.fm-cell-bad,.fm-cell-warn,.fm-farol-OK,.fm-farol-NOK,.fm-farol-NA) :is(button,strong,small,span){color:inherit}
+ :root[data-theme] :is(#appShell,#modal) .fm-matrix .fm-cell-button{background:transparent;border:0;color:inherit;box-shadow:none;border-radius:5px}
+ :root[data-theme] :is(#appShell,#modal) .fm-matrix .fm-cell-button:hover{background:transparent;outline:1px solid currentColor;outline-offset:-4px}
+ :root[data-theme] :is(#appShell,#modal) .fm-matrix td small{font-size:11.5px;line-height:1.5}
+ :root[data-theme] :is(#appShell,#modal) .fm-preview-input{background:var(--screen-soft);border:1px solid var(--control-border);color:var(--screen-muted);border-radius:8px;font:400 14px/1.5 Inter,system-ui,sans-serif;min-height:44px;padding:11px 13px;box-shadow:none}
+ :root[data-theme] :is(#appShell,#modal) .fm-answer-buttons>:is(button,span){background:var(--screen-surface);border:1px solid var(--control-border);box-shadow:none;color:var(--screen-text);min-height:46px}
+ :root[data-theme] :is(#appShell,#modal) .fm-answer-buttons>.yes{color:var(--screen-good-text)}
+ :root[data-theme] :is(#appShell,#modal) .fm-answer-buttons>.no{color:var(--screen-bad-text)}
+ :root[data-theme] :is(#appShell,#modal) .fm-answer-buttons>.na{color:var(--screen-warn-text)}
+ :root[data-theme] :is(#appShell,#modal) .fm-answer-buttons>.yes.selected{background:var(--screen-good-fill);color:var(--screen-good-on);border-color:var(--screen-good-text)}
+ :root[data-theme] :is(#appShell,#modal) .fm-answer-buttons>.no.selected{background:var(--screen-bad-fill);color:var(--screen-bad-on);border-color:var(--screen-bad-text)}
+ :root[data-theme] :is(#appShell,#modal) .fm-answer-buttons>.na.selected{background:var(--screen-warn-fill);color:var(--screen-warn-on);border-color:var(--screen-warn-text)}
+ :root[data-theme] :is(#appShell,#modal) .fm-answer-buttons>button[aria-checked=true]{outline:2px solid currentColor;outline-offset:2px;font-weight:650}
+ :root[data-theme] :is(#appShell,#modal) .fm-answer-buttons>button[aria-checked=true]::before{content:'✓';margin-right:7px}
+ :root[data-theme] :is(#appShell,#modal) .fm-answer-buttons>span{cursor:default}
 }
 
 @media screen{

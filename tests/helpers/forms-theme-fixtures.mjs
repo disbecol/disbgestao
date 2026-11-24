@@ -1,0 +1,8 @@
+export const unit='Matriz Caicó';
+export const person={id:'worker',name:'Colaborador de exemplo',role:'COLABORADOR_ENTREGA',area:'Entrega',units:[unit],active:true};
+const checks=Array.from({length:10},(_,i)=>({id:'q'+i,label:i?'Condição '+i:'Todos estão usando EPIs?',type:'BOOLEAN',scope:'INDIVIDUAL',required:true,scored:true,expected:'YES',allow_na:true}));
+export const schema={evaluation:{enabled:true,area:'Entrega',membership:'AREA'},sections:[{id:'conditions',title:'Condições da equipe',fields:[...checks,{id:'text',label:'Observação',type:'TEXT',scope:'GROUP',required:false,scored:false}]}]};
+export const definition={id:'theme-form',name:'Inspeção da equipe',description:'Dados fictícios para conferir a apresentação.',area:'Entrega',form_type:'DTO',status:'PUBLISHED',version:1,units:[unit],apply_everyone:true,apply_roles:[],apply_user_ids:[],report_roles:['ADMIN'],report_user_ids:[],schema};
+const row=(id,month,ok,status='COMPLETED')=>({id,form_id:definition.id,form_name:definition.name,form_area:'Entrega',form_version:1,unit,code:'FORM-'+id,status,revision:1,respondent_id:'admin',respondent_name:'Aplicador de exemplo',evaluated_people:[person],schema_snapshot:schema,answers:{__evaluations:{worker:Object.fromEntries(checks.map((q,i)=>[q.id,{value:i<ok?'YES':'NO',observation:i<ok?'':'Condição a verificar.'}]))}},started_at:`2026-${month}-10T12:00:00Z`,completed_at:status==='COMPLETED'?`2026-${month}-10T12:10:00Z`:null});
+const na=row('na','07',0);na.answers.__evaluations.worker.q0.value='NA';
+export const responses=[na,row('warning','09',8),row('bad','10',0),row('good','11',10),row('draft','11',1,'DRAFT')];
