@@ -250,7 +250,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.110-refugo-module',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.110-pull-cycle-delete',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -12818,344 +12818,46 @@ function renderSalesPricing(){
   if(result.total>result.rows.length)box.insertAdjacentHTML('beforeend','<div class="empty-state">Exibindo os primeiros 100 produtos. Refine a pesquisa para encontrar os demais.</div>');
 }
 
-// PULL_CYCLE_DELETE_BEGIN
-// Exclusão administrativa: o banco remove o ciclo em uma transação e registra
-// os arquivos para remoção pela API do Storage, com nova tentativa se falhar.
-const renderPullHistoryBeforeDelete=renderPullHistory;
-renderPullHistory=function(){
-  renderPullHistoryBeforeDelete();
-  if(!isAdmin())return;
-  $('tbodyPullHistory')?.querySelectorAll('[data-hist-detail]').forEach(detail=>{
-    const trip=pullHistory.find(row=>row.id===detail.dataset.histDetail);
-    if(!trip||!['PULL','TRANSFER'].includes(trip.cycle_type))return;
-    const button=document.createElement('button');
-    button.type='button';button.className='mini-btn pull-delete-action';
-    button.dataset.pullDeleteCycle=trip.id;button.textContent='Excluir ciclo';
-    detail.parentElement?.appendChild(button);
-  });
-};
-const pullPlanCardHtmlBeforeDelete=pullPlanCardHtml;
-pullPlanCardHtml=function(plan,analyst=false){
-  const html=pullPlanCardHtmlBeforeDelete(plan,analyst);
-  if(!analyst||!isAdmin()||!['PULL','TRANSFER'].includes(plan.cycle_type))return html;
-  const action=plan.trip_id
-    ?`<button type="button" class="mini-btn pull-delete-action" data-pull-delete-cycle="${esc(plan.trip_id)}">Excluir ciclo</button>`
-    :`<button type="button" class="mini-btn pull-delete-action" data-pull-delete-plan="${esc(plan.id)}">Excluir viagem</button>`;
-  return html.replace('</div></article>',`${action}</div></article>`);
-};
-const renderPullFarolBeforeDelete=renderPullFarol;
-renderPullFarol=function(...args){
-  const result=renderPullFarolBeforeDelete(...args);
-  if(!isAdmin())return result;
-  $('pullFarolCards')?.querySelectorAll('[data-pull-detail]').forEach(detail=>{
-    const button=document.createElement('button');
-    button.type='button';button.className='btn secondary wide pull-delete-action';
-    button.dataset.pullDeleteCycle=detail.dataset.pullDetail;
-    button.textContent='Excluir ciclo';
-    detail.parentElement?.appendChild(button);
-  });
-  return result;
-};
-const onPullFarolClickBeforeDelete=onPullFarolClick;
-onPullFarolClick=function(event){
-  const button=event.target.closest('[data-pull-delete-cycle]');
-  if(button)return void openPullDeleteCycle(button.dataset.pullDeleteCycle);
-  return onPullFarolClickBeforeDelete(event);
-};
-const onPullHistoryClickBeforeDelete=onPullHistoryClick;
-onPullHistoryClick=function(event){
-  const button=event.target.closest('[data-pull-delete-cycle]');
-  if(button)return void openPullDeleteCycle(button.dataset.pullDeleteCycle);
-  return onPullHistoryClickBeforeDelete(event);
-};
-const onPullPlansClickBeforeDelete=onPullPlansClick;
-onPullPlansClick=function(event){
-  const cycle=event.target.closest('[data-pull-delete-cycle]');
-  if(cycle)return void openPullDeleteCycle(cycle.dataset.pullDeleteCycle);
-  const plan=event.target.closest('[data-pull-delete-plan]');
-  if(plan)return void openPullDeletePlan(plan.dataset.pullDeletePlan);
-  return onPullPlansClickBeforeDelete(event);
-};
-const loadPullHistoryBeforeDelete=loadPullHistory;
-loadPullHistory=async function(silent=false){
-  const result=await loadPullHistoryBeforeDelete(silent);
-  if(isAdmin())void refreshPullDeletedFilesButton();
-  return result;
-};
-
-async function refreshPullDeletedFilesButton(){
-  const button=$('btnPullDeletedFiles');if(!button||!isAdmin())return;
-  const {data,error}=await sb.from('pull_deleted_storage_files').select('id').limit(1000);
-  if(error){button.classList.add('hidden');console.warn('Arquivos pendentes da Puxada',error);return;}
-  const total=(data||[]).length;
-  button.classList.toggle('hidden',total===0);
-  button.textContent=`Limpar ${total}${total===1000?'+':''} arquivo${total===1?'':'s'} pendente${total===1?'':'s'}`;
-}
-async function removePullDeletedFiles(files){
-  let failed=0;
-  for(const file of files){
-    if(!['puxada-anexos','puxada-notas'].includes(file.bucket)||!file.path){failed++;continue;}
-    try{
-      const removed=await sb.storage.from(file.bucket).remove([file.path]);
-      const acknowledged=await sb.rpc('ack_pull_deleted_file',{p_bucket:file.bucket,p_path:file.path});
-      if(acknowledged.error)throw removed.error||acknowledged.error;
-    }catch(error){failed++;console.warn('Arquivo privado pendente de remoção',file,error);}
-  }
-  await refreshPullDeletedFilesButton();
-  return failed;
-}
-async function retryPullDeletedFiles(){
-  if(!isAdmin()||!navigator.onLine)return toast('Conecte-se para limpar os arquivos pendentes.','error');
-  const button=$('btnPullDeletedFiles');button.disabled=true;button.textContent='Limpando arquivos…';
-  try{
-    const {data,error}=await sb.from('pull_deleted_storage_files').select('bucket_id,object_name').order('queued_at').limit(1000);
-    if(error)throw error;
-    const files=(data||[]).map(row=>({bucket:row.bucket_id,path:row.object_name}));
-    const failed=await removePullDeletedFiles(files);
-    toast(failed?`${failed} arquivo(s) ainda pendentes. Tente novamente.`:`${files.length} arquivo(s) removidos.`,failed?'error':'success');
-  }catch(error){toast(humanError(error),'error');}
-  finally{button.disabled=false;await refreshPullDeletedFilesButton();}
-}
-async function openPullDeleteCycle(tripId){
-  if(!isAdmin()||!navigator.onLine)return toast('A exclusão do ciclo exige acesso de administrador e internet.','error');
-  try{
-    const {data:preview,error}=await sb.rpc('preview_pull_cycle_deletion',{p_trip_id:tripId});
-    if(error)throw error;
-    if(!preview)throw new Error('Ciclo não encontrado.');
-    const code=String(preview.trip_code||'');
-    const type=preview.cycle_type==='TRANSFER'?'transferência':'puxada';
-    const body=`<div class="notice"><strong>${esc(code)} • ${esc(preview.plate)}</strong><br>${esc(preview.origin_unit)} • ${esc(preview.status)}<br>${esc(preview.driver1_name)} / ${esc(preview.driver2_name||'—')}</div><p>Serão removidos ${Number(preview.events)||0} etapas, ${Number(preview.checklists)||0} checklists, o trajeto, ocorrências, notas e ${Number(preview.files)||0} arquivo(s) privado(s) deste ciclo. <strong>${Number(preview.nris_preserved)||0} solicitação(ões) de NRI permanecerão no histórico, desvinculadas do ciclo.</strong></p><div class="field"><label for="pullDeleteConfirmCode">Digite ${esc(code)} para confirmar *</label><input id="pullDeleteConfirmCode" autocomplete="off" placeholder="${esc(code)}"></div>`;
-    openModal(`Excluir ciclo de ${type}`,`${code} • exclusão permanente`,body,[
-      {label:'Voltar',class:'secondary',onClick:closeModal},
-      {label:'Excluir ciclo',class:'danger',onClick:async event=>{
-        if($('pullDeleteConfirmCode')?.value.trim().toUpperCase()!==code.toUpperCase())return toast('Digite o código exato do ciclo.','error');
-        const button=event.currentTarget;button.disabled=true;button.textContent='Excluindo ciclo…';
-        try{
-          const {data,error}=await sb.rpc('delete_pull_cycle',{p_trip_id:tripId,p_trip_code:code});
-          if(error)throw error;
-          closeModal();
-          const failed=await removePullDeletedFiles(data?.files||[]);
-          await Promise.all([loadPullHistory(true),loadPullPlans(true),loadPullFarol(true)]);
-          toast(failed?`Ciclo ${code} excluído. ${failed} arquivo(s) aguardam nova tentativa.`:`Ciclo ${code} e arquivos excluídos.`,failed?'error':'success');
-        }catch(error){button.disabled=false;button.textContent='Excluir ciclo';toast(humanError(error),'error');}
-      }}
-    ]);
-  }catch(error){toast(humanError(error),'error');}
-}
-async function openPullDeletePlan(planId){
-  if(!isAdmin()||!navigator.onLine)return toast('A exclusão da viagem exige acesso de administrador e internet.','error');
-  const plan=pullPlans.find(row=>row.id===planId);
-  if(!plan||plan.trip_id||!['PULL','TRANSFER'].includes(plan.cycle_type))return toast('Esta viagem já iniciou. Exclua o ciclo no histórico ou no Farol.','error');
-  const body=`<div class="notice"><strong>${esc(plan.plate)} → ${esc(plan.factory)}</strong><br>${esc(plan.origin_unit)} • ${esc(plan.driver1_name)} / ${esc(plan.driver2_name||'—')}</div><p>A viagem planejada e as notas anexadas serão excluídas permanentemente.</p><div class="field"><label for="pullDeleteConfirmPlate">Digite a placa ${esc(plan.plate)} para confirmar *</label><input id="pullDeleteConfirmPlate" autocomplete="off" placeholder="${esc(plan.plate)}"></div>`;
-  openModal('Excluir viagem planejada',plan.plate,body,[
-    {label:'Voltar',class:'secondary',onClick:closeModal},
-    {label:'Excluir viagem',class:'danger',onClick:async event=>{
-      if($('pullDeleteConfirmPlate')?.value.trim().toUpperCase()!==plan.plate.toUpperCase())return toast('Digite a placa exata da viagem.','error');
-      const button=event.currentTarget;button.disabled=true;button.textContent='Excluindo viagem…';
-      try{
-        const {data,error}=await sb.rpc('delete_pull_plan',{p_plan_id:plan.id,p_plate:plan.plate});
-        if(error)throw error;
-        closeModal();
-        const failed=await removePullDeletedFiles(data?.files||[]);
-        await loadPullPlans(true);
-        toast(failed?`Viagem excluída. ${failed} arquivo(s) aguardam nova tentativa.`:'Viagem planejada e arquivos excluídos.',failed?'error':'success');
-      }catch(error){button.disabled=false;button.textContent='Excluir viagem';toast(humanError(error),'error');}
-    }}
-  ]);
-}
-document.addEventListener('DOMContentLoaded',()=>{
-  $('btnPullDeletedFiles')?.addEventListener('click',retryPullDeletedFiles);
+const pullCycleDelete = window.DISB_PULL_CYCLE_DELETE?.create({
+  document, getElement: $,
+  getHistory: () => pullHistory, getPlans: () => pullPlans,
+  getClient: () => sb, isAdmin, isOnline: () => navigator.onLine,
+  escapeHtml: esc, toast, humanError,
+  openModal: (...args) => openModal(...args), closeModal: () => closeModal(),
+  loadHistory: (...args) => loadPullHistory(...args),
+  loadPlans: (...args) => loadPullPlans(...args),
+  loadFarol: (...args) => loadPullFarol(...args)
 });
-// PULL_CYCLE_DELETE_END
+if (pullCycleDelete) {
+  renderPullHistory = pullCycleDelete.wrapRenderHistory(renderPullHistory);
+  pullPlanCardHtml = pullCycleDelete.wrapPlanCardHtml(pullPlanCardHtml);
+  renderPullFarol = pullCycleDelete.wrapRenderFarol(renderPullFarol);
+  onPullFarolClick = pullCycleDelete.wrapFarolClick(onPullFarolClick);
+  onPullHistoryClick = pullCycleDelete.wrapHistoryClick(onPullHistoryClick);
+  onPullPlansClick = pullCycleDelete.wrapPlansClick(onPullPlansClick);
+  loadPullHistory = pullCycleDelete.wrapLoadHistory(loadPullHistory);
+  pullCycleDelete.bind();
+}
 
-// FEFO_COMPLETED_EDITS_BEGIN
-// Correcoes administrativas de contagens FEFO finalizadas.
-// O backend registra cada alteracao; esta tela nao publica dados em Vendas.
-let fefoCorrectionContext=null;
-const originalOpenFefoReport=openFefoReport;
-openFefoReport=function(id){
+// Correções administrativas de contagens FEFO finalizadas.
+const fefoCompletedEdits = window.DISB_FEFO_COMPLETED_EDITS?.create({
+  document, getElement: $,
+  getReports: () => fefoReports, getActiveCounts: () => fefoActiveCounts,
+  getItemsByCount: () => fefoItemsByCount, getProductsByCode: () => productsByCode,
+  getClient: () => sb, getActiveUnit: () => activeUnit, timeZone: TZ,
+  isAdmin, hasPermission: hasPerm, sortItems: fefoItemSort,
+  loadReports: loadFefoReports, fetchItemsForCount: fetchFefoItemsForCount,
+  rememberItems: rememberFefoItems, renderReports: renderFefoReports,
+  openModal: (...args) => openModal(...args), closeModal: () => closeModal(),
+  toast, humanError: humanFefoError,
+  escapeHtml: esc, formatDate: fmtDate, formatDateTime: fmtDateTime,
+  confirm: message => window.confirm(message)
+});
+const originalOpenFefoReport = openFefoReport;
+openFefoReport = function(id) {
   originalOpenFefoReport(id);
-  const count=fefoReports.find(row=>row.id===id)||fefoActiveCounts.find(row=>row.id===id);
-  if(!count||count.status!=='COMPLETED'||!isAdmin()||!hasPerm('FEFO_REPORT'))return;
-  const button=document.createElement('button');
-  button.className='btn secondary';
-  button.textContent='Editar contagem';
-  button.addEventListener('click',()=>openFefoCorrection(id));
-  $('modalActions').prepend(button);
+  fefoCompletedEdits?.onReportOpened(id);
 };
-
-function fefoCorrectionCount(){return fefoReports.find(row=>row.id===fefoCorrectionContext?.countId);}
-function fefoCorrectionItems(){return [...(fefoItemsByCount.get(fefoCorrectionContext?.countId)||[])].sort(fefoItemSort);}
-function fefoLocalDateTime(value){
-  if(!value)return '';
-  const parts=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(value)).map(x=>[x.type,x.value]));
-  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
-}
-function fefoTimestampFromInput(value){
-  if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value||''))return '';
-  const date=new Date(`${value}:00-03:00`);
-  return Number.isNaN(date.getTime())?'':date.toISOString();
-}
-function fefoCorrectionReason(){return $('fefoCorrectionReason')?.value.trim()||'';}
-function requireFefoReason(){
-  const reason=fefoCorrectionReason();
-  if(reason.length<5||reason.length>500){toast('Descreva a correção em pelo menos 5 caracteres.','error');$('fefoCorrectionReason')?.focus();return '';}
-  return reason;
-}
-
-async function openFefoCorrection(countId){
-  if(!isAdmin()||!hasPerm('FEFO_REPORT'))return;
-  let count=fefoReports.find(row=>row.id===countId);
-  if(!count){
-    await loadFefoReports(true);
-    count=fefoReports.find(row=>row.id===countId);
-  }
-  if(!count||count.status!=='COMPLETED')return;
-  fefoCorrectionContext={countId,profiles:[],units:[],edits:[],search:''};
-  openModal(`Editar • ${count.count_code}`,'Carregando dados da contagem…','<p class="notice">Carregando…</p>',[{label:'Voltar ao relatório',class:'secondary',onClick:()=>openFefoReport(countId)}]);
-  try{
-    const [profiles,units,edits]=await Promise.all([
-      sb.from('profiles').select('id,username,name').order('name'),
-      sb.from('units').select('name').eq('active',true).order('name'),
-      sb.from('fefo_completed_edits').select('target,action,before_data,after_data,reason,edited_by,edited_at').eq('count_id',countId).order('edited_at',{ascending:false}).limit(30)
-    ]);
-    for(const result of [profiles,units,edits])if(result.error)throw result.error;
-    if(fefoCorrectionContext?.countId!==countId)return;
-    fefoCorrectionContext.profiles=profiles.data||[];
-    fefoCorrectionContext.units=units.data||[];
-    fefoCorrectionContext.edits=edits.data||[];
-    renderFefoCorrection();
-  }catch(error){toast(humanFefoError(error),'error');openFefoReport(countId);}
-}
-
-function renderFefoCorrection(){
-  const context=fefoCorrectionContext,count=fefoCorrectionCount();if(!context||!count)return;
-  const items=fefoCorrectionItems();
-  const unitOptions=context.units.map(row=>`<option value="${esc(row.name)}" ${row.name===count.unit?'selected':''}>${esc(row.name)}</option>`).join('');
-  const profileOptions=context.profiles.map(row=>`<option value="${esc(row.id)}" ${row.id===count.counter_id?'selected':''}>${esc(row.name)} (${esc(row.username)})</option>`).join('');
-  const body=`<div class="fefo-correction">
-    <p class="notice">Corrija os dados e informe o motivo. Cada alteração fica registrada com o administrador e o horário. A contagem continua finalizada.</p>
-    <section class="fefo-correction-section"><h3>Dados do cabeçalho</h3>
-      <div class="fefo-correction-grid">
-        <label class="field"><span>Unidade</span><select id="fefoCorrectionUnit">${unitOptions}</select></label>
-        <label class="field"><span>Responsável</span><select id="fefoCorrectionCounter">${profileOptions}</select></label>
-        <label class="field"><span>Início</span><input id="fefoCorrectionStart" type="datetime-local" value="${esc(fefoLocalDateTime(count.started_at))}"></label>
-        <label class="field"><span>Finalização</span><input id="fefoCorrectionEnd" type="datetime-local" value="${esc(fefoLocalDateTime(count.completed_at))}"></label>
-      </div><button class="mini-btn" id="fefoCorrectionSaveHeader" type="button">Salvar cabeçalho</button>
-    </section>
-    <section class="fefo-correction-section"><div class="fefo-correction-heading"><div><h3>Itens da contagem</h3><small>${items.length} item(ns) • selecione um para corrigir</small></div><button class="mini-btn" id="fefoCorrectionAdd" type="button">+ Adicionar item</button></div>
-      <input id="fefoCorrectionSearch" type="search" placeholder="Buscar código, produto, validade ou rua" value="${esc(context.search)}" aria-label="Buscar itens da contagem">
-      <div id="fefoCorrectionList" class="fefo-correction-list"></div>
-    </section>
-    <section class="fefo-correction-section"><h3>Motivo da correção</h3><textarea id="fefoCorrectionReason" rows="2" maxlength="500" placeholder="Ex.: Corrigir validade informada na conferência"></textarea><small>Obrigatório ao salvar cabeçalho, incluir, alterar ou excluir item.</small></section>
-    <details class="fefo-correction-history"><summary>Histórico de correções (${context.edits.length}${context.edits.length===30?'+':''})</summary>${context.edits.map(row=>{const actor=context.profiles.find(p=>p.id===row.edited_by);return `<div><strong>${row.target==='HEADER'?'Cabeçalho':'Item'} • ${row.action==='ADD'?'Adicionado':row.action==='DELETE'?'Excluído':'Alterado'}</strong><span>${esc(actor?.name||'Administrador')} • ${fmtDateTime(row.edited_at)}</span><p>${esc(row.reason)}</p></div>`;}).join('')||'<p>Nenhuma correção registrada.</p>'}</details>
-  </div>`;
-  openModal(`Editar • ${count.count_code}`,'Contagem finalizada',body,[{label:'Voltar ao relatório',class:'secondary',onClick:()=>openFefoReport(count.id)}]);
-  $('fefoCorrectionSaveHeader').addEventListener('click',saveFefoCorrectionHeader);
-  $('fefoCorrectionAdd').addEventListener('click',()=>openFefoCorrectionItem(null));
-  $('fefoCorrectionSearch').addEventListener('input',event=>{context.search=event.target.value;renderFefoCorrectionItems();});
-  $('fefoCorrectionList').addEventListener('click',event=>{
-    const edit=event.target.closest('[data-fefo-correction-edit]');
-    const del=event.target.closest('[data-fefo-correction-delete]');
-    if(edit)openFefoCorrectionItem(edit.dataset.fefoCorrectionEdit);
-    else if(del)deleteFefoCorrectionItem(del.dataset.fefoCorrectionDelete);
-  });
-  renderFefoCorrectionItems();
-}
-
-function renderFefoCorrectionItems(){
-  const needle=String(fefoCorrectionContext?.search||'').trim().toLocaleLowerCase('pt-BR');
-  const rows=fefoCorrectionItems().filter(item=>!needle||[item.product_code,item.product_name,item.lot,item.street,fmtDate(item.validity_date)].join(' ').toLocaleLowerCase('pt-BR').includes(needle));
-  $('fefoCorrectionList').innerHTML=rows.map(item=>`<div class="fefo-correction-row"><div><strong>${esc(item.product_code)} • ${esc(item.product_name)}</strong><small>Validade ${fmtDate(item.validity_date)} • Rua ${esc(item.street||'—')} • Lote ${esc(item.lot||'—')}</small><small>Palete ${Number(item.pallet||0)} · Lastro ${Number(item.layer||0)} · Caixa ${Number(item.box||0)} · Unidade ${Number(item.loose_unit||0)}</small></div><div class="mini-actions"><button class="mini-btn" data-fefo-correction-edit="${item.id}">Editar</button><button class="mini-btn danger" data-fefo-correction-delete="${item.id}">Excluir</button></div></div>`).join('')||'<p class="notice">Nenhum item encontrado.</p>';
-}
-
-function openFefoCorrectionItem(itemId){
-  const count=fefoCorrectionCount(),item=fefoCorrectionItems().find(row=>row.id===itemId)||null;
-  if(!count)return;
-  const productOptions=[...productsByCode.values()].filter(row=>row.active!==false).sort((a,b)=>String(a.name).localeCompare(String(b.name),'pt-BR')).map(row=>`<option value="${esc(row.code)}">${esc(row.code)} • ${esc(row.name)}</option>`).join('');
-  openModal(`${item?'Editar':'Adicionar'} item • ${count.count_code}`,'Correção da contagem finalizada',`<form id="fefoCorrectionItemForm" class="fefo-correction-section">
-    <div class="fefo-correction-grid">
-      <label class="field"><span>Produto</span><select id="fefoCorrectionProduct" required><option value="">Selecione</option>${productOptions}</select></label>
-      <label class="field"><span>Validade</span><input id="fefoCorrectionValidity" type="date" required value="${esc(item?.validity_date||'')}"></label>
-      <label class="field"><span>Lote</span><input id="fefoCorrectionLot" maxlength="120" value="${esc(item?.lot||'')}"></label>
-      <label class="field"><span>Rua</span><input id="fefoCorrectionStreet" maxlength="100" value="${esc(item?.street||'')}"></label>
-      ${[['Pallet','pallet'],['Lastro','layer'],['Caixa','box'],['Unidade','loose_unit']].map(([label,key])=>`<label class="field"><span>${label}</span><input id="fefoCorrection${key}" type="number" min="0" step="1" required value="${Number(item?.[key]||0)}"></label>`).join('')}
-    </div>
-    <label class="field"><span>Motivo da correção</span><textarea id="fefoCorrectionItemReason" rows="2" minlength="5" maxlength="500" required placeholder="Descreva o que foi corrigido"></textarea></label>
-    <button class="btn primary" type="submit">${item?'Salvar item':'Adicionar item'}</button>
-  </form>`,[{label:'Voltar à contagem',class:'secondary',onClick:renderFefoCorrection}]);
-  $('fefoCorrectionProduct').value=item?.product_code||'';
-  if(item&&!$('fefoCorrectionProduct').value){
-    const option=document.createElement('option');option.value=item.product_code;option.textContent=`${item.product_code} • ${item.product_name} (histórico)`;$('fefoCorrectionProduct').append(option);$('fefoCorrectionProduct').value=item.product_code;
-  }
-  $('fefoCorrectionItemForm').addEventListener('submit',event=>saveFefoCorrectionItem(event,item));
-}
-
-async function refreshFefoCorrection(countId){
-  const [countResult,items]=await Promise.all([
-    sb.from('fefo_counts').select('*').eq('id',countId).single(),fetchFefoItemsForCount(countId)
-  ]);
-  if(countResult.error)throw countResult.error;
-  const index=fefoReports.findIndex(row=>row.id===countId);
-  if(index>=0)fefoReports[index]=countResult.data;else fefoReports.unshift(countResult.data);
-  rememberFefoItems(items,[countId]);renderFefoReports();
-  return countResult.data;
-}
-async function reloadFefoCorrection(countId){
-  const count=await refreshFefoCorrection(countId);
-  if(count.unit!==activeUnit){closeModal();await loadFefoReports(true);toast('Contagem movida para '+count.unit+'. Selecione essa unidade para consultá-la.','success');return;}
-  await openFefoCorrection(countId);
-}
-async function saveFefoCorrectionHeader(){
-  const count=fefoCorrectionCount(),reason=requireFefoReason();if(!count||!reason)return;
-  const p_started_at=$('fefoCorrectionStart').value===fefoLocalDateTime(count.started_at)
-    ?count.started_at:fefoTimestampFromInput($('fefoCorrectionStart').value);
-  const p_completed_at=$('fefoCorrectionEnd').value===fefoLocalDateTime(count.completed_at)
-    ?count.completed_at:fefoTimestampFromInput($('fefoCorrectionEnd').value);
-  if(!p_started_at||!p_completed_at||new Date(p_started_at).getTime()>new Date(p_completed_at).getTime()){
-    toast('Confira as datas e horários do início e da finalização.','error');return;
-  }
-  if($('fefoCorrectionUnit').value===count.unit&&$('fefoCorrectionCounter').value===count.counter_id
-    &&new Date(p_started_at).getTime()===new Date(count.started_at).getTime()
-    &&new Date(p_completed_at).getTime()===new Date(count.completed_at).getTime()){
-    toast('Nenhum dado do cabeçalho foi alterado.','error');return;
-  }
-  const button=$('fefoCorrectionSaveHeader');button.disabled=true;
-  try{
-    const {error}=await sb.rpc('edit_completed_fefo_header_v2',{p_count_id:count.id,p_unit:$('fefoCorrectionUnit').value,p_counter_id:$('fefoCorrectionCounter').value,p_started_at,p_completed_at,p_reason:reason});
-    if(error)throw error;
-    toast('Cabeçalho corrigido.','success');await reloadFefoCorrection(count.id);
-  }catch(error){toast(humanFefoError(error),'error');button.disabled=false;}
-}
-async function saveFefoCorrectionItem(event,item){
-  event.preventDefault();
-  const count=fefoCorrectionCount(),form=event.currentTarget,reason=$('fefoCorrectionItemReason').value.trim();if(!count)return;
-  if(reason.length<5){toast('Descreva a correção em pelo menos 5 caracteres.','error');return;}
-  const values={};
-  for(const key of ['pallet','layer','box','loose_unit']){
-    const value=Number($(`fefoCorrection${key}`).value);
-    if(!Number.isSafeInteger(value)||value<0){toast('As quantidades devem ser números inteiros não negativos.','error');return;}
-    values[`p_${key}`]=value;
-  }
-  const button=form.querySelector('button[type=submit]');button.disabled=true;
-  try{
-    const {error}=await sb.rpc('edit_completed_fefo_item_v2',{p_count_id:count.id,p_action:item?'UPDATE':'ADD',p_item_id:item?.id||null,p_product_code:$('fefoCorrectionProduct').value,p_validity_date:$('fefoCorrectionValidity').value,p_lot:$('fefoCorrectionLot').value.trim(),p_street:$('fefoCorrectionStreet').value.trim(),...values,p_reason:reason});
-    if(error)throw error;
-    toast(item?'Item corrigido.':'Item adicionado.','success');await reloadFefoCorrection(count.id);
-  }catch(error){toast(humanFefoError(error),'error');button.disabled=false;}
-}
-async function deleteFefoCorrectionItem(itemId){
-  const count=fefoCorrectionCount(),item=fefoCorrectionItems().find(row=>row.id===itemId),reason=requireFefoReason();
-  if(!count||!item||!reason)return;
-  if(!window.confirm(`Excluir o item ${item.product_code} • ${item.product_name} da contagem ${count.count_code}?`))return;
-  try{
-    const {error}=await sb.rpc('edit_completed_fefo_item_v2',{p_count_id:count.id,p_action:'DELETE',p_item_id:itemId,p_product_code:null,p_validity_date:null,p_lot:null,p_street:null,p_pallet:null,p_layer:null,p_box:null,p_loose_unit:null,p_reason:reason});
-    if(error)throw error;
-    toast('Item excluído da contagem.','success');await reloadFefoCorrection(count.id);
-  }catch(error){toast(humanFefoError(error),'error');}
-}
-
-// FEFO_COMPLETED_EDITS_END
 
 // FORMULARIOS_MODULE_START
 const deliveryDamageDashboard=window.DISB_DAMAGE_DASHBOARD_UI?.create({
