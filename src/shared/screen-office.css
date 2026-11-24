@@ -72,6 +72,9 @@
  #appShell #view-forms-manage .fm-model-meta{border-color:var(--screen-border);font-size:11.5px;color:var(--screen-muted)}
  #appShell #view-forms-manage .fm-question-editor{border:1px solid var(--screen-border);border-radius:10px;background:var(--screen-surface);padding:18px;box-shadow:none;margin-bottom:13px}
  #appShell #view-forms-manage .fm-question-heading{padding:0 0 13px;border-bottom:1px solid var(--screen-border);gap:12px}
+ #appShell #view-forms-manage .fm-question-heading{background:var(--screen-soft);padding:12px;border-radius:7px}
+ #appShell #view-forms-manage .fm-question-dot{background:var(--screen-selected);color:var(--screen-accent);font-size:12px}
+ #appShell #view-forms-manage :is(.fm-question-heading small,.fm-builder-bottom p,.fm-preview-question small,.fm-archive-row p){font-size:12px;line-height:1.6;color:var(--screen-muted)}
  #appShell #view-forms-manage .fm-question-heading strong{font-size:13px;font-weight:550;color:var(--screen-text)}
  #appShell #view-forms-manage .fm-question-fields{gap:16px;padding-top:18px}
  #appShell #view-forms-manage .fm-permission-grid{gap:12px;padding:16px;background:var(--screen-soft);border:1px solid var(--screen-border);border-radius:9px}

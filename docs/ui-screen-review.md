@@ -2,7 +2,7 @@
 
 Referência: Disbecol ERP observado em 24/11/2026. Direção: Inter local, superfícies neutras, índigo discreto nas ações, cores semânticas nos estados. Os estilos têm tratamento por área, além da camada compartilhada. As telas usam os renderizadores do aplicativo em uma prévia isolada, com registros fictícios e sem gravações.
 
-O inventário possui **74 destinos atuais**. Oito entradas de Devoluções são aliases das abas de Acompanhamentos; a análise por raio é uma nona aba. Sete páginas antigas da Puxada são redirecionamentos e ficam fora desta contagem. Login e janelas de trabalho também foram conferidos.
+O inventário possui **73 destinos atuais**. Oito entradas de Devoluções são aliases das abas de Acompanhamentos; a análise por raio é uma nona aba. Sete páginas antigas da Puxada são redirecionamentos e ficam fora desta contagem. Login e janelas de trabalho também foram conferidos.
 
 ## Registro individual
 
@@ -34,7 +34,6 @@ O inventário possui **74 destinos atuais**. Oito entradas de Devoluções são 
 | `returns-reasons` | Análise de motivos | Conferida | Abas de análise, filtros, listas, edição, metas e fontes. |
 | `returns-monitoring` | Monitoramento | Conferida | Abas de análise, filtros, listas, edição, metas e fontes. |
 | `returns-audited` | Devoluções auditadas | Conferida | Abas de análise, filtros, listas, edição, metas e fontes. |
-| `returns-priorities` | Prioridades do dia | Conferida | Abas de análise, filtros, listas, edição, metas e fontes. |
 | `returns-priority-sheet` | Prioridades por motorista | Conferida | Abas de análise, filtros, listas, edição, metas e fontes. |
 | `returns-goals` | Metas | Conferida | Abas de análise, filtros, listas, edição, metas e fontes. |
 | `returns-import` | Bases do Google | Conferida | Abas de análise, filtros, listas, edição, metas e fontes. |
@@ -100,4 +99,4 @@ Foram corrigidos os problemas encontrados de contraste em preços, Refugo, forne
 
 ## Validação
 
-552 testes do projeto e 27 do módulo React da Puxada passaram. Compilação TypeScript/Vite concluída. Fontes e estilos são locais e estão no precache. A prévia bloqueia mutações e acesso à produção. Não foi realizado teste em aparelho físico nem ensaio de todas as combinações de permissões.
+553 testes do projeto e 27 do módulo React da Puxada passaram. Compilação TypeScript/Vite concluída. Fontes e estilos são locais e estão no precache. A prévia bloqueia mutações e acesso à produção. Não foi realizado teste em aparelho físico nem ensaio de todas as combinações de permissões.

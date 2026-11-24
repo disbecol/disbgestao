@@ -32,6 +32,6 @@ Alinhamento à esquerda e espaços recorrentes de 4, 8, 12, 16, 24 e 32 px. List
 
 ## Evidência e limites
 
-Na versão 1.7.111 foram inventariados os 74 destinos atuais e revisadas suas telas, além do login e da análise por raio. As oito rotas de análises de Devoluções são apresentadas como abas de Acompanhamentos. Sete rotas antigas da Puxada apenas redirecionam para as seis páginas atuais e não são telas adicionais. A revisão usa os renderizadores reais, dados fictícios e bloqueio de gravações/conexão com produção. O registro por página está em [ui-screen-review.md](ui-screen-review.md).
+Na versão 1.7.111 foram inventariados os 73 destinos atuais e revisadas suas telas, além do login e da análise por raio. As oito rotas de análises de Devoluções são apresentadas como abas de Acompanhamentos. Sete rotas antigas da Puxada apenas redirecionam para as seis páginas atuais e não são telas adicionais. A revisão usa os renderizadores reais, dados fictícios e bloqueio de gravações/conexão com produção. O registro por página está em [ui-screen-review.md](ui-screen-review.md).
 
 Foram verificados temas claro/escuro, computador/celular, contagens em andamento, relatórios, consultas, configurações e janelas de edição. Testes cobrem contraste, preservação dos controles e permissões, disponibilidade offline dos estilos/fontes e os fluxos existentes. Isso não constitui teste de todas as combinações possíveis de dados ou de instalação/acessibilidade em aparelho físico. Nenhum registro ou esquema de produção foi alterado nesta revisão visual.
