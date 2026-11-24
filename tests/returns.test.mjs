@@ -7,6 +7,7 @@ const headers=['Mapa','Data','Unb Nota','Nota','Serie','Unb Cliente','Cod. Clien
 const reportRow=over=>Object.assign(['12','01/11/2026','47','77','1','47','42','Loja','','','','ABC1234','1.234,56','1,25','02/11/2026','1','Recusa','','Operador','10:00'],over);
 test('datas e números brasileiros não aceitam dias inexistentes e preservam zero',()=>{
  assert.equal(R.day('31/02/2026'),null);assert.equal(R.day('29/02/2024'),'2024-02-29');assert.equal(R.day(46327),'2026-11-01');
+ assert.equal(R.day('3/2/2026'),'2026-02-03');
  assert.equal(R.cents('R$ 1.234,56'),123456);assert.equal(R.cents(''),null);assert.equal(R.cents('0'),0);assert.equal(R.cents(-1),null);assert.equal(R.volume('0,0105'),.0105);
 });
 test('03.02.24 ignora A:E, agrupa motivos da nota, elimina cópia exata e conta PDVs por mapa/data',()=>{
@@ -16,6 +17,10 @@ test('03.02.24 ignora A:E, agrupa motivos da nota, elimina cópia exata e conta 
 });
 test('03.02.24 recusa estrutura errada e relata linha sem valor',()=>{
  assert.throws(()=>R.report([['Data','Mapa','Valor','Volume']]));assert.equal(R.report([headers,reportRow({12:''})]).errors.length,1);
+});
+test('03.02.24 aceita datas textuais sem zero à esquerda',()=>{
+ const parsed=R.report([headers,reportRow({1:'3/2/2026',14:'4/2/2026'})]);
+ assert.equal(parsed.errors.length,0);assert.equal(parsed.rows[0].operation_date,'2026-02-03');assert.equal(parsed.rows[0].return_date,'2026-02-04');
 });
 test('pedidos ignoram fórmulas auxiliares vazias e notas canceladas, sem contar o mesmo item duas vezes',()=>{
  const h=['Mapa','Cliente','Emissao','Nota','Total','Nome','Status','Produto','Qtde'];

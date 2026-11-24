@@ -39,8 +39,8 @@
     if(typeof value==='number'){if(!Number.isFinite(value)||value<20000||value>80000)return null;return new Date(Date.UTC(1899,11,30)+Math.floor(value)*86400000).toISOString().slice(0,10);}
     const raw=text(value);let y,m,d,match;
     if((match=/^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/.exec(raw)))[,y,m,d]=match;
-    else if((match=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(raw)))[,d,m,y]=match;else return null;
-    const date=new Date(Date.UTC(+y,+m-1,+d));return date.getUTCFullYear()===+y&&date.getUTCMonth()===+m-1&&date.getUTCDate()===+d?`${y}-${m}-${d}`:null;
+    else if((match=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(raw)))[,d,m,y]=match;else return null;
+    const date=new Date(Date.UTC(+y,+m-1,+d));return date.getUTCFullYear()===+y&&date.getUTCMonth()===+m-1&&date.getUTCDate()===+d?`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`:null;
   }
   function number(value){
     if(value===null||value===undefined||text(value)==='')return null;
@@ -74,7 +74,7 @@
     for(let index=h.index+1;index<rows.length;index++){
       const v=(rows[index]||[]).slice(start,start+20);if(!v.some(x=>text(x)))continue;if(norm(v[0]).startsWith('total'))continue;sourceRows++;
       const r={operation_date:day(v[1]),return_date:day(v[14]),map_number:identifier(v[0]),invoice_number:identifier(v[3]),invoice_series:identifier(v[4]),customer_code:identifier(v[6]),customer_name:text(v[7]),amount_cents:cents(v[12]),volume_hl:volume(v[13]),reason_code:identifier(v[15]),reason:text(v[16]),plate:text(v[11]).toUpperCase(),return_time:text(v[19]),report_user:text(v[18]),source:{unb_note:text(v[2]),unb_customer:text(v[5]),phone:text(v[8]),area:text(v[9]),sector:text(v[10]),order_origin:text(v[17])}};
-      if(!r.operation_date||!r.map_number||!r.invoice_number||!r.customer_code||r.amount_cents===null||r.volume_hl===null||!r.return_date){issue(errors,index+1,'Confira data, mapa, nota, cliente, valor e volume.');continue;}
+      if(!r.operation_date||!r.map_number||!r.invoice_number||!r.customer_code||r.amount_cents===null||r.volume_hl===null||!r.return_date){issue(errors,index+1,'Confira data, mapa, nota, cliente, valor, volume e data da devolução.');continue;}
       const fingerprint=JSON.stringify(r);if(seen.has(fingerprint)){duplicates++;continue;}seen.add(fingerprint);
       r.row_key=key(r.operation_date,r.map_number,r.invoice_number,r.invoice_series,r.customer_code,r.return_date,r.return_time);
       const previous=groups.get(r.row_key);
