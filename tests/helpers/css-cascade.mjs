@@ -7,12 +7,12 @@ import {selectorSpecificity, compare} from '@csstools/selector-specificity';
 import {parseHTML} from 'linkedom';
 
 const read = file => fs.readFileSync(new URL('../../'+file,import.meta.url),'utf8');
-export function cascade({theme='light',width=1280,media='screen',markup}={}) {
+export function cascade({theme='light',width=1280,media='screen',markup,stylesheets}={}) {
   const html=read('index.html');
   const {document}=parseHTML(markup||html);
   document.documentElement.dataset.theme=theme;
   const rules=[];
-  for(const sheet of [...html.matchAll(/rel="stylesheet"[^>]*href="([^?"]+)/g)].map(m=>m[1])) {
+  for(const sheet of stylesheets||[...html.matchAll(/rel="stylesheet"[^>]*href="([^?"]+)/g)].map(m=>m[1])) {
     postcss.parse(read(sheet)).walkRules(rule=>{
       for(let parent=rule.parent;parent;parent=parent.parent) {
         if(parent.type!=='atrule') continue;

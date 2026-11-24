@@ -250,7 +250,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.108-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.109-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -552,7 +552,32 @@ function updateOnlineStatus(){ const el=$('syncPill'); if(!el)return; const onli
 function sanitizeLot(value){ return String(value||'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
 function enforceLotInput(e){ const clean=sanitizeLot(e?.target?.value); if(e?.target&&e.target.value!==clean)e.target.value=clean; }
 
+function setupPullEmbeddedApp(){
+  const integration=window.DISB_PULL_INTEGRATION;if(!integration)return;
+  integration.configure({context:()=>({sb,user:authUser,profile,units:myUnits,unit:activeUnit,hasPerm}),openView,captureLocation:async timeoutMs=>{const gps=await captureGps({maxWaitMs:timeoutMs,useRecent:false});return {location:{latitude:gps.latitude,longitude:gps.longitude,accuracy:gps.accuracy,capturedAt:gps.capturedAt||new Date().toISOString(),source:'GPS'},locationStatus:'Captured'};}});
+  const legacy={'operations':'puxada-viagem','plans':'puxada-cadastrar','control':'puxada-farol','history':'puxada-historico','dashboard':'puxada-dashboard'};
+  const menu=document.querySelector('.nav-module[data-module="puxada"] .nav-module-items');
+  for(const [page,route]of Object.entries(integration.routes)){
+    const view='puxada-app-'+page;viewMeta[view]=[route.label+' · Puxada','Operação e gestão de viagens'];
+    let section=$('view-'+view);if(!section){section=document.createElement('section');section.id='view-'+view;section.className='view role-puxada puxada-embedded-view';$('mainContent').append(section);}
+    if(route.permission)section.dataset.permission=route.permission;else section.dataset.permissionAny=route.permissions;
+    let button=document.querySelector('.nav-item[data-view="'+view+'"]')||document.querySelector('.nav-item[data-view="'+legacy[page]+'"]');
+    if(!button)button=document.createElement('button');
+    const badge=button.querySelector('#badgePullAtivos'),icon=document.createElement('span');icon.setAttribute('aria-hidden','true');
+    const paths={operations:'<path d="M3 5h11v11H3zM14 9h4l3 4v3h-7"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>',plans:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/>',control:'<path d="M4 20V10m8 10V4m8 16v-7M2 20h20"/>',history:'<path d="M3 11a9 9 0 1 1 2 7M3 4v7h7m2-4v5l3 2"/>',dashboard:'<path d="M3 3v18h18M7 16l4-5 4 2 6-8"/>',settings:'<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/>'};
+    icon.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">'+paths[page]+'</svg>';
+    button.replaceChildren(icon,document.createTextNode(route.label));if(badge){badge.classList.add('hidden');button.append(badge);}
+    button.className='nav-item';button.dataset.view=view;button.removeAttribute('data-permission');button.removeAttribute('data-permission-any');
+    if(route.permission)button.dataset.permission=route.permission;else button.dataset.permissionAny=route.permissions;
+    menu?.append(button);
+  }
+  const all='PULL_TRIP,PULL_PLAN,PULL_FAROL,PULL_HISTORY,PULL_DASHBOARD,PULL_TMA_ADJUST,PULL_CONFIG,PULL_GOALS';
+  const module=menu?.closest('.nav-module'),area=menu?.closest('.nav-area');if(module)module.dataset.permissionAny=all;if(area)area.dataset.permissionAny=all;
+  document.querySelector('.nav-module[data-module="puxada-config-admin"]')?.classList.add('pull-legacy-navigation');
+}
+
 function bindBaseEvents(){
+  setupPullEmbeddedApp();
   $('formLogin').addEventListener('submit', login);
   $('btnMostrarSenha').addEventListener('click',()=>{ const i=$('loginSenha'); i.type=i.type==='password'?'text':'password'; $('btnMostrarSenha').textContent=i.type==='password'?'Mostrar':'Ocultar'; });
   $('btnSair').addEventListener('click', logout); $('btnSairMobile').addEventListener('click',logout);
@@ -597,7 +622,7 @@ function bindBaseEvents(){
   $('tbodyPendentes').addEventListener('change',onPendingCheck);
   $('btnSelecionarPendentes').addEventListener('click',toggleVisiblePendingSelection);
   $('btnImprimirTudo').addEventListener('click',()=>startPrint(filteredPending()));
-  $('btnImprimirSelecionadas').addEventListener('click',()=>startPrint(pendingNris.filter(x=>selectedNris.has(x.id))));
+  $('btnImprimirSelecionadas').addEventListener('click',()=>startPrint(pendingNris.filter(x=>selectedNris.has(x.id)).sort(comparePendingProduct)));
   if(isNativeCapacitor())$('btnNriAndroidPrintQueue')?.classList.remove('hidden');
   $('btnNriAndroidPrintQueue')?.addEventListener('click',manageNriAndroidPrintQueue);
   $('btnExcluirSelecionados').addEventListener('click',removeSelectedNris);
@@ -1059,6 +1084,7 @@ async function onModuleSettingsClick(event){
 
 async function logout(){
   if(submitAvaria._pending)return toast('Aguarde o registro da avaria ser salvo no aparelho.','');
+  window.DISB_PULL_INTEGRATION?.suspend();
   clearAvariaRequest();
   formsModule?.stop();
   returnsModule?.stop();
@@ -1132,7 +1158,7 @@ async function logout(){
   setLoginMessage('');
 }
 
-function showLogin(msg=''){ $('appShell').classList.add('hidden');$('loginScreen').classList.remove('hidden');setLoginMessage(msg); }
+function showLogin(msg=''){ window.DISB_PULL_INTEGRATION?.suspend(); $('appShell').classList.add('hidden');$('loginScreen').classList.remove('hidden');setLoginMessage(msg); }
 function setLoginMessage(msg){$('loginMessage').textContent=msg||'';}
 function loginError(e){ const m=String(e?.message||e||''); if(/invalid login/i.test(m))return 'Usuário ou senha inválidos.'; return humanError(e); }
 
@@ -1239,7 +1265,7 @@ function openModuleForView(name){
 function homeShortcutCatalog(){
   return [...document.querySelectorAll('.nav-item[data-view]')].filter(button=>{
     const view=button.dataset.view;
-    return view&&view!=='home'&&viewMeta[view]&&$(`view-${view}`)
+    return view&&!button.closest('.pull-legacy-navigation')&&view!=='home'&&viewMeta[view]&&$(`view-${view}`)
       &&!button.classList.contains('hidden')
       &&!button.closest('.nav-area')?.classList.contains('hidden')
       &&!button.closest('.nav-module')?.classList.contains('hidden')
@@ -1299,6 +1325,7 @@ function setHomeShortcutPicker(open){
 }
 function toggleHomeShortcutPicker(){setHomeShortcutPicker($('homeShortcutPicker')?.classList.contains('hidden'));}
 function renderHome(){
+  if(window.DISB_PULL_INTEGRATION)homeShortcutIds=[...new Set(homeShortcutIds.map(window.DISB_PULL_INTEGRATION.redirect))];
   const grid=$('homeShortcutGrid');if(!grid)return;
   const catalog=homeShortcutCatalog(),byView=new Map(catalog.map(item=>[item.view,item]));
   const selected=homeShortcutIds.map(id=>byView.get(id)).filter(Boolean);
@@ -1331,6 +1358,7 @@ function openView(name,force=false){
   if(name==='returns-recurrence')name='returns-penalties';
   if(window.DISB_RETURNS?.FOLLOWUP_VIEWS?.includes(name)){returnsModule?.activateDashboardTab(name);name='returns-followup';}
   if(name==='home'&&isPullDriver())name='puxada-viagem';
+  name=window.DISB_PULL_INTEGRATION?.redirect(name)||name;
   const v=$(`view-${name}`); if(!v||v.classList.contains('hidden'))return;
   if(activeView.startsWith('returns-')&&activeView!==name&&!returnsModule.canLeave())return;
   if(activeView.startsWith('orders-')&&activeView!==name&&!ordersModule.canLeave())return;
@@ -1338,6 +1366,7 @@ function openView(name,force=false){
   if(activeView.startsWith('fdr-')&&activeView!==name&&!fdrModule.canLeave())return;
   if(activeView.startsWith('fdr-')&&activeView!==name)fdrModule?.stop();
   if(!force&&activeView===name){toggleSidebar(false);return;}
+  if(!name.startsWith('puxada-app-'))window.DISB_PULL_INTEGRATION?.suspend();
   activeView=name; document.querySelectorAll('.view').forEach(x=>x.classList.remove('active')); v.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.view===name));
   openModuleForView(name);
@@ -1625,8 +1654,30 @@ async function showNriDamageDetail(r){
     openModal('Paletes avariados',`${r.nri||''} • ${r.codigoProduto||r.product_code||''} • lote ${r.lote||r.lot||''}`,body);
   }catch(e){toast(humanError(e),'error');}
 }
-function filteredPending(){const q=norm($('pendFiltro').value),u=$('pendUnidade').value;return pendingNris.filter(x=>(!u||x.unidade===u)&&(!q||norm([x.nri,x.codigoProduto,x.nomeProduto,x.lote,x.placa].join(' ')).includes(q)));}
-function renderPending(){const arr=filteredPending();$('tbodyPendentes').innerHTML=arr.length?arr.map(x=>{const hasDamage=nriDamageForRecord(x).length>0;return `<tr><td><input type="checkbox" data-check="${x.id}" ${selectedNris.has(x.id)?'checked':''}></td><td><strong>${esc(x.nri)}</strong><small>${esc(x.codigoProduto)} • ${esc(x.nomeProduto)}</small></td><td>${esc(x.lote)}<small>${x.validade?fmtDate(x.validade):'Sem Validade'}</small></td><td>${esc(x.unidade)}<small>${esc(x.placa)} • ${esc(x.motorista)}</small></td><td>${nriDamageSummaryHtml(x)}</td><td>${fmtNum(x.quantidade)}</td><td><div class="mini-actions"><button class="mini-btn" data-act="preview" data-id="${x.id}">Visualizar</button>${hasDamage?`<button class="mini-btn danger" data-act="damage" data-id="${x.id}">Ver avaria</button>`:''}<button class="mini-btn" data-act="print" data-id="${x.id}">Imprimir</button><button class="mini-btn danger" data-act="remove" data-id="${x.id}">Remover</button></div></td></tr>`;}).join(''):`<tr><td colspan="7">Nenhuma NRI pendente.</td></tr>`;updatePendingSelectionActions();}
+function comparePendingProduct(a,b){
+  const code=x=>String(x.codigoProduto||x.product_code||'').trim();
+  return code(b).localeCompare(code(a),'pt-BR',{numeric:true,sensitivity:'base'})||String(a.nri||'').localeCompare(String(b.nri||''),'pt-BR',{numeric:true});
+}
+function pendingTruckGroups(records){
+  const groups=new Map();
+  for(const row of [...records].sort(comparePendingProduct)){
+    const plate=String(row.placa||row.plate||'').trim().toUpperCase(),unit=row.unidade||row.unit||'',date=row.recebimento||row.receipt_date||'';
+    const key=JSON.stringify([unit,row.pull_trip_id||row.request_id||((plate&&plate!=='--')?plate+'|'+date:row.id)]);
+    if(!groups.has(key))groups.set(key,{key,plate:plate&&plate!=='--'?plate:'Sem placa informada',unit,date,factory:row.fabrica||row.factory||'',rows:[]});
+    groups.get(key).rows.push(row);
+  }
+  return [...groups.values()];
+}
+function filteredPending(){const q=norm($('pendFiltro').value),u=$('pendUnidade').value;return pendingNris.filter(x=>(!u||x.unidade===u)&&(!q||norm([x.nri,x.codigoProduto,x.nomeProduto,x.lote,x.placa].join(' ')).includes(q))).sort(comparePendingProduct);}
+function pendingNriRow(x){
+  const hasDamage=nriDamageForRecord(x).length>0;
+  return `<tr><td><input type="checkbox" aria-label="Selecionar NRI ${esc(x.nri)}" data-check="${esc(x.id)}" ${selectedNris.has(x.id)?'checked':''}></td><td><strong>${esc(x.codigoProduto)} · ${esc(x.nomeProduto)}</strong><small>${esc(x.nri)}</small></td><td>${esc(x.lote)}<small>${x.validade?fmtDate(x.validade):'Sem Validade'}</small></td><td>${esc(x.unidade)}<small>${esc(x.motorista)}</small></td><td>${nriDamageSummaryHtml(x)}</td><td>${fmtNum(x.quantidade)}</td><td><div class="mini-actions"><button class="mini-btn" data-act="preview" data-id="${esc(x.id)}">Visualizar</button>${hasDamage?`<button class="mini-btn danger" data-act="damage" data-id="${esc(x.id)}">Ver avaria</button>`:''}<button class="mini-btn" data-act="print" data-id="${esc(x.id)}">Imprimir</button><button class="mini-btn danger" data-act="remove" data-id="${esc(x.id)}">Remover</button></div></td></tr>`;
+}
+function renderPending(){
+  const host=$('tbodyPendentes'),opened=new Set([...host.querySelectorAll('details[open]')].map(x=>x.dataset.nriGroup)),groups=pendingTruckGroups(filteredPending()),search=!!$('pendFiltro').value.trim();
+  host.innerHTML=groups.length?groups.map(group=>`<details class="nri-pending-truck" data-nri-group="${esc(group.key)}" ${search||opened.has(group.key)?'open':''}><summary><span class="nri-pending-truck-label"><strong>Carreta ${esc(group.plate)}</strong><small>${[group.date?fmtDate(group.date):'',group.factory,group.unit].filter(Boolean).map(esc).join(' · ')}</small></span><span class="nri-pending-count">${group.rows.length} NRI${group.rows.length===1?'':'s'}</span><span class="nri-pending-chevron" aria-hidden="true">⌄</span></summary><div class="table-wrap"><table><thead><tr><th aria-label="Seleção"></th><th>Produto / NRI · código ↓</th><th>Lote / Validade</th><th>Unidade / Motorista</th><th>Avaria</th><th>Quantidade</th><th>Ações</th></tr></thead><tbody>${group.rows.map(pendingNriRow).join('')}</tbody></table></div></details>`).join(''):'<div class="empty-state">Nenhuma NRI pendente.</div>';
+  updatePendingSelectionActions();
+}
 function updatePendingSelectionActions(){
   const selected=pendingNris.filter(x=>selectedNris.has(x.id));
   const visibleIds=new Set(filteredPending().map(x=>x.id));
@@ -3257,6 +3308,7 @@ async function initPullModule(){
 }
 
 function pullOnView(name){
+  if(name.startsWith('puxada-app-'))return window.DISB_PULL_INTEGRATION?.enter(name);
   if(name==='nri-carretas') return loadPullNriPending();
   if(name==='puxada-cadastrar') return loadPullPlans();
   if(name==='puxada-viagem') return loadPullActiveTrip();
@@ -8415,6 +8467,7 @@ async function changeActiveUnit(next){
   deliveryDamageDashboard?.stop();
   fdrModule?.stop();
   formsModule?.stop();
+  window.DISB_PULL_INTEGRATION?.suspend();
   activeUnit=next;try{localStorage.setItem(unitAccessKey(),activeUnit);}catch(_e){}
   resetUnitScopedState();renderActiveUnitSelector();refRefreshPromise=null;refs.units=myUnits.map(name=>({name}));populateReferenceInputs();
   await loadReferences(false);

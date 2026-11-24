@@ -25,6 +25,7 @@
 .damage-v2-primary-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;padding:0;border:0}
 #modal .damage-detail-v2 .damage-card-action{min-height:38px;font-size:12.5px;font-weight:600;border-radius:8px;padding:9px 15px}
 #modal .damage-detail-v2 .damage-card-action:is(.deliver,.launch,.approve){background:var(--blue);border-color:var(--blue);color:var(--action-text,#fff)}
+:root[data-theme="dark"] #modal .damage-review-delivery.damage-detail-v2 .damage-card-action:is(.deliver,.launch,.approve){background:var(--blue);border-color:var(--blue);color:var(--action-text)}
 #modal .damage-detail-v2 .damage-card-action.reject{background:transparent;border-color:var(--border);color:var(--red)}
 #modal .damage-detail-v2 .damage-evidence{margin:0;border:0;border-top:1px solid var(--border);border-radius:0;background:transparent}
 #modal .damage-detail-v2 .damage-evidence>summary{font-size:12px;font-weight:500;padding:13px 16px;color:var(--muted);background:var(--damage-v2-soft)}
@@ -38,3 +39,4 @@
 #modal .damage-detail-v2 .delivery-selection-bar{padding:10px 12px;background:var(--damage-v2-soft);border:1px solid var(--border);border-radius:8px;margin:0 0 12px;font-size:12px}
 #modal .damage-detail-v2 .delivery-selection-bar small{color:var(--muted);font-weight:400}
 @media(max-width:600px){#modal .damage-detail-v2{padding:14px}#modal .damage-detail-v2 .damage-request-hero{padding:13px}#modal .damage-detail-v2 .damage-request-hero strong{font-size:17px}#modal .damage-detail-v2 .damage-product-head{padding:13px;gap:10px}#modal .damage-detail-v2 .damage-product-head .status{margin-left:0}.damage-v2-primary-actions{padding:12px}.damage-v2-primary-actions .damage-card-action{flex:1}.damage-v2-admin-row{align-items:flex-start;flex-direction:column}.damage-v2-tabs{gap:18px}}
+@media(max-width:700px){#modal .damage-detail-v2 .damage-card-action,.damage-v2-tabs button{min-height:48px}}

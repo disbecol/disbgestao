@@ -1,0 +1,376 @@
+-- Sanitized production schema, no customer data or credentials.
+create schema auth; create schema storage; create role anon; create role authenticated;
+create table auth.users(id uuid primary key); create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+create table storage.objects(bucket_id text,name text,metadata jsonb,primary key(bucket_id,name));
+create table public.module_settings(module_name text primary key,active boolean not null); insert into public.module_settings values('Puxada',true);
+create table public.test_permissions(user_id uuid,code text,primary key(user_id,code));
+create table public.user_units(user_id uuid,unit_name text,primary key(user_id,unit_name));
+create table public.units(
+"name" text default '' not null,
+"active" boolean default true not null,
+PRIMARY KEY (name)
+);
+create table public.profiles(
+"id" uuid default gen_random_uuid() not null,
+"username" text default '' not null,
+"name" text default '' not null,
+"role" text default '' not null,
+"active" boolean default true not null,
+"created_at" timestamp with time zone default now() not null,
+"updated_at" timestamp with time zone default now() not null,
+"evaluation_area" text default '' not null,
+PRIMARY KEY (id)
+);
+create table public.factories(
+"name" text default '' not null,
+"active" boolean default true not null,
+"latitude" double precision,
+"longitude" double precision,
+"radius_meters" integer,
+PRIMARY KEY (name)
+);
+create table public.pull_goals(
+"year" integer not null,
+"tmv_out_target_minutes" integer default 0 not null,
+"factory_target_minutes" integer default 0 not null,
+"tmv_return_target_minutes" integer default 0 not null,
+"unit_target_minutes" integer default 0 not null,
+"cycle_target_minutes" integer default 0 not null,
+"tmv_out_adherence" numeric default 85 not null,
+"factory_adherence" numeric default 85 not null,
+"tmv_return_adherence" numeric default 85 not null,
+"unit_adherence" numeric default 85 not null,
+"cycle_adherence" numeric default 85 not null,
+"updated_by" uuid,
+"updated_at" timestamp with time zone default now() not null,
+PRIMARY KEY (year),
+constraint pull_goals_year_check CHECK (((year >= 2020) AND (year <= 2100))),
+constraint pull_goals_tmv_out_target_minutes_check CHECK ((tmv_out_target_minutes >= 0)),
+constraint pull_goals_factory_target_minutes_check CHECK ((factory_target_minutes >= 0)),
+constraint pull_goals_tmv_return_target_minutes_check CHECK ((tmv_return_target_minutes >= 0)),
+constraint pull_goals_unit_target_minutes_check CHECK ((unit_target_minutes >= 0)),
+constraint pull_goals_cycle_target_minutes_check CHECK ((cycle_target_minutes >= 0)),
+constraint pull_goals_tmv_out_adherence_check CHECK (((tmv_out_adherence >= (0)::numeric) AND (tmv_out_adherence <= (100)::numeric))),
+constraint pull_goals_factory_adherence_check CHECK (((factory_adherence >= (0)::numeric) AND (factory_adherence <= (100)::numeric))),
+constraint pull_goals_tmv_return_adherence_check CHECK (((tmv_return_adherence >= (0)::numeric) AND (tmv_return_adherence <= (100)::numeric))),
+constraint pull_goals_unit_adherence_check CHECK (((unit_adherence >= (0)::numeric) AND (unit_adherence <= (100)::numeric))),
+constraint pull_goals_cycle_adherence_check CHECK (((cycle_adherence >= (0)::numeric) AND (cycle_adherence <= (100)::numeric)))
+);
+create table public.pull_steps(
+"id" uuid default gen_random_uuid() not null,
+"name" text not null,
+"step_type" text not null,
+"sort_order" integer default 100 not null,
+"action_code" text not null,
+"active" boolean default true not null,
+"required" boolean default true not null,
+"duration_mode" text default 'POINT'::text not null,
+"requires_factory_geofence" boolean default false not null,
+"suggest_tma_discount" boolean default false not null,
+"created_at" timestamp with time zone default now() not null,
+"updated_at" timestamp with time zone default now() not null,
+"executor_driver" smallint,
+"flow_type" text default 'PULL'::text not null,
+"skip_when_solo" boolean default false not null,
+PRIMARY KEY (id),
+constraint pull_steps_step_type_check CHECK ((step_type = ANY (ARRAY['MAIN'::text, 'OCCURRENCE'::text]))),
+constraint pull_steps_duration_mode_check CHECK ((duration_mode = ANY (ARRAY['POINT'::text, 'INTERVAL'::text]))),
+constraint pull_steps_action_code_key UNIQUE (action_code),
+constraint pull_steps_executor_driver_check CHECK ((((step_type = 'MAIN'::text) AND (executor_driver = ANY (ARRAY[1, 2]))) OR ((step_type = 'OCCURRENCE'::text) AND (executor_driver IS NULL)))),
+constraint pull_steps_flow_type_check CHECK ((flow_type = ANY (ARRAY['PULL'::text, 'TRANSFER'::text, 'BOTH'::text]))),
+constraint pull_steps_solo_skip_valid CHECK (((NOT skip_when_solo) OR ((step_type = 'MAIN'::text) AND (flow_type = 'PULL'::text) AND (action_code <> ALL (ARRAY['START_TRIP'::text, 'ARRIVE_FACTORY'::text, 'LEAVE_FACTORY'::text, 'ARRIVE_UNIT'::text])))))
+);
+create table public.pull_trips(
+"id" uuid default gen_random_uuid() not null,
+"trip_code" text,
+"origin_unit" text not null,
+"plate" text not null,
+"carrier" text default ''::text not null,
+"factory" text not null,
+"driver1_id" uuid not null,
+"driver1_name" text not null,
+"driver2_id" uuid not null,
+"driver2_name" text not null,
+"active_driver_id" uuid,
+"active_driver_name" text default ''::text not null,
+"started_at" timestamp with time zone default now() not null,
+"start_latitude" double precision not null,
+"start_longitude" double precision not null,
+"start_accuracy" double precision,
+"arrived_factory_at" timestamp with time zone,
+"left_factory_at" timestamp with time zone,
+"ended_at" timestamp with time zone,
+"ended_by_id" uuid,
+"ended_by_name" text,
+"end_latitude" double precision,
+"end_longitude" double precision,
+"end_accuracy" double precision,
+"next_started_at" timestamp with time zone,
+"status" text default 'IN_PROGRESS'::text not null,
+"kpi_status" text default 'IN_PROGRESS'::text not null,
+"nri_status" text default 'NOT_READY'::text not null,
+"tma_adjust_minutes" integer default 0 not null,
+"tma_adjust_reason" text default ''::text not null,
+"tma_adjusted_by" uuid,
+"tma_adjusted_by_name" text,
+"tma_adjusted_at" timestamp with time zone,
+"created_at" timestamp with time zone default now() not null,
+"updated_at" timestamp with time zone default now() not null,
+"cycle_type" text default 'PULL'::text not null,
+"nri_discarded_at" timestamp with time zone,
+"nri_discarded_by" uuid,
+"nri_discarded_by_name" text,
+"nri_discard_reason" text default ''::text not null,
+"solo_trip" boolean default false not null,
+"appointment_at" timestamp with time zone,
+"week_trip_type" text,
+"checklist_flow_version" smallint default 1 not null,
+PRIMARY KEY (id),
+constraint pull_trips_status_check CHECK ((status = ANY (ARRAY['IN_PROGRESS'::text, 'ARRIVED'::text, 'CANCELLED'::text]))),
+constraint pull_trips_kpi_status_check CHECK ((kpi_status = ANY (ARRAY['IN_PROGRESS'::text, 'WAITING_NEXT_START'::text, 'CLOSED'::text, 'CANCELLED'::text]))),
+constraint pull_trips_tma_adjust_minutes_check CHECK ((tma_adjust_minutes >= 0)),
+constraint pull_trips_trip_code_key UNIQUE (trip_code),
+constraint pull_trips_cycle_type_check CHECK ((cycle_type = ANY (ARRAY['PULL'::text, 'TRANSFER'::text]))),
+constraint pull_trips_nri_status_check CHECK ((nri_status = ANY (ARRAY['NOT_READY'::text, 'PENDING'::text, 'COMPLETED'::text, 'DISCARDED'::text]))),
+constraint pull_trips_week_trip_type_check CHECK ((week_trip_type = ANY (ARRAY['FIRST'::text, 'ROUTINE'::text, 'LAST'::text])))
+);
+create table public.pull_events(
+"id" uuid default gen_random_uuid() not null,
+"trip_id" uuid not null,
+"step_id" uuid,
+"step_name" text not null,
+"action_code" text not null,
+"step_order" integer not null,
+"user_id" uuid not null,
+"user_name" text not null,
+"recorded_at" timestamp with time zone default now() not null,
+"device_at" timestamp with time zone,
+"latitude" double precision not null,
+"longitude" double precision not null,
+"gps_accuracy" double precision,
+"geofence_status" text default 'NOT_APPLICABLE'::text not null,
+"distance_factory_m" double precision,
+"factory_latitude" double precision,
+"factory_longitude" double precision,
+"factory_radius_m" integer,
+"exception_reason" text default ''::text not null,
+PRIMARY KEY (id),
+constraint pull_events_geofence_status_check CHECK ((geofence_status = ANY (ARRAY['NOT_APPLICABLE'::text, 'INSIDE'::text, 'OUTSIDE'::text, 'NOT_CONFIGURED'::text]))),
+constraint pull_events_trip_id_step_id_key UNIQUE (trip_id, step_id)
+);
+create table public.pull_settings(
+"singleton" boolean default true not null,
+"gps_max_accuracy_m" integer default 200 not null,
+"track_interval_seconds" integer default 60 not null,
+"track_min_distance_m" integer default 50 not null,
+"updated_by" uuid,
+"updated_at" timestamp with time zone default now() not null,
+"checklist_enabled" boolean default true not null,
+PRIMARY KEY (singleton),
+constraint pull_settings_singleton_check CHECK (singleton),
+constraint pull_settings_track_min_distance_m_check CHECK (((track_min_distance_m >= 0) AND (track_min_distance_m <= 10000))),
+constraint pull_settings_gps_max_accuracy_m_check CHECK (((gps_max_accuracy_m >= 5) AND (gps_max_accuracy_m <= 500))),
+constraint pull_settings_track_interval_seconds_check CHECK (((track_interval_seconds >= 5) AND (track_interval_seconds <= 3600)))
+);
+create table public.pull_vehicles(
+"id" uuid default gen_random_uuid() not null,
+"plate" text not null,
+"carrier" text default ''::text not null,
+"active" boolean default true not null,
+"created_at" timestamp with time zone default now() not null,
+"updated_at" timestamp with time zone default now() not null,
+PRIMARY KEY (id),
+constraint pull_vehicles_plate_key UNIQUE (plate)
+);
+create table public.pull_trip_plans(
+"id" uuid default gen_random_uuid() not null,
+"cycle_type" text not null,
+"origin_unit" text not null,
+"plate" text not null,
+"carrier" text not null,
+"factory" text not null,
+"driver1_id" uuid not null,
+"driver1_name" text not null,
+"driver2_id" uuid,
+"driver2_name" text,
+"solo_trip" boolean default false not null,
+"scheduled_at" timestamp with time zone,
+"status" text default 'PLANNED'::text not null,
+"trip_id" uuid,
+"created_by" uuid not null,
+"updated_by" uuid,
+"created_at" timestamp with time zone default now() not null,
+"updated_at" timestamp with time zone default now() not null,
+"week_trip_type" text,
+PRIMARY KEY (id),
+constraint pull_trip_plans_cycle_type_check CHECK ((cycle_type = ANY (ARRAY['PULL'::text, 'TRANSFER'::text]))),
+constraint pull_trip_plans_status_check CHECK ((status = ANY (ARRAY['PLANNED'::text, 'STARTED'::text, 'CANCELLED'::text]))),
+constraint pull_plan_driver_valid CHECK (((solo_trip AND (driver2_id IS NULL)) OR ((NOT solo_trip) AND (driver2_id IS NOT NULL) AND (driver2_id <> driver1_id)))),
+constraint pull_plan_appointment_valid CHECK (((cycle_type = 'TRANSFER'::text) OR (scheduled_at IS NOT NULL))),
+constraint pull_trip_plans_trip_id_key UNIQUE (trip_id),
+constraint pull_trip_plans_week_trip_type_check CHECK ((week_trip_type = ANY (ARRAY['FIRST'::text, 'ROUTINE'::text, 'LAST'::text])))
+);
+create table public.pull_occurrences(
+"id" uuid default gen_random_uuid() not null,
+"trip_id" uuid not null,
+"step_id" uuid,
+"occurrence_name" text not null,
+"action_code" text not null,
+"duration_mode" text not null,
+"suggest_tma_discount" boolean default false not null,
+"started_by" uuid not null,
+"started_by_name" text not null,
+"started_at" timestamp with time zone default now() not null,
+"start_latitude" double precision not null,
+"start_longitude" double precision not null,
+"start_accuracy" double precision,
+"ended_by" uuid,
+"ended_by_name" text,
+"ended_at" timestamp with time zone,
+"end_latitude" double precision,
+"end_longitude" double precision,
+"end_accuracy" double precision,
+"status" text default 'OPEN'::text not null,
+"note" text default ''::text not null,
+PRIMARY KEY (id),
+constraint pull_occurrences_duration_mode_check CHECK ((duration_mode = ANY (ARRAY['POINT'::text, 'INTERVAL'::text]))),
+constraint pull_occurrences_status_check CHECK ((status = ANY (ARRAY['OPEN'::text, 'CLOSED'::text])))
+);
+create table public.pull_track_points(
+"id" bigint generated by default as identity not null,
+"trip_id" uuid not null,
+"user_id" uuid not null,
+"recorded_at" timestamp with time zone default now() not null,
+"device_at" timestamp with time zone,
+"latitude" double precision not null,
+"longitude" double precision not null,
+"gps_accuracy" double precision,
+"ingest_key" text,
+"source" text default 'WEB'::text not null,
+"speed_mps" double precision,
+"bearing" double precision,
+PRIMARY KEY (id)
+);
+create table public.pull_trip_invoices(
+"id" uuid default gen_random_uuid() not null,
+"trip_id" uuid,
+"pdf_path" text not null,
+"invoice_number" text default ''::text not null,
+"items" jsonb not null,
+"uploaded_by" uuid not null,
+"created_at" timestamp with time zone default now() not null,
+"updated_at" timestamp with time zone default now() not null,
+"plan_id" uuid,
+PRIMARY KEY (id),
+constraint pull_trip_invoices_items_check CHECK ((jsonb_typeof(items) = 'array'::text)),
+constraint pull_trip_invoices_pdf_path_key UNIQUE (pdf_path),
+constraint pull_invoice_has_owner CHECK (((trip_id IS NOT NULL) OR (plan_id IS NOT NULL)))
+);
+create table public.pull_checklist_runs(
+"id" uuid default gen_random_uuid() not null,
+"trip_id" uuid not null,
+"checkpoint_code" text not null,
+"checklist_type" text not null,
+"driver_no" smallint not null,
+"driver_id" uuid not null,
+"driver_name" text not null,
+"recorded_at" timestamp with time zone default now() not null,
+"device_at" timestamp with time zone,
+"latitude" double precision,
+"longitude" double precision,
+"gps_accuracy" double precision,
+"odometer_km" integer,
+"odometer_previous_km" integer,
+"odometer_delta_km" integer,
+"odometer_alert" text,
+PRIMARY KEY (id),
+constraint pull_checklist_runs_checklist_type_check CHECK ((checklist_type = ANY (ARRAY['DEPARTURE'::text, 'RETURN'::text]))),
+constraint pull_checklist_runs_driver_no_check CHECK ((driver_no = ANY (ARRAY[1, 2]))),
+constraint pull_checklist_runs_trip_id_checkpoint_code_key UNIQUE (trip_id, checkpoint_code),
+constraint pull_checklist_runs_odometer_km_check CHECK (((odometer_km >= 0) AND (odometer_km <= 9999999))),
+constraint pull_checklist_runs_odometer_alert_check CHECK ((odometer_alert = ANY (ARRAY['LOWER'::text, 'JUMP'::text])))
+);
+create table public.pull_tma_adjust_audit(
+"id" uuid default gen_random_uuid() not null,
+"trip_id" uuid not null,
+"old_minutes" integer not null,
+"new_minutes" integer not null,
+"old_reason" text default ''::text not null,
+"new_reason" text default ''::text not null,
+"changed_by" uuid not null,
+"changed_by_name" text not null,
+"changed_at" timestamp with time zone default now() not null,
+PRIMARY KEY (id)
+);
+create table public.pull_trip_attachments(
+"id" uuid default gen_random_uuid() not null,
+"trip_id" uuid not null,
+"photo_path" text not null,
+"observation" text default ''::text not null,
+"uploaded_by" uuid not null,
+"created_at" timestamp with time zone default now() not null,
+PRIMARY KEY (id),
+constraint pull_trip_attachments_observation_check CHECK ((char_length(observation) <= 500)),
+constraint pull_trip_attachments_photo_path_key UNIQUE (photo_path)
+);
+create table public.pull_checklist_answers(
+"id" uuid default gen_random_uuid() not null,
+"run_id" uuid not null,
+"question_id" uuid,
+"question_snapshot" text not null,
+"critical_snapshot" boolean not null,
+"answer" text not null,
+"observation" text default ''::text not null,
+"sort_order" integer not null,
+PRIMARY KEY (id),
+constraint pull_checklist_answers_run_id_question_id_key UNIQUE (run_id, question_id),
+constraint pull_checklist_answers_answer_check CHECK ((answer = ANY (ARRAY['OK'::text, 'NOK'::text]))),
+constraint pull_checklist_answers_check CHECK (((char_length(observation) <= 1000) AND ((answer = 'OK'::text) OR (char_length(btrim(observation)) >= 3))))
+);
+create table public.pull_appointment_changes(
+"id" uuid default gen_random_uuid() not null,
+"trip_id" uuid not null,
+"old_appointment_at" timestamp with time zone,
+"new_appointment_at" timestamp with time zone not null,
+"reason" text not null,
+"changed_by" uuid not null,
+"changed_by_name" text not null,
+"changed_at" timestamp with time zone default now() not null,
+PRIMARY KEY (id),
+constraint pull_appointment_changes_reason_check CHECK (((char_length(btrim(reason)) >= 5) AND (char_length(btrim(reason)) <= 500)))
+);
+create table public.pull_checklist_questions(
+"id" uuid default gen_random_uuid() not null,
+"question" text not null,
+"critical" boolean default false not null,
+"active" boolean default true not null,
+"sort_order" integer default 0 not null,
+"created_at" timestamp with time zone default now() not null,
+"updated_at" timestamp with time zone default now() not null,
+PRIMARY KEY (id),
+constraint pull_checklist_questions_question_check CHECK (((char_length(btrim(question)) >= 5) AND (char_length(btrim(question)) <= 300)))
+);
+create table public.pull_trip_route_snapshots(
+"trip_id" uuid not null,
+"route_points" jsonb default '[]'::jsonb not null,
+"sampled_points" integer default 0 not null,
+"original_points" integer default 0 not null,
+"archived_at" timestamp with time zone default now() not null,
+PRIMARY KEY (trip_id),
+constraint pull_trip_route_points_array CHECK ((jsonb_typeof(route_points) = 'array'::text))
+);
+create table public.pull_deleted_storage_files(
+"id" uuid default gen_random_uuid() not null,
+"subject_id" uuid not null,
+"subject_code" text not null,
+"bucket_id" text not null,
+"object_name" text not null,
+"queued_at" timestamp with time zone default now() not null,
+PRIMARY KEY (id),
+constraint pull_deleted_storage_files_bucket_id_check CHECK ((bucket_id = ANY (ARRAY['puxada-anexos'::text, 'puxada-notas'::text]))),
+constraint pull_deleted_storage_files_bucket_id_object_name_key UNIQUE (bucket_id, object_name)
+);
+create function public.user_has_unit(n text) returns boolean language sql stable security definer as $$select exists(select 1 from public.user_units where user_id=auth.uid() and unit_name=n)$$;
+create function public.assert_user_unit(n text) returns void language plpgsql as $$begin if not public.user_has_unit(n) then raise exception 'UNIDADE_SEM_ACESSO';end if;end;$$;
+create function public.is_admin() returns boolean language sql stable security definer as $$select coalesce((select role='ADMIN' from public.profiles where id=auth.uid()),false)$$;
+create function public.has_permission(c text) returns boolean language sql stable security definer as $$select public.is_admin() or exists(select 1 from public.test_permissions where user_id=auth.uid() and code=c)$$;

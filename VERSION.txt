@@ -1,1 +1,1 @@
-v1.7.108 - Detalhe de avarias simplificado e padrao visual harmonizado.
+v1.7.109 - Nova Puxada integrada, avarias simplificadas e visual harmonizado.

@@ -1,0 +1,10 @@
+import {StrictMode} from 'react';
+import {createRoot} from 'react-dom/client';
+import App from './App';
+import {api} from './lib/api';
+import './styles.css';
+import './embedded.css';
+document.documentElement.dataset.theme=window.parent.document.documentElement.dataset.theme||'light';
+window.addEventListener('message',event=>{if(event.source!==window.parent||event.origin!==location.origin)return;if(event.data?.type==='disb:puxada-theme')document.documentElement.dataset.theme=event.data.theme==='dark'?'dark':'light';});
+document.addEventListener('click',event=>{const anchor=(event.target as Element)?.closest('a[href]') as HTMLAnchorElement|null;if(!anchor)return;const url=new URL(anchor.href,location.href);if(url.origin===location.origin&&url.pathname.startsWith('/api/')){event.preventDefault();void api.download(url.pathname.slice(4)+url.search,anchor.download||undefined).catch(error=>window.alert(error.message));}});
+createRoot(document.getElementById('root')!).render(<StrictMode><App/></StrictMode>);
