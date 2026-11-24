@@ -250,7 +250,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.109-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.110-workspace',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -787,6 +787,8 @@ function bindBaseEvents(){
 
   // Users/import
   $('formUsuario').addEventListener('submit',saveUser);
+  $('btnUserEditorOpen')?.addEventListener('click',()=>{clearUserForm();$('userEditor').open=true;$('usuarioLogin').focus();});
+  $('btnCloseUserEditor')?.addEventListener('click',()=>{$('userEditor').open=false;$('btnUserEditorOpen').focus();});
   $('btnLimparUsuario').addEventListener('click',clearUserForm);
   $('tbodyUsuarios').addEventListener('click',onUserTableClick);
   $('usuarioPerfil')?.addEventListener('change',()=>renderUserPermissionEditor(null,true));
@@ -3070,7 +3072,7 @@ function updatePermissionGroupCounts(){$('usuarioPermissoes')?.querySelectorAll(
 function selectedUserPermissions(){return [...($('usuarioPermissoes')?.querySelectorAll('[data-user-permission]:checked')||[])].map(x=>x.dataset.userPermission);}
 function onUserTableClick(e){
   const b=e.target.closest('button[data-user]');if(!b)return;const u=users.find(x=>x.username===b.dataset.user);if(!u)return;
-  $('usuarioOriginal').value=u.username;$('usuarioLogin').value=u.username;$('usuarioNome').value=u.name;if($('usuarioArea'))$('usuarioArea').value=u.evaluation_area||'';$('usuarioPerfil').value=u.role;$('usuarioSenha').value='';$('usuarioAtivo').checked=u.active;renderUserPermissionEditor(u,false);
+  $('usuarioOriginal').value=u.username;$('usuarioLogin').value=u.username;$('usuarioNome').value=u.name;if($('usuarioArea'))$('usuarioArea').value=u.evaluation_area||'';$('usuarioPerfil').value=u.role;$('usuarioSenha').value='';$('usuarioAtivo').checked=u.active;renderUserPermissionEditor(u,false);if($('userEditor')){$('userEditor').open=true;$('userEditor').scrollIntoView({block:'start'});}
 }
 function clearUserForm(){$('usuarioOriginal').value='';$('usuarioLogin').value='';$('usuarioNome').value='';if($('usuarioArea'))$('usuarioArea').value='';$('usuarioPerfil').value='COLABORADOR_ARMAZEM';$('usuarioSenha').value='';$('usuarioAtivo').checked=true;renderUserPermissionEditor(null,true);}
 async function saveUser(e){
@@ -8522,7 +8524,7 @@ renderUsers=function(){
 };
 onUserTableClick=function(e){
   const b=e.target.closest('button[data-user]');if(!b)return;const u=users.find(x=>x.username===b.dataset.user);if(!u)return;
-  $('usuarioOriginal').value=u.username;$('usuarioLogin').value=u.username;$('usuarioNome').value=u.name;if($('usuarioArea'))$('usuarioArea').value=u.evaluation_area||'';$('usuarioPerfil').value=u.role;$('usuarioSenha').value='';$('usuarioAtivo').checked=u.active;renderUserPermissionEditor(u,false);renderUserUnitEditor(u);
+  $('usuarioOriginal').value=u.username;$('usuarioLogin').value=u.username;$('usuarioNome').value=u.name;if($('usuarioArea'))$('usuarioArea').value=u.evaluation_area||'';$('usuarioPerfil').value=u.role;$('usuarioSenha').value='';$('usuarioAtivo').checked=u.active;renderUserPermissionEditor(u,false);if($('userEditor')){$('userEditor').open=true;$('userEditor').scrollIntoView({block:'start'});}renderUserUnitEditor(u);
 };
 clearUserForm=function(){$('usuarioOriginal').value='';$('usuarioLogin').value='';$('usuarioNome').value='';if($('usuarioArea'))$('usuarioArea').value='';$('usuarioPerfil').value='COLABORADOR_ARMAZEM';$('usuarioSenha').value='';$('usuarioAtivo').checked=true;renderUserPermissionEditor(null,true);renderUserUnitEditor(null);};
 function adminUserErrorText(value){

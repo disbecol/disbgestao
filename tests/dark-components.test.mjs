@@ -32,6 +32,8 @@ function renderedApplication(productQuery='',decision=null,home=null){
   api.pickers(productQuery);
   if(decision)api.decision(decision.status,decision.domain);
   if(home)api.home(home.views||[],home.query||'');
+  vm.runInContext(read('src/shared/screen-design.js'),context);
+  window.DISB_SCREEN_DESIGN.enhance();
   return document.toString();
 }
 const markup=renderedApplication();

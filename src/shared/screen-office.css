@@ -1,0 +1,161 @@
+@media screen{
+ /* Entrada e início usam o mesmo tratamento limpo do ERP de referência. */
+ #loginScreen.login-screen{background:var(--screen-bg);font-family:Inter,system-ui,sans-serif;padding:24px}
+ #loginScreen .login-card{border:1px solid var(--screen-border);border-radius:16px;background:var(--screen-surface);box-shadow:0 12px 55px #17203a0b;overflow:hidden}
+ #loginScreen .login-brand-panel{background:var(--screen-soft);color:var(--screen-text);padding:44px;border:0;border-right:1px solid var(--screen-border)}
+ #loginScreen .login-brand-panel :is(h1,.eyebrow,p,.feature-list span){font-family:Inter,system-ui,sans-serif;color:var(--screen-text)}
+ #loginScreen .login-brand-panel h1{font-size:33px;line-height:1.2;letter-spacing:-1px;font-weight:650;max-width:320px}
+ #loginScreen .login-brand-panel :is(p,.feature-list span){font-size:13px;line-height:1.8;color:var(--screen-muted)}
+ #loginScreen .login-brand-panel .eyebrow{font-size:10.5px;font-weight:550;letter-spacing:.7px;color:var(--screen-muted)}
+ #loginScreen .feature-list{gap:11px;border-top:1px solid var(--screen-border);padding-top:22px;margin-top:24px}
+ #loginScreen .login-logo{width:62px;height:62px;background:var(--screen-surface);border:1px solid var(--screen-border);border-radius:13px;padding:10px;margin-bottom:24px;box-shadow:none}
+ #loginScreen .login-form-panel{padding:40px}
+ #loginScreen .login-form-panel h2{font-family:Inter,system-ui,sans-serif;font-size:25px;font-weight:650;letter-spacing:-.6px;color:var(--screen-text)}
+ #loginScreen .login-form-panel p{font-size:13px;color:var(--screen-muted);line-height:1.7}
+ #loginScreen :is(input,select){font-family:Inter,system-ui,sans-serif;font-size:14px;border-radius:8px;min-height:44px}
+ #loginScreen label{font-size:13px;font-weight:500;color:var(--screen-text)}
+ #loginScreen .login-version{font-size:11px;letter-spacing:0;color:var(--screen-muted);font-weight:400}
+ #appShell #view-home .home-hero{padding:26px;border:1px solid var(--screen-border);border-radius:12px;background:var(--screen-surface);box-shadow:var(--screen-shadow);margin-bottom:24px}
+ #appShell #view-home .home-hero h1{font-size:27px;line-height:1.3;font-weight:650;letter-spacing:-.7px;color:var(--screen-text)}
+ #appShell #view-home :is(.home-kicker,.home-section-eyebrow){font-size:11px;letter-spacing:0;font-weight:500;color:var(--screen-muted);text-transform:none}
+ #appShell #view-home .home-hero p{font-size:13px;line-height:1.7;max-width:640px;color:var(--screen-muted)}
+ #appShell #view-home .home-context span{font-size:11.5px;padding:5px 9px;border:1px solid var(--screen-border);border-radius:6px;background:var(--screen-soft);color:var(--screen-muted)}
+ #appShell #view-home .home-shortcut-grid{gap:16px;grid-template-columns:repeat(auto-fill,minmax(245px,1fr))}
+ #appShell #view-home .home-shortcut-card{padding:20px;border:1px solid var(--screen-border);border-radius:11px;background:var(--screen-surface);box-shadow:var(--screen-shadow);min-height:118px}
+ #appShell #view-home .home-shortcut-card strong{font-size:14px;font-weight:600;color:var(--screen-text)}
+ #appShell #view-home .home-shortcut-card small{font-size:11.5px;font-weight:400;line-height:1.65;color:var(--screen-muted)}
+ #appShell #view-home :is(.home-shortcut-icon,.home-option-icon){border:0;box-shadow:none;background:var(--screen-selected);color:var(--screen-accent);width:36px;height:36px;border-radius:9px}
+ #appShell #view-home .home-shortcut-empty{padding:36px 22px;border:1px dashed var(--screen-border);border-radius:12px;background:var(--screen-surface);box-shadow:none}
+ #appShell #view-home .home-shortcut-empty strong{font-size:16px;font-weight:600;color:var(--screen-text)}
+ #appShell #view-home .home-shortcut-empty p{font-size:13px;color:var(--screen-muted)}
+ #appShell #view-home .home-shortcut-picker{padding:22px;border:1px solid var(--screen-border);background:var(--screen-surface);border-radius:11px;box-shadow:none}
+ #appShell #view-home .home-option{background:var(--screen-surface);border:1px solid var(--screen-border);border-radius:9px;padding:13px}
+ #appShell #view-home :is(.home-shortcut-area,.home-shortcut-open>span,.home-shortcut-remove){font-size:11px;font-weight:500;letter-spacing:0;color:var(--screen-muted)}
+ /* Pedidos: solicitação, fila de trabalho e leitura gerencial. */
+ #appShell .screen-workspace[data-screen-area=pedidos] .od-workspace{gap:20px;--od-accent:var(--chart-blue)}
+ #appShell .screen-workspace[data-screen-area=pedidos] .od-header{margin:0 0 3px;align-items:flex-start}
+ #appShell .screen-workspace[data-screen-area=pedidos] .od-header h1{font-size:27px;font-weight:650;line-height:1.3;margin:5px 0 7px;letter-spacing:-.6px;color:var(--screen-text)}
+ #appShell .screen-workspace[data-screen-area=pedidos] :is(.od-eyebrow,.od-header p,.od-live){font-size:12px;font-weight:400;line-height:1.65;letter-spacing:0;text-transform:none;color:var(--screen-muted)}
+ #appShell #view-orders-new .od-types{gap:14px}
+ #appShell #view-orders-new .od-type{padding:18px 20px;border:1px solid var(--screen-border);border-radius:10px;background:var(--screen-surface);box-shadow:none;color:var(--screen-text);text-align:left}
+ #appShell #view-orders-new .od-type strong{font-size:14px;font-weight:600;color:var(--screen-text)}
+ #appShell #view-orders-new .od-type :is(span,small){font-size:12px;line-height:1.6;color:var(--screen-muted)}
+ #appShell #view-orders-new .od-type.active{background:var(--screen-selected);border-color:var(--screen-ring);outline:0;box-shadow:none}
+ #appShell #view-orders-new .od-auto{border:1px solid var(--screen-border);border-radius:8px;background:var(--screen-soft);padding:12px;color:var(--screen-muted);font-size:13px}
+ #appShell #view-orders-new .od-notice{margin:0;border-radius:8px;padding:14px 16px}
+ #appShell :is(#view-orders-own,#view-orders-queue,#view-orders-manage) .od-request{background:var(--screen-surface);border:1px solid var(--screen-border);border-radius:11px;padding:20px;box-shadow:var(--screen-shadow)}
+ #appShell :is(#view-orders-own,#view-orders-queue,#view-orders-manage) .od-card-head h2{font-size:15px;font-weight:600;line-height:1.5;color:var(--screen-text)}
+ #appShell :is(#view-orders-own,#view-orders-queue,#view-orders-manage) .od-card-head p{font-size:12px;color:var(--screen-muted)}
+ #appShell :is(#view-orders-own,#view-orders-queue,#view-orders-manage) .od-detail{padding:16px 0;border-top:1px solid var(--screen-border);margin-top:16px;background:transparent}
+ #appShell #view-orders-queue .od-analysis{padding:18px;border:1px solid var(--screen-border);border-left:3px solid var(--screen-accent);border-radius:9px;background:var(--screen-soft);margin-top:18px}
+ #appShell #view-orders-queue .od-tabs,#appShell #view-orders-dashboard .od-tabs{padding:5px;border:1px solid var(--screen-border);border-radius:9px;background:var(--screen-surface);gap:5px}
+ #appShell .screen-workspace[data-screen-area=pedidos] .od-tabs button{border:0;background:transparent;border-radius:6px;color:var(--screen-muted);font-size:12.5px;font-weight:500;padding:10px 14px}
+ #appShell .screen-workspace[data-screen-area=pedidos] .od-tabs button.active{background:var(--screen-selected);color:var(--screen-accent)}
+ #appShell #view-orders-dashboard .od-chart{background:var(--screen-surface);border-color:var(--screen-border);border-radius:10px;padding:18px}
+ #appShell #view-orders-dashboard .od-seller-ranking li{padding:10px 0;border-bottom:1px solid var(--screen-border);font-size:13px;color:var(--screen-text)}
+ #appShell #view-orders-dashboard .od-seller-ranking strong{font-weight:550}
+ #appShell #view-orders-productivity .od-panel{padding:22px}
+ #appShell #view-orders-audit .od-table-wrap{margin-top:18px}
+ #appShell #view-orders-config .od-panel{padding:24px}
+ #appShell #view-orders-config .od-field{max-width:100%}
+ #appShell #view-orders-config .od-check{border:1px solid var(--screen-border);border-radius:8px;padding:13px;background:var(--screen-soft);color:var(--screen-text);font-size:13px}
+ /* Formulários: o modelo, a aplicação e os resultados têm estações distintas. */
+ #appShell .screen-workspace[data-screen-area=formularios] .fm-tabs{padding:5px;border:1px solid var(--screen-border);border-radius:9px;background:var(--screen-surface);gap:5px;margin-bottom:20px;overflow-x:auto}
+ #appShell .screen-workspace[data-screen-area=formularios] :is(.fm-tabs,.fm-report-tabs) button{border:0;border-radius:6px;background:transparent;padding:10px 13px;font-family:Inter,system-ui,sans-serif;font-size:12.5px;font-weight:500;color:var(--screen-muted);white-space:nowrap}
+ #appShell .screen-workspace[data-screen-area=formularios] :is(.fm-tabs,.fm-report-tabs) button.active{background:var(--screen-selected);color:var(--screen-accent);font-weight:600}
+ #appShell .screen-workspace[data-screen-area=formularios] .fm-report-tabs{padding:5px;background:var(--screen-surface);border:1px solid var(--screen-border);border-radius:9px;gap:5px;overflow:auto;margin-bottom:20px}
+ #appShell .screen-workspace[data-screen-area=formularios] :is(.fm-model small,.fm-metric small){font-size:12px;color:var(--screen-muted);font-weight:400;line-height:1.6}
+ #appShell #view-forms-manage .fm-model-grid{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px}
+ #appShell #view-forms-manage .fm-model{padding:22px;border:1px solid var(--screen-border);border-radius:11px;background:var(--screen-surface);box-shadow:var(--screen-shadow)}
+ #appShell #view-forms-manage .fm-model h2{font-size:15px;font-weight:600;line-height:1.5;color:var(--screen-text)}
+ #appShell #view-forms-manage .fm-model p{font-size:12px;line-height:1.7;color:var(--screen-muted)}
+ #appShell #view-forms-manage .fm-model-meta{border-color:var(--screen-border);font-size:11.5px;color:var(--screen-muted)}
+ #appShell #view-forms-manage .fm-question-editor{border:1px solid var(--screen-border);border-radius:10px;background:var(--screen-surface);padding:18px;box-shadow:none;margin-bottom:13px}
+ #appShell #view-forms-manage .fm-question-heading{padding:0 0 13px;border-bottom:1px solid var(--screen-border);gap:12px}
+ #appShell #view-forms-manage .fm-question-heading strong{font-size:13px;font-weight:550;color:var(--screen-text)}
+ #appShell #view-forms-manage .fm-question-fields{gap:16px;padding-top:18px}
+ #appShell #view-forms-manage .fm-permission-grid{gap:12px;padding:16px;background:var(--screen-soft);border:1px solid var(--screen-border);border-radius:9px}
+ #appShell #view-forms-manage .fm-builder-bottom{padding:16px 0 0;border-top:1px solid var(--screen-border);background:var(--screen-surface);gap:10px}
+ #appShell #view-forms-manage .fm-section-heading{border-bottom:1px solid var(--screen-border);padding:10px 0 16px;margin-bottom:20px}
+ #appShell #view-forms-fill .fm-catalog-filters{padding:18px;border:1px solid var(--screen-border);border-radius:10px;background:var(--screen-surface);gap:16px}
+ #appShell #view-forms-fill .fm-resume{padding:18px;border:1px solid var(--screen-border);border-left:3px solid var(--screen-accent);border-radius:10px;background:var(--screen-surface)}
+ #appShell #view-forms-fill .fm-application-bar{padding:18px 20px;border:1px solid var(--screen-border);border-radius:10px;background:var(--screen-surface);color:var(--screen-text)}
+ #appShell #view-forms-fill .fm-application-bar strong{font-size:15px;font-weight:600;color:var(--screen-text)}
+ #appShell #view-forms-fill .fm-application-bar small{font-size:12px;color:var(--screen-muted)}
+ #appShell #view-forms-fill .fm-unit-banner>span{font-size:12px;color:var(--screen-muted)}
+ #appShell #view-forms-fill .fm-answer-card{border:1px solid var(--screen-border);background:var(--screen-surface);border-radius:11px;padding:22px;margin:0 0 18px;box-shadow:var(--screen-shadow)}
+ #appShell #view-forms-fill .fm-answer-title{font-size:15px;font-weight:550;line-height:1.6;color:var(--screen-text)}
+ #appShell #view-forms-fill .fm-answer-buttons{gap:10px;margin:16px 0}
+ #appShell #view-forms-fill .fm-answer-buttons button{min-height:46px;padding:11px 20px;border-radius:8px;font-size:13px;font-weight:550}
+ #appShell #view-forms-fill .fm-answer-tools{padding-top:14px;border-color:var(--screen-border);font-size:12px;color:var(--screen-muted)}
+ #appShell #view-forms-fill .fm-fill-footer{padding:18px 0;background:var(--screen-bg);border-top:1px solid var(--screen-border);gap:10px}
+ #appShell :is(#view-forms-report,#view-forms-self) .fm-metrics{gap:14px;margin:0 0 22px}
+ #appShell :is(#view-forms-report,#view-forms-self) .fm-metric{padding:18px;border:1px solid var(--screen-border);border-radius:10px;background:var(--screen-surface);box-shadow:var(--screen-shadow)}
+ #appShell :is(#view-forms-report,#view-forms-self) .fm-metric span{font-size:12px;font-weight:450;color:var(--screen-muted)}
+ #appShell :is(#view-forms-report,#view-forms-self) .fm-metric strong{font-size:26px;font-weight:650;letter-spacing:-.6px;color:var(--screen-text)}
+ #appShell #view-forms-report :is(.fm-chart,.fm-ranking,.fm-dash,.fm-farol){border-color:var(--screen-border);border-radius:10px;background:var(--screen-surface);padding:20px}
+ #appShell #view-forms-report .fm-matrix{border-radius:9px;border-color:var(--screen-border)}
+ #appShell #view-forms-self .fm-self-card{border:1px solid var(--screen-border);border-radius:11px;background:var(--screen-surface);padding:22px;box-shadow:var(--screen-shadow)}
+ #appShell #view-forms-self .fm-self-item{padding:14px;border:1px solid var(--screen-border);border-radius:8px;background:var(--screen-soft);color:var(--screen-text)}
+ #appShell #view-forms-schedule .fm-schedule-editor{padding:22px;border:1px solid var(--screen-border);border-radius:11px;background:var(--screen-surface)}
+ #appShell #view-forms-schedule .fm-calendar-head{padding:14px 0;gap:12px;border-color:var(--screen-border)}
+ #appShell #view-forms-schedule .fm-calendar-day{background:var(--screen-surface);border-color:var(--screen-border);min-height:115px;padding:10px}
+ #appShell #view-forms-schedule .fm-calendar-day.today{background:var(--screen-selected)}
+ #appShell #view-forms-schedule .fm-calendar-event{font-size:11px;line-height:1.5;border-radius:6px;padding:8px;background:var(--screen-selected);color:var(--screen-accent)}
+ /* Configurações: administração sem aparência de formulário improvisado. */
+ #appShell #view-modulos-config .module-settings-grid{gap:16px}
+ #appShell #view-modulos-config .module-setting-card{padding:20px;border:1px solid var(--screen-border);border-radius:11px;background:var(--screen-surface);box-shadow:var(--screen-shadow);gap:15px}
+ #appShell #view-modulos-config .module-setting-copy strong{font-size:14px;font-weight:600;color:var(--screen-text)}
+ #appShell #view-modulos-config .module-settings-note{font-size:12px;line-height:1.7;color:var(--screen-muted)}
+ #appShell #view-modulos-config .module-setting-state{font-size:11px;font-weight:500}
+ #appShell #view-modulos-config .module-setting-copy p{font-size:12px;line-height:1.6;color:var(--screen-muted)}
+ #appShell #view-modulos-config .module-setting-icon{width:38px;height:38px;border-radius:9px;background:var(--screen-selected);color:var(--screen-accent);font-size:18px}
+ #appShell #view-usuarios .admin-grid{grid-template-columns:minmax(320px,.85fr) minmax(0,1.45fr);gap:20px;align-items:start}
+ #appShell #view-usuarios .permissions-grid{gap:12px}
+ #appShell #view-usuarios :is(.permission-group,.permission-module){border:1px solid var(--screen-border);border-radius:9px;background:var(--screen-surface);overflow:hidden}
+ #appShell #view-usuarios :is(.permission-group h3,.permission-module h3){padding:13px 14px;margin:0;font-size:13px;font-weight:600;background:var(--screen-soft);color:var(--screen-text)}
+ #appShell #view-usuarios .permission-option{padding:12px;border-color:var(--screen-border);border-radius:0;background:var(--screen-surface);color:var(--screen-text)}
+ #appShell #view-usuarios .permission-option strong{font-size:12.5px;font-weight:550;color:var(--screen-text)}
+ #appShell #view-usuarios .permission-option small{font-size:11.5px;line-height:1.6;color:var(--screen-muted)}
+ #appShell #view-produtos #formProductAdmin{padding:0}
+ #appShell #view-produtos #productAdminCount{padding:13px 0 0;font-size:12px;color:var(--screen-muted)}
+ #appShell #view-contatos-clientes .customer-contact-card{padding:18px;border:1px solid var(--screen-border);border-radius:10px;background:var(--screen-surface);box-shadow:none}
+ #appShell #view-contatos-clientes .customer-contact-table td:nth-child(2){min-width:210px}
+ #appShell #view-bases>.card{max-width:1400px}
+ #appShell #view-bases .geo-admin-card{padding:24px}
+ #appShell #view-bases .geo-admin-results{display:grid;gap:12px;margin-top:18px}
+ #appShell #view-bases .geo-admin-results>div{border:1px solid var(--screen-border);border-radius:9px;padding:16px;background:var(--screen-soft)}
+ #appShell #view-bases input[type=file]{width:100%;background:var(--screen-soft);border:1px dashed var(--screen-border);padding:10px}
+ #appShell #view-bases input[type=file]::file-selector-button{font:500 12px Inter,system-ui,sans-serif;padding:8px 12px;border:1px solid var(--screen-border);border-radius:6px;background:var(--screen-surface);color:var(--screen-text);margin-right:12px}
+ #modal.forms-modal .modal-box{width:min(1160px,100%)}
+ #modal .fm-answer-card,#modal .fm-detail-section{padding:18px;background:var(--screen-surface);border:1px solid var(--screen-border);border-radius:10px;color:var(--screen-text)}
+ @media(max-width:1100px){#appShell #view-usuarios .admin-grid{grid-template-columns:1fr}#appShell #view-forms-manage .fm-model-grid{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}}
+ @media(max-width:700px){#loginScreen.login-screen{padding:16px}#loginScreen .login-brand-panel{padding:24px;border-right:0;border-bottom:1px solid var(--screen-border)}#loginScreen .login-brand-panel h1{font-size:25px;max-width:none}#loginScreen .login-form-panel{padding:24px}#loginScreen .feature-list{display:none}#loginScreen :is(input,select){font-size:16px;min-height:48px}#appShell #view-home .home-hero{padding:20px}#appShell #view-home .home-shortcut-grid{grid-template-columns:1fr}#appShell #view-home .home-shortcut-card{min-height:100px;padding:18px}#appShell #view-orders-new .od-types{grid-template-columns:1fr;gap:10px}#appShell #view-orders-new .od-type{padding:15px 16px}#appShell :is(#view-orders-own,#view-orders-queue,#view-orders-manage) .od-request{padding:16px}#appShell #view-forms-manage .fm-model-grid{grid-template-columns:1fr}#appShell #view-forms-manage .fm-question-editor,#appShell #view-forms-fill .fm-answer-card,#appShell #view-forms-self .fm-self-card,#appShell #view-forms-schedule .fm-schedule-editor{padding:16px}#appShell #view-forms-fill .fm-application-bar{padding:15px}#appShell #view-forms-fill .fm-answer-buttons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}#appShell #view-forms-fill .fm-answer-buttons button{padding-inline:12px}#appShell #view-forms-report .fm-report-tabs{flex-wrap:nowrap}#appShell #view-modulos-config .module-setting-card{padding:16px}#appShell #view-bases .geo-admin-card{padding:16px}}
+}
+
+@media screen{
+ #appShell #view-usuarios .user-admin-workspace{display:grid;grid-template-columns:minmax(0,1fr);min-width:0;gap:20px}
+ #appShell #view-usuarios .user-editor{padding:0;margin-bottom:0}
+ #appShell #view-usuarios .user-editor>summary{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:19px 22px;list-style:none;cursor:pointer;background:var(--screen-surface);border-radius:11px;color:var(--screen-text)}
+ #appShell #view-usuarios .user-editor>summary::-webkit-details-marker{display:none}
+ #appShell #view-usuarios .user-editor>summary strong{display:block;font-size:14px;font-weight:600;color:var(--screen-text)}
+ #appShell #view-usuarios .user-editor>summary small{display:block;font-size:12px;font-weight:400;line-height:1.6;color:var(--screen-muted);margin-top:4px}
+ #appShell #view-usuarios .user-editor[open]>summary{border-bottom:1px solid var(--screen-border);border-radius:11px 11px 0 0;background:var(--screen-soft)}
+ #appShell #view-usuarios .user-editor-body{padding:24px}
+ #appShell #view-usuarios #formUsuario>.grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+ #appShell #view-usuarios .user-unit-editor-head,#appShell #view-usuarios .permission-editor-head{border-top:1px solid var(--screen-border);padding-top:22px;margin-top:22px;margin-bottom:16px;gap:18px}
+ #appShell #view-usuarios :is(.user-unit-editor-head,.permission-editor-head) strong{font-size:14px;font-weight:600;color:var(--screen-text)}
+ #appShell #view-usuarios :is(.user-unit-editor-head,.permission-editor-head) small{font-size:12px;font-weight:400;line-height:1.6;color:var(--screen-muted)}
+ #appShell #view-usuarios .permission-editor{grid-template-columns:repeat(3,minmax(0,1fr));max-height:540px;overflow:auto;gap:14px;padding-right:8px}
+ #appShell #view-usuarios .permission-group{background:var(--screen-surface);border-color:var(--screen-border);border-radius:9px}
+ #appShell #view-usuarios .permission-group-title{background:var(--screen-soft);border-color:var(--screen-border);padding:13px 14px;font-size:13px;font-weight:600;color:var(--screen-text)}
+ #appShell #view-usuarios .permission-group-title strong{color:var(--screen-text);font-size:13px;font-weight:600}
+ #appShell #view-usuarios .permission-group-title small{color:var(--screen-muted);font-size:11px;font-weight:500}
+ #appShell #view-usuarios .permission-row{padding:12px 14px;background:var(--screen-surface);border-color:var(--screen-border);border-radius:0;color:var(--screen-text)}
+ #appShell #view-usuarios .permission-row strong{font-size:12.5px;font-weight:550;color:var(--screen-text)}
+ #appShell #view-usuarios .permission-row small{font-size:11.5px;line-height:1.6;color:var(--screen-muted)}
+ #appShell #view-usuarios .user-unit-editor{padding:14px;background:var(--screen-soft);border:1px solid var(--screen-border);border-radius:8px;gap:18px}
+ #appShell #view-usuarios #formUsuario>.actions{padding-top:20px;border-top:1px solid var(--screen-border);margin-top:24px}
+ @media(max-width:1000px){#appShell #view-usuarios .permission-editor{grid-template-columns:repeat(2,minmax(0,1fr))}}
+ @media(max-width:700px){#appShell #view-usuarios .user-editor-body{padding:16px}#appShell #view-usuarios .user-editor>summary{padding:16px}#appShell #view-usuarios #formUsuario>.grid{grid-template-columns:1fr}#appShell #view-usuarios .permission-editor{grid-template-columns:1fr;max-height:460px;padding-right:4px}#appShell #view-usuarios .permission-editor-head{align-items:flex-start;flex-direction:column}}
+}
