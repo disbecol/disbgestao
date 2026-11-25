@@ -28,6 +28,7 @@ const PERMISSION_CATALOG = [
   ['Refugo','REFUGO_AFERIR','Aferir mapa'],['Refugo','REFUGO_HISTORICO','Histórico / CSV'],['Refugo','REFUGO_CONFIG','Cadastros'],
   ['Validade do Estoque','SALES_STOCK_VALIDITY_VIEW','Consultar validades'],['Validade do Estoque','SALES_STOCK_VALIDITY_IMPORT','Importar arquivo'],
   ['Escalonada Digital','SALES_PRICING_VIEW','Consultar preços'],
+  ['Rating de Clientes','RATING_VIEW','Consultar avaliações'],['Rating de Clientes','RATING_EDIT','Editar tratativas'],
   ['Formulários','FORMS_SELF_VIEW','Consultar minhas avaliações'],['Formulários','FORMS_FILL','Preencher formulários'],['Formulários','FORMS_REPORT','Acompanhamento e planos de ação'],['Formulários','FORMS_MANAGE','Criar formulários e agendamentos'],
   ['Puxada','PULL_PLAN','Cadastrar viagens'],['Puxada','PULL_TRIP','Viagem'],['Puxada','PULL_FAROL','Farol de andamento'],['Puxada','PULL_HISTORY','Histórico'],['Puxada','PULL_DASHBOARD','Dashboards'],['Puxada','PULL_GOALS','Metas'],['Puxada','PULL_CONFIG','Configurações'],['Puxada','PULL_TMA_ADJUST','Ajustar TMA'],
   ['Administração','ADMIN_USERS','Usuários e permissões'],['Administração','ADMIN_BASES','Bases / importação']
@@ -202,6 +203,7 @@ const viewMeta = {
   'sales-avaria-gestao':['Gestão de avarias de vendas','Aprovação, reprovação e auditoria'],
   'sales-stock-validity':['Consulta de validades','Vencimento dos produtos da unidade'],
   'sales-pricing':['Escalonada Digital','Preços TTC e TTV por segmento'],
+  'rating-clients':['Rating de Clientes','Avaliações e tratativas dos clientes'],
   'forms-manage':['Criar formulários','Modelos, seções, perguntas e permissões'],
   'forms-fill':['Formulários','Aplicar, continuar e consultar suas aplicações'],
   'forms-self':['Minhas avaliações','Meus resultados e evolução por pergunta'],
@@ -730,6 +732,7 @@ function bindBaseEvents(){
   });
   $('btnSalesPricingRefresh')?.addEventListener('click',()=>loadSalesPricing(true));
   $('btnSalesPricingRetry')?.addEventListener('click',()=>loadSalesPricing(true));
+  ratingModule?.bind();
 
   // Conferencia
   renderConferenceQuantityCards();
@@ -1023,6 +1026,7 @@ function moduleNameForPermission(code){
   if(code.startsWith('SALES_DAMAGE_'))return 'Avarias de Vendas';
   if(code.startsWith('SALES_STOCK_VALIDITY_'))return 'Validade do Estoque';
   if(code.startsWith('SALES_PRICING_'))return 'Escalonada Digital';
+  if(code.startsWith('RATING_'))return 'Rating de Clientes';
   if(code.startsWith('FORMS_'))return 'Formulários';
   if(code.startsWith('PULL_'))return 'Puxada';
   return '';
@@ -1093,6 +1097,7 @@ async function logout(){
   ordersModule?.stop();
   deliveryDamageDashboard?.stop();
   fdrModule?.stop();
+  ratingModule?.reset();
 
   offlineClearIdentityV171();
   salesPricingProducts=[];salesPricingLoaded=false;salesPricingError='';
@@ -1389,6 +1394,7 @@ function openView(name,force=false){
   if(name==='sales-avaria-gestao')loadSalesDamageManage();
   if(name==='sales-stock-validity')loadStockValidity(true);
   if(name==='sales-pricing')loadSalesPricing(true);
+  if(name==='rating-clients')ratingModule?.enter();
   if(name.startsWith('forms-'))void formsModule?.enter(name);
   if(name.startsWith('returns-'))void returnsModule?.enter(name);
   if(name.startsWith('orders-'))void ordersModule?.enter(name);
@@ -8406,6 +8412,7 @@ function resetUnitScopedState(){
   pendingNris=[];historyNris=[];selectedNris.clear();adminAvarias=[];deliveryDamageMyRequests=[];salesDamageMyRequests=[];salesDamageManageRequests=[];
   stockValidityRows=[];stockValidityLoadedUnit='';stockValidityPreview=null;stockValidityLoadId++;
   salesPricingProducts=[];salesPricingLoaded=false;salesPricingError='';
+  ratingModule?.reset();
   fefoActiveCount=null;fefoItems=[];fefoEditingItemId=null;fefoActiveCounts=[];fefoReports=[];fefoItemsByCount.clear();
   rotatingAssetActiveCount=null;rotatingAssetEntries=[];rotatingAssetHistory=[];rotatingAssetEntriesByCount.clear();
   refugoModule?.reset();
@@ -12882,6 +12889,18 @@ const formsModule=window.DISB_FORMS_UI?.create({
     }
     const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
   }
+});
+const ratingModule=window.DISB_RATING?.create({
+  document,
+  getElement:$,
+  context:()=>({
+    client:sb,
+    units:[...myUnits],
+    activeUnit,
+    hasPermission:hasPerm
+  }),
+  escapeHtml:esc,
+  toast
 });
 const closeModalBeforeForms=closeModal;
 closeModal=function(){closeModalBeforeForms();$('modal')?.classList.remove('forms-modal');};

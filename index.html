@@ -17,6 +17,7 @@
   <link rel="stylesheet" href="src/shared/signature-pad.css?v=1.7.113">
   <link rel="stylesheet" href="src/estoque/stock-validity.css?v=1.7.41">
   <link rel="stylesheet" href="src/vendas/sales-pricing.css?v=1.7.52">
+  <link rel="stylesheet" href="src/ratings/rating.css?v=1.7.113-rating">
   <link rel="stylesheet" href="src/forms/forms.css?v=1.7.113">
   <link rel="stylesheet" href="src/estoque/refugo.css?v=1.7.16">
   <link rel="preload" href="assets/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
@@ -170,7 +171,7 @@
         </div>
       </div>
 
-      <div class="nav-area" data-area="vendas" data-permission-any="SALES_DAMAGE_CREATE,SALES_DAMAGE_VIEW_OWN,SALES_DAMAGE_VIEW_ALL,SALES_DAMAGE_REVIEW,SALES_DAMAGE_OVERRIDE,SALES_DAMAGE_POST,SALES_STOCK_VALIDITY_VIEW,SALES_STOCK_VALIDITY_IMPORT,SALES_PRICING_VIEW">
+      <div class="nav-area" data-area="vendas" data-permission-any="SALES_DAMAGE_CREATE,SALES_DAMAGE_VIEW_OWN,SALES_DAMAGE_VIEW_ALL,SALES_DAMAGE_REVIEW,SALES_DAMAGE_OVERRIDE,SALES_DAMAGE_POST,SALES_STOCK_VALIDITY_VIEW,SALES_STOCK_VALIDITY_IMPORT,SALES_PRICING_VIEW,RATING_VIEW,RATING_EDIT">
         <button type="button" class="nav-area-toggle" aria-expanded="false"><span class="area-icon">$</span><span class="area-name">Vendas</span><span class="area-chevron">⌄</span></button>
         <div class="nav-area-items">
           <div class="nav-module role-sales-damage" data-module="avarias-vendas" data-permission-any="SALES_DAMAGE_CREATE,SALES_DAMAGE_VIEW_OWN,SALES_DAMAGE_VIEW_ALL,SALES_DAMAGE_REVIEW,SALES_DAMAGE_OVERRIDE,SALES_DAMAGE_POST">
@@ -191,6 +192,12 @@
             <button type="button" class="nav-module-toggle" aria-expanded="false"><span class="module-icon">R$</span><span class="module-name">Escalonada Digital</span><span class="module-chevron">⌄</span></button>
             <div class="nav-module-items">
               <button class="nav-item" data-view="sales-pricing" data-permission="SALES_PRICING_VIEW"><span>⌕</span>Consultar preços</button>
+            </div>
+          </div>
+          <div class="nav-module" data-module="rating-clientes" data-permission-any="RATING_VIEW,RATING_EDIT">
+            <button type="button" class="nav-module-toggle" aria-expanded="false"><span class="module-icon">★</span><span class="module-name">Rating de Clientes</span><span class="module-chevron">⌄</span></button>
+            <div class="nav-module-items">
+              <button class="nav-item" data-view="rating-clients" data-permission-any="RATING_VIEW,RATING_EDIT"><span>◫</span>Avaliações da Matriz e Filial</button>
             </div>
           </div>
         </div>
@@ -559,6 +566,17 @@
         <div id="salesPricingAlert" class="notice sales-pricing-alert hidden" role="alert"></div>
         <button id="btnSalesPricingRetry" type="button" class="btn secondary hidden">Tentar novamente</button>
         <div id="salesPricingResults" class="sales-pricing-results" aria-live="polite"><div class="empty-state">Digite um código ou nome para pesquisar.</div></div>
+      </section>
+
+      <section id="view-rating-clients" class="view" data-permission-any="RATING_VIEW,RATING_EDIT">
+        <div class="page-head"><div><div class="breadcrumb">Vendas / Rating de Clientes</div><h1>Avaliações de clientes</h1><p>Consulte as avaliações da Matriz e da Filial e atualize a tratativa/comentário diretamente na planilha.</p></div><span class="page-chip sales">RATING</span></div>
+        <div class="card rating-card">
+          <div class="rating-context"><div><small>PLANILHA</small><strong>Google Sheets · Rating de Clientes</strong></div><div><small>UNIDADE</small><strong id="ratingUnitLabel">—</strong></div><button id="btnRatingRefresh" type="button" class="btn secondary">Atualizar</button></div>
+          <div class="rating-controls"><div id="ratingUnitTabs" class="rating-unit-tabs" role="tablist" aria-label="Unidade do rating"></div><div class="field rating-search"><label for="ratingSearch">Pesquisar avaliações</label><input id="ratingSearch" type="search" autocomplete="off" placeholder="Cliente, código, cidade, motorista ou motivo"></div></div>
+          <div id="ratingAlert" class="notice rating-alert hidden" role="alert"></div>
+          <div id="ratingStatus" class="sales-pricing-status" role="status" aria-live="polite"></div>
+          <div class="rating-table-wrap"><table class="rating-table"><thead><tr><th>Data</th><th>Cód. Cliente</th><th>Nome</th><th>Cidade</th><th>Motorista</th><th>Motivo</th><th>Tratativa/comentário</th></tr></thead><tbody id="ratingRows"><tr><td colspan="7">Selecione uma unidade para consultar.</td></tr></tbody></table></div>
+        </div>
       </section>
 
       <!-- HISTORICO DE PALETES AVARIADOS -->
@@ -1039,6 +1057,7 @@
   <script src="src/puxada/pull-camera.js?v=1.7.32-pull-camera"></script>
   <script src="src/estoque/stock-validity.js?v=1.7.41"></script>
   <script src="src/vendas/sales-pricing.js?v=1.7.52"></script>
+  <script src="src/ratings/rating.js?v=1.7.113-rating"></script>
   <script src="src/shared/asset-conversion.js?v=1.7.49"></script>
   <script src="src/conferencia/conference.js?v=1.7.60"></script>
   <script src="src/forms/forms.js?v=1.7.113"></script>
@@ -1066,6 +1085,6 @@
 <script src="src/estoque/fefo-completed-edits.js?v=1.7.110-fefo-edits"></script>
 <script src="src/estoque/fefo-reports.js?v=1.7.113-fefo-reports"></script>
 <script src="src/puxada/pull-cycle-delete.js?v=1.7.110-pull-cycle-delete"></script>
-<script src="app.js?v=1.7.113-modules"></script>
+<script src="app.js?v=1.7.113-rating"></script>
 </body>
 </html>
