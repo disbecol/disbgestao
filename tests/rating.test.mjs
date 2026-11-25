@@ -76,5 +76,5 @@ test('registra a tela Rating no menu e carrega o módulo antes do app principal'
   assert.ok(document.querySelector('.nav-item[data-view="rating-clients"]'));
   assert.ok(document.querySelector('#view-rating-clients[data-permission-any*="RATING_VIEW"]'));
   const scripts=[...document.querySelectorAll('script[src]')].map(script=>script.getAttribute('src'));
-  assert.ok(scripts.indexOf('src/ratings/rating.js?v=1.7.113-rating')<scripts.indexOf('app.js?v=1.7.113-rating'));
+  assert.ok(scripts.indexOf('src/ratings/rating.js?v=1.7.114-rating')<scripts.indexOf('app.js?v=1.7.114-rating'));
 });

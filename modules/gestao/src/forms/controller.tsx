@@ -1,4 +1,41 @@
 import { Fragment } from "react";
+import type { ReactNode } from "react";
+import type { PDFPage } from "pdf-lib";
+import type { FormsModule, FormsView, ReactFormsAdapter } from "./types";
+import type {
+  ActionPlan,
+  Answer,
+  Answers,
+  CatalogFilter,
+  DefinitionStatus,
+  EvaluatedPerson,
+  FormAssignment,
+  FormBuilder,
+  FormDefinition,
+  FormField,
+  FormPerson,
+  FormResponse,
+  FormReadRow,
+  OwnEvaluation,
+  PlanDisplay,
+  FormSection,
+  ReportFilter,
+  ReportTab,
+  ScheduleFilter,
+  ValidationIssue,
+} from "./models";
+import type {} from "./core-contract";
+import type { Tone } from "../shared/ui";
+import { createFormsService, requireFormsContext } from "./service";
+import {
+  closestElement,
+  controlValue,
+  isControl,
+  isElement,
+  isInput,
+} from "./dom";
+import { jsonClone, readBuilderDraft, readResponseDraft } from "./drafts";
+import { oneOf, updateBuilder, updateQuestion } from "./edits";
 import { renderContent } from "../shared/react-host";
 import {
   rowKey,
@@ -18,10 +55,13 @@ import {
   head,
 } from "../shared/ui";
 
-const F = window.DISB_FORMS,
-  E = F.esc,
-  $ = (id) => document.getElementById(id);
-const STATUS = {
+const F = window.DISB_FORMS;
+const $ = (id: string) => document.getElementById(id);
+const setText = (id: string, text: string) => {
+  const element = $(id);
+  if (element) element.textContent = text;
+};
+const STATUS: Record<string, string> = {
   DRAFT: "Rascunho",
   PUBLISHED: "Publicado",
   ARCHIVED: "Arquivado",
@@ -32,21 +72,25 @@ const STATUS = {
   DONE: "Concluído",
 };
 const TYPES = F.FORM_TYPES;
-const fmt = (v) =>
+const fmt = (v: string | null | undefined) =>
   v
     ? new Date(v).toLocaleString("pt-BR", { timeZone: "America/Fortaleza" })
     : "—";
-const day = (v) =>
+const day = (v: string | null | undefined) =>
   v ? String(v).slice(0, 10).split("-").reverse().join("/") : "—";
-const pct = (v) =>
+const pct = (v: number | null | undefined) =>
   v == null
     ? "Sem avaliação"
     : `${Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
-const tone = (v) =>
+const tone = (v: number | null | undefined): Tone =>
   v == null ? "neutral" : v >= 90 ? "good" : v >= 70 ? "warn" : "bad";
 
-const errorMessage = (error) => {
-  const m = String(error?.message || error || "Falha na operação.");
+const errorMessage = (error: unknown) => {
+  const message =
+    error && typeof error === "object" && "message" in error
+      ? error.message
+      : error;
+  const m = String(message || "Falha na operação.");
   if (/FORM_VERSION_CONFLICT/.test(m))
     return "Este registro foi alterado em outra tela. Atualize antes de salvar; suas alterações locais foram preservadas.";
   if (/FORM_REQUIRED:/.test(m))
@@ -76,61 +120,85 @@ const errorMessage = (error) => {
   return m;
 };
 
-function create(adapter) {
-  const listeners = [];
-  const listen = (target, type, handler) => {
-    target.addEventListener(type, handler);
-    listeners.push(() => target.removeEventListener(type, handler));
+function create(adapter: ReactFormsAdapter): FormsModule {
+  const service = createFormsService(adapter.context);
+  const rpc = service.rpc;
+  const listeners: (() => void)[] = [];
+  type Events = WindowEventMap & DocumentEventMap;
+  const listen = <Type extends keyof Events>(
+    target: EventTarget,
+    type: Type,
+    handler: (event: Events[Type]) => void,
+  ) => {
+    const listener: EventListener = (event) => handler(event as Events[Type]);
+    target.addEventListener(type, listener);
+    listeners.push(() => target.removeEventListener(type, listener));
   };
-  const ctx = () => adapter.context(),
-    can = (code) => adapter.hasPermission(code),
-    notify = (s, t = "success") => adapter.toast(s, t);
-  let definitions = [],
-    people = [],
-    responses = [],
-    assignments = [],
-    plans = [],
-    builder = null,
+  const ctx = () => requireFormsContext(adapter.context()),
+    can = (code: string) => adapter.hasPermission(code),
+    notify = (s: string, t = "success") => adapter.toast(s, t);
+  let definitions: FormDefinition[] = [],
+    people: FormPerson[] = [],
+    responses: FormResponse[] = [],
+    assignments: FormAssignment[] = [],
+    plans: ActionPlan[] = [],
+    builder: FormBuilder | null = null,
     editingField = "",
     builderTab = "data",
     selectedForm = "",
-    response = null,
-    answers = {},
+    response: FormResponse | null = null,
+    answers: Answers = {},
     sectionIndex = 0,
-    reportTab = "summary",
+    reportTab: ReportTab = "summary",
     reportPage = 0,
-    reportFilter = {},
+    reportFilter: ReportFilter = {},
     busy = false,
     generation = 0,
     identity = "",
-    saveTimer = null,
+    saveTimer: ReturnType<typeof setTimeout> | undefined,
     saveChain = Promise.resolve(),
     dirty = false,
-    clock = null,
-    lastView = "",
+    clock: ReturnType<typeof setInterval> | undefined,
+    lastView: FormsView | "" = "",
     scheduleFormOpen = false,
     loading = false,
     activePerson = "",
-    pendingStart = null,
-    catalogFilter = {},
+    pendingStart: { formId: string; assignmentId: string | null } | null = null,
+    catalogFilter: CatalogFilter = {},
     scheduleView = "list",
     calendarMonth = "",
     executionPerson = "",
     uploading = false,
-    myEvaluations = [],
+    myEvaluations: OwnEvaluation[] = [],
     myYear = new Date().getFullYear(),
     myForm = "",
     myEvolution = false;
-  const rootFor = (view) => $(`view-${view}`);
-  const currentKey = () => `${ctx().user?.id || ""}|${ctx().unit || ""}`;
-  const localKey = (r) => `disb_forms_response_v1_${ctx().user?.id}_${r?.id}`;
+  const rootFor = (view: string) => $(`view-${view}`);
+  const currentKey = () =>
+    `${adapter.context().user?.id || ""}|${adapter.context().unit || ""}`;
+  const localKey = (r: FormResponse) =>
+    `disb_forms_response_v1_${adapter.context().user?.id}_${r.id}`;
   const builderKey = () =>
-    `disb_forms_builder_v1_${ctx().user?.id}_${ctx().unit}`;
-  const findForm = (id) => definitions.find((f) => f.id === id);
-  const currentPerson = () => ctx().profile || {};
-  const manage = (f) =>
+    `disb_forms_builder_v1_${adapter.context().user?.id}_${adapter.context().unit}`;
+  function requireBuilder(): FormBuilder {
+    if (!builder) throw Error("Abra um formulário para editar.");
+    return builder;
+  }
+  function requireResponse(): FormResponse {
+    if (!response) throw Error("Abra uma aplicação para continuar.");
+    return response;
+  }
+  function requireForm(id: string): FormDefinition {
+    const form = findForm(id);
+    if (!form)
+      throw Error("O formulário não está mais disponível. Atualize a tela.");
+    return form;
+  }
+  const findForm = (id: string) => definitions.find((f) => f.id === id);
+  const currentPerson = () => ctx().profile;
+  const manage = (f: FormDefinition | undefined) =>
     !!f && can("FORMS_MANAGE") && f.units.every((u) => ctx().units.includes(u));
-  const fill = (f) =>
+  const fill = (f: FormDefinition | undefined) =>
     !!f &&
     can("FORMS_FILL") &&
     f.status === "PUBLISHED" &&
@@ -138,32 +206,13 @@ function create(adapter) {
       f.apply_everyone ||
       f.apply_roles?.includes(currentPerson().role) ||
       f.apply_user_ids?.includes(ctx().user.id));
-  const report = (f) =>
+  const report = (f: FormDefinition | undefined) =>
+    !!f &&
     can("FORMS_REPORT") &&
     (manage(f) ||
       currentPerson().role === "ADMIN" ||
       f.report_roles?.includes(currentPerson().role) ||
       f.report_user_ids?.includes(ctx().user.id));
-  async function rpc(name, args) {
-    const { data, error } = await ctx().client.rpc(name, args);
-    if (error) throw error;
-    return data;
-  }
-  async function allRows(table, configure) {
-    let rows = [];
-    for (let offset = 0; ; offset += 250) {
-      let q = ctx().client.from(table).select("*");
-      q = configure(q).range(offset, offset + 249);
-      const { data, error } = await q;
-      if (error) throw error;
-      rows.push(...(data || []));
-      if (!data || data.length < 250) return rows;
-      if (rows.length >= 10000)
-        throw Error(
-          "O filtro possui mais de 10.000 registros. Reduza o intervalo para consultar e exportar todos os dados.",
-        );
-    }
-  }
   function persist() {
     if (!response) return;
     try {
@@ -195,19 +244,14 @@ function create(adapter) {
   async function loadDefinitions() {
     const key = currentKey(),
       token = generation;
-    if (!ctx().client || !ctx().user) return;
+    if (!adapter.context().client || !adapter.context().user) return;
     if (!navigator.onLine)
       throw Error(
         "Conecte-se à internet para carregar os formulários da unidade. As respostas já abertas continuam guardadas no aparelho.",
       );
-    const { data, error } = await ctx()
-      .client.from("form_definitions")
-      .select("*")
-      .contains("units", [ctx().unit])
-      .order("name");
+    const data = await service.definitions();
     if (key !== currentKey() || token !== generation) return;
-    if (error) throw error;
-    definitions = data || [];
+    definitions = data;
     paintNav();
   }
   async function loadPeople() {
@@ -310,7 +354,7 @@ function create(adapter) {
     }
     return true;
   }
-  async function enter(view) {
+  async function enter(view: FormsView) {
     lastView = view;
     if (identity !== currentKey()) await start();
     try {
@@ -357,8 +401,8 @@ function create(adapter) {
     }
     paintNav();
   }
-  function newBuilder(model = null) {
-    const section = {
+  function newBuilder(model: FormBuilder | null = null) {
+    const section: FormSection = {
       id: F.id(),
       title: "Dados",
       fields: [
@@ -376,7 +420,7 @@ function create(adapter) {
       ],
     };
     builder = model
-      ? JSON.parse(JSON.stringify(model))
+      ? jsonClone(model)
       : {
           name: "",
           description: "",
@@ -403,7 +447,11 @@ function create(adapter) {
     adapter.openView("forms-manage", true);
     renderManage();
   }
-  function choices(name, items, selected) {
+  function choices(
+    name: string,
+    items: Array<string | { value: string; label?: string }>,
+    selected: string[],
+  ) {
     return (
       <div className={"fm-choice-list"}>
         {items.map((item, rowIndex) => (
@@ -411,12 +459,16 @@ function create(adapter) {
             <Input
               type={"checkbox"}
               data-fm-list={name}
-              value={item.value ?? item}
+              value={typeof item === "string" ? item : item.value}
               {...attributeProps(
-                selected.includes(item.value ?? item) ? "checked" : "",
+                selected.includes(typeof item === "string" ? item : item.value)
+                  ? "checked"
+                  : "",
               )}
             ></Input>
-            <span>{item.label ?? item}</span>
+            <span>
+              {typeof item === "string" ? item : (item.label ?? item.value)}
+            </span>
           </label>
         ))}
       </div>
@@ -549,6 +601,8 @@ function create(adapter) {
     );
   }
   function builderData() {
+    const model = requireBuilder();
+
     const roles = Object.entries(ctx().roles).map(([value, label]) => ({
         value,
         label,
@@ -570,7 +624,7 @@ function create(adapter) {
           <div className={"fm-grid"}>
             {field(
               "Nome de exibição *",
-              input("name", builder.name, {
+              input("name", model.name, {
                 maxLength: "200",
                 placeholder: "Ex.: Inspeção de veículos",
               }),
@@ -580,18 +634,18 @@ function create(adapter) {
               "Descrição",
               <TextArea
                 data-fm-meta={"description"}
-                maxLength={"350"}
-                rows={"3"}
+                maxLength={350}
+                rows={3}
                 placeholder={"Explique o objetivo e quando preencher"}
               >
-                {builder.description}
+                {model.description}
               </TextArea>,
               true,
             )}
             {field(
               "Área responsável *",
               <>
-                {input("area", builder.area, {
+                {input("area", model.area, {
                   maxLength: "100",
                   list: "formsAreas",
                   placeholder: "Ex.: Logística",
@@ -616,9 +670,9 @@ function create(adapter) {
             {field(
               "Tipo de formulário *",
               <Select data-fm-meta={"form_type"}>
-                {!TYPES[builder.form_type] ? (
-                  <Option value={builder.form_type} selected={true}>
-                    {builder.form_type}
+                {!TYPES[model.form_type] ? (
+                  <Option value={model.form_type} selected={true}>
+                    {model.form_type}
                     {" · anterior"}
                   </Option>
                 ) : (
@@ -629,7 +683,7 @@ function create(adapter) {
                     key={rowKey(undefined, rowIndex)}
                     value={id}
                     {...attributeProps(
-                      id === builder.form_type ? "selected" : "",
+                      id === model.form_type ? "selected" : "",
                     )}
                   >
                     {label}
@@ -648,12 +702,12 @@ function create(adapter) {
               <p>{"O acesso respeita as unidades de cada usuário."}</p>
             </div>
           </div>
-          {choices("units", ctx().units, builder.units)}
+          {choices("units", ctx().units, model.units)}
           <label className={"fm-toggle"}>
             <Input
               type={"checkbox"}
               data-fm-meta={"apply_everyone"}
-              {...attributeProps(builder.apply_everyone ? "checked" : "")}
+              {...attributeProps(model.apply_everyone ? "checked" : "")}
             ></Input>
             <span>
               {"Todos os usuários autorizados destas unidades podem preencher"}
@@ -672,7 +726,7 @@ function create(adapter) {
           <div className={"fm-permission-grid"}>
             <section>
               <h3>{"Quem pode preencher"}</h3>
-              {builder.apply_everyone ? (
+              {model.apply_everyone ? (
                 <p className={"notice"}>
                   {
                     "Todos os usuários das unidades selecionadas, com a permissão de preencher formulários."
@@ -680,12 +734,12 @@ function create(adapter) {
                 </p>
               ) : (
                 <>
-                  {choices("apply_roles", roles, builder.apply_roles)}
+                  {choices("apply_roles", roles, model.apply_roles)}
 
                   <details>
                     <summary>
                       {"Pessoas específicas ("}
-                      {builder.apply_user_ids.length}
+                      {model.apply_user_ids.length}
                       {")"}
                     </summary>
                     <Input
@@ -694,18 +748,18 @@ function create(adapter) {
                       placeholder={"Buscar pessoa"}
                       aria-label={"Buscar pessoas para preencher"}
                     ></Input>
-                    {choices("apply_user_ids", users, builder.apply_user_ids)}
+                    {choices("apply_user_ids", users, model.apply_user_ids)}
                   </details>
                 </>
               )}
             </section>
             <section>
               <h3>{"Quem pode acompanhar os relatórios"}</h3>
-              {choices("report_roles", roles, builder.report_roles)}
+              {choices("report_roles", roles, model.report_roles)}
               <details>
                 <summary>
                   {"Pessoas específicas ("}
-                  {builder.report_user_ids.length}
+                  {model.report_user_ids.length}
                   {")"}
                 </summary>
                 <Input
@@ -714,7 +768,7 @@ function create(adapter) {
                   placeholder={"Buscar pessoa"}
                   aria-label={"Buscar pessoas para acompanhar"}
                 ></Input>
-                {choices("report_user_ids", users, builder.report_user_ids)}
+                {choices("report_user_ids", users, model.report_user_ids)}
               </details>
               <p className={"fm-help"}>
                 {
@@ -727,7 +781,7 @@ function create(adapter) {
 
         {evaluationEditor()}
 
-        {builder.id ? (
+        {model.id ? (
           <div className={"card fm-archive-row"}>
             <div>
               <h3>{"Disponibilidade"}</h3>
@@ -741,7 +795,7 @@ function create(adapter) {
                 <Option
                   key={rowKey(s, rowIndex)}
                   value={s}
-                  {...attributeProps(builder.status === s ? "selected" : "")}
+                  {...attributeProps(model.status === s ? "selected" : "")}
                 >
                   {STATUS[s]}
                 </Option>
@@ -756,15 +810,20 @@ function create(adapter) {
     );
   }
   function evaluationEditor() {
-    const config = builder.schema.evaluation || { enabled: false, area: "" },
+    const model = requireBuilder();
+
+    const config = model.schema.evaluation || { enabled: false, area: "" },
       members = people.filter((p) =>
-        p.units.some((u) => builder.units.includes(u)),
+        p.units.some((u) => model.units.includes(u)),
       ),
       areas = [
         ...new Set(
-          [...members.map((p) => p.area).filter(Boolean), config.area].filter(
-            Boolean,
-          ),
+          [
+            ...members
+              .map((p) => p.area)
+              .filter((value): value is string => !!value),
+            config.area,
+          ].filter(Boolean),
         ),
       ].sort((a, b) => a.localeCompare(b, "pt-BR"));
     return (
@@ -816,7 +875,9 @@ function create(adapter) {
       </div>
     );
   }
-  function questionEditor(section, q) {
+  function questionEditor(section: FormSection, q: FormField) {
+    const model = requireBuilder();
+
     const open = editingField === q.id,
       canScore = ["BOOLEAN", "SINGLE_CHOICE"].includes(q.type),
       expected =
@@ -867,8 +928,8 @@ function create(adapter) {
             {field(
               "Pergunta *",
               <TextArea
-                rows={"2"}
-                maxLength={"500"}
+                rows={2}
+                maxLength={500}
                 data-fm-q={"label"}
                 data-id={q.id}
                 placeholder={"O que você precisa verificar?"}
@@ -877,7 +938,7 @@ function create(adapter) {
               </TextArea>,
               true,
             )}
-            {builder.schema.evaluation?.enabled
+            {model.schema.evaluation?.enabled
               ? field(
                   "Esta resposta vale para",
                   <Select data-fm-q={"scope"} data-id={q.id}>
@@ -917,7 +978,7 @@ function create(adapter) {
             {field(
               "Orientação (opcional)",
               <Input
-                maxLength={"500"}
+                maxLength={500}
                 data-fm-q={"help"}
                 data-id={q.id}
                 value={q.help}
@@ -928,8 +989,8 @@ function create(adapter) {
               ? field(
                   "Opções * · uma por linha",
                   <TextArea
-                    rows={"4"}
-                    maxLength={"4500"}
+                    rows={4}
+                    maxLength={4500}
                     data-fm-q={"options"}
                     data-id={q.id}
                   >
@@ -1031,9 +1092,11 @@ function create(adapter) {
     );
   }
   function builderQuestions() {
+    const model = requireBuilder();
+
     return (
       <>
-        {builder.schema.sections.map((s, i) => (
+        {model.schema.sections.map((s, i) => (
           <section key={rowKey(s, i)} className={"card fm-section-editor"}>
             <div className={"fm-section-heading"}>
               <div>
@@ -1044,7 +1107,7 @@ function create(adapter) {
                 <Input
                   aria-label={"Título da seção " + (i + 1)}
                   data-fm-section={s.id}
-                  maxLength={"150"}
+                  maxLength={150}
                   value={s.title}
                 ></Input>
               </div>
@@ -1084,7 +1147,7 @@ function create(adapter) {
       </>
     );
   }
-  function previewHtml(model) {
+  function previewHtml(model: FormBuilder) {
     return (
       <>
         <div className={"notice"}>
@@ -1124,7 +1187,7 @@ function create(adapter) {
       </>
     );
   }
-  async function saveBuilder(status) {
+  async function saveBuilder(status: DefinitionStatus) {
     if (busy || !builder) return;
     rememberBuilder();
     if (!F.clean(builder.name) || !F.clean(builder.area))
@@ -1137,16 +1200,33 @@ function create(adapter) {
     )
       throw Error("Selecione quem pode preencher o formulário.");
     F.validateSchema(builder.schema);
+    const editing = builder,
+      submitted = jsonClone(builder),
+      key = currentKey(),
+      storageKey = builderKey();
     busy = true;
     setBusy(true);
     try {
       const saved = await rpc("save_form_definition", {
-        p_id: builder.id || null,
-        p_expected_version: builder.version || 0,
-        p_payload: { ...builder, status },
+        p_id: submitted.id || null,
+        p_expected_version: submitted.version || 0,
+        p_payload: { ...submitted, status },
       });
+      if (key !== currentKey() || builder !== editing) return;
+      if (JSON.stringify(builder) !== JSON.stringify(submitted)) {
+        builder.id = saved.id;
+        builder.version = saved.version;
+        builder.status = saved.status;
+        rememberBuilder();
+        await loadDefinitions();
+        renderManage();
+        notify(
+          "Versão salva. As alterações feitas durante o envio continuam guardadas para salvar novamente.",
+        );
+        return;
+      }
       builder = null;
-      localStorage.removeItem(builderKey());
+      localStorage.removeItem(storageKey);
       await loadDefinitions();
       renderManage();
       notify(`${saved.name}: ${STATUS[saved.status].toLowerCase()}.`);
@@ -1155,25 +1235,19 @@ function create(adapter) {
       setBusy(false);
     }
   }
-  function setBusy(value) {
+  function setBusy(value: boolean) {
     document
-      .querySelectorAll(
+      .querySelectorAll<HTMLButtonElement>(
         '[data-fm-action="publish"],[data-fm-action="save-draft"],[data-fm-action="finish"],[data-fm-action="save-response"]',
       )
       .forEach((b) => (b.disabled = value || uploading));
   }
   async function loadOwn() {
     const key = currentKey(),
-      rows = await allRows("form_responses", (q) =>
-        q
-          .eq("unit", ctx().unit)
-          .eq("respondent_id", ctx().user.id)
-          .neq("status", "CANCELLED")
-          .order("started_at", { ascending: false }),
-      );
+      rows = await service.ownResponses();
     if (key === currentKey()) responses = rows;
   }
-  function responseRows(rows) {
+  function responseRows(rows: FormReadRow[]) {
     return (
       <div className={"fm-table-wrap"}>
         <table className={"fm-table"}>
@@ -1238,7 +1312,6 @@ function create(adapter) {
   }
   function renderCatalog() {
     const box = rootFor("forms-fill"),
-      form = null,
       available = definitions.filter(fill),
       mine = responses;
     renderContent(
@@ -1246,9 +1319,8 @@ function create(adapter) {
       <>
         {head(
           "APLICAR",
-          form?.name || "Preencher formulários",
-          form?.description ||
-            "Escolha um formulário ou continue uma aplicação em andamento.",
+          "Preencher formulários",
+          "Escolha um formulário ou continue uma aplicação em andamento.",
           <>
             {btn("catalog", "Todos os formulários")}
             {btn("refresh", "Atualizar")}
@@ -1380,11 +1452,13 @@ function create(adapter) {
     filterCatalog();
   }
   function filterCatalog() {
-    for (const card of document.querySelectorAll("[data-fm-catalog-key]"))
+    for (const card of document.querySelectorAll<HTMLElement>(
+      "[data-fm-catalog-key]",
+    ))
       card.classList.toggle(
         "hidden",
         !!(
-          !card.dataset.fmCatalogKey.includes(
+          !(card.dataset.fmCatalogKey || "").includes(
             F.key(catalogFilter.search || ""),
           ) ||
           (catalogFilter.type &&
@@ -1394,12 +1468,12 @@ function create(adapter) {
         ),
       );
   }
-  function duration(r) {
+  function duration(r: Pick<FormResponse, "started_at" | "completed_at">) {
     const seconds = Math.max(
       0,
       Math.floor(
-        ((r.completed_at ? new Date(r.completed_at) : new Date()) -
-          new Date(r.started_at)) /
+        ((r.completed_at ? new Date(r.completed_at) : new Date()).getTime() -
+          new Date(r.started_at).getTime()) /
           1000,
       ),
     );
@@ -1409,7 +1483,7 @@ function create(adapter) {
       .toString()
       .padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
   }
-  async function begin(formId, assignmentId = null) {
+  async function begin(formId: string, assignmentId: string | null = null) {
     if (busy) return;
     if (!navigator.onLine)
       throw Error(
@@ -1425,7 +1499,7 @@ function create(adapter) {
       pendingStart = { formId, assignmentId };
       adapter.modal({
         title: "Quem será avaliado?",
-        subtitle: findForm(formId).schema.evaluation.area,
+        subtitle: requireForm(formId).schema.evaluation?.area || "",
         html: targets.length ? (
           <>
             <p>
@@ -1470,15 +1544,15 @@ function create(adapter) {
       busy = false;
     }
   }
-  async function openResponse(row) {
+  async function openResponse(row: FormResponse) {
     response = row;
     activePerson = row.evaluated_people?.[0]?.id || "";
     selectedForm = row.form_id;
-    answers = JSON.parse(JSON.stringify(row.answers || {}));
+    answers = jsonClone(row.answers || {});
     sectionIndex = 0;
     dirty = false;
     try {
-      const saved = JSON.parse(localStorage.getItem(localKey(row)) || "null");
+      const saved = readResponseDraft(localStorage.getItem(localKey(row)));
       if (row.status === "DRAFT" && saved?.revision === row.revision) {
         answers = saved.answers;
         dirty = JSON.stringify(answers) !== JSON.stringify(row.answers);
@@ -1487,7 +1561,9 @@ function create(adapter) {
           "Há uma cópia local de outra revisão. Foram carregadas as respostas atuais do servidor.",
           "error",
         );
-    } catch (_e) {}
+    } catch (error) {
+      notify(errorMessage(error), "error");
+    }
     adapter.openView("forms-fill", true);
     if (row.status === "COMPLETED") {
       showDetail(row);
@@ -1497,13 +1573,14 @@ function create(adapter) {
     renderResponse();
     clearInterval(clock);
     clock = setInterval(() => {
-      if ($("formsElapsed") && response)
-        $("formsElapsed").textContent = duration(response);
+      if (response) setText("formsElapsed", duration(response));
     }, 1000);
   }
-  function answerBag(id, person = activePerson) {
-    const f = F.fields(response.schema_snapshot).find((f) => f.id === id);
-    if (f?.scope === "INDIVIDUAL" && response.evaluated_people?.length) {
+  function answerBag(id: string, person = activePerson) {
+    const rowSnapshot = requireResponse();
+
+    const f = F.fields(rowSnapshot.schema_snapshot).find((f) => f.id === id);
+    if (f?.scope === "INDIVIDUAL" && rowSnapshot.evaluated_people?.length) {
       answers.__evaluations ??= {};
       answers.__evaluations[person] ??= {};
       return answers.__evaluations[person];
@@ -1511,15 +1588,18 @@ function create(adapter) {
     return answers;
   }
   function currentAnswers() {
+    const rowSnapshot = requireResponse();
+
     return activePerson
-      ? F.evaluationAnswers(response.schema_snapshot, answers, activePerson)
+      ? F.evaluationAnswers(rowSnapshot.schema_snapshot, answers, activePerson)
       : answers;
   }
 
-  function photoLinks(answer) {
-    return (answer?.photos || []).length ? (
+  function photoLinks(answer: Answer | undefined) {
+    const photos = answer?.photos || [];
+    return photos.length ? (
       <div className={"fm-photo-grid"}>
-        {answer.photos.map((path, i) => (
+        {photos.map((path, i) => (
           <a
             key={rowKey(path, i)}
             data-fm-photo={path}
@@ -1538,7 +1618,7 @@ function create(adapter) {
       ""
     );
   }
-  function photoEditor(field, answer) {
+  function photoEditor(field: FormField, answer: Answer) {
     return (
       <div className={"fm-photo-editor"}>
         <div className={"actions"}>
@@ -1590,12 +1670,12 @@ function create(adapter) {
       </div>
     );
   }
-  async function photoOperation(promise) {
-    let timer;
+  async function photoOperation<T>(promise: PromiseLike<T>): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       return await Promise.race([
         promise,
-        new Promise((_, reject) => {
+        new Promise<never>((_, reject) => {
           timer = setTimeout(
             () =>
               reject(
@@ -1612,8 +1692,16 @@ function create(adapter) {
     }
   }
   async function refreshPhotoLinks() {
-    const links = [...document.querySelectorAll("[data-fm-photo]")],
-      paths = [...new Set(links.map((e) => e.dataset.fmPhoto))];
+    const links = [
+        ...document.querySelectorAll<HTMLAnchorElement>("[data-fm-photo]"),
+      ],
+      paths = [
+        ...new Set(
+          links
+            .map((e) => e.dataset.fmPhoto)
+            .filter((path): path is string => !!path),
+        ),
+      ];
     if (!paths.length) return;
     const key = currentKey(),
       { data, error } = await photoOperation(
@@ -1633,11 +1721,12 @@ function create(adapter) {
       )) {
         if (item.signedUrl) {
           link.href = item.signedUrl;
-          link.querySelector("img").src = item.signedUrl;
+          const image = link.querySelector("img");
+          if (image) image.src = item.signedUrl;
         }
       }
   }
-  async function compressPhoto(file) {
+  async function compressPhoto(file: File) {
     if (!file.type.startsWith("image/")) throw Error("Selecione uma imagem.");
     if (file.size > 25 * 1024 * 1024)
       throw Error("A imagem deve ter até 25 MB antes da redução.");
@@ -1653,8 +1742,11 @@ function create(adapter) {
         canvas = document.createElement("canvas");
       canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
       canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
-      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-      const blob = await new Promise((resolve) =>
+      const context = canvas.getContext("2d");
+      if (!context)
+        throw Error("Não foi possível preparar essa foto neste aparelho.");
+      context.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise<Blob | null>((resolve) =>
         canvas.toBlob(resolve, "image/jpeg", 0.85),
       );
       if (!blob || blob.size > 5 * 1024 * 1024)
@@ -1664,7 +1756,7 @@ function create(adapter) {
       URL.revokeObjectURL(url);
     }
   }
-  async function addPhotos(id, files, person = activePerson) {
+  async function addPhotos(id: string, files: File[], person = activePerson) {
     if (uploading || busy) throw Error("Aguarde a operação atual.");
     if (!response || response.status !== "DRAFT") return;
     if (!navigator.onLine)
@@ -1676,6 +1768,7 @@ function create(adapter) {
       row = response,
       key = currentKey(),
       field = F.fields(row.schema_snapshot).find((f) => f.id === id);
+    if (!field) throw Error("Esta pergunta não está mais disponível.");
     if (
       (entry.photos || []).length + files.length > 5 ||
       F.evidencePaths(answers).length + files.length > 40
@@ -1708,7 +1801,7 @@ function create(adapter) {
     }
   }
 
-  function answerControl(f, a) {
+  function answerControl(f: FormField, a: Answer) {
     const v = a?.value;
     if (f.type === "PHOTO")
       return (
@@ -1744,13 +1837,17 @@ function create(adapter) {
     if (f.type === "SINGLE_CHOICE")
       return (
         <Select data-fm-answer={f.id} aria-label={f.label}>
-          {options(f.options, v, "Selecione uma opção")}
+          {options(
+            f.options || [],
+            typeof v === "string" || typeof v === "number" ? v : undefined,
+            "Selecione uma opção",
+          )}
         </Select>
       );
     if (f.type === "MULTIPLE_CHOICE")
       return (
         <div className={"fm-multiple-options"}>
-          {f.options.map((option, rowIndex) => (
+          {(f.options || []).map((option, rowIndex) => (
             <label key={rowKey(option, rowIndex)}>
               <Input
                 type={"checkbox"}
@@ -1768,8 +1865,8 @@ function create(adapter) {
     if (f.type === "LONG_TEXT")
       return (
         <TextArea
-          rows={"4"}
-          maxLength={"4000"}
+          rows={4}
+          maxLength={4000}
           data-fm-answer={f.id}
           aria-label={f.label}
           placeholder={"Digite a resposta"}
@@ -1794,11 +1891,13 @@ function create(adapter) {
       ></Input>
     );
   }
-  function answerPart(f, person = null) {
+  function answerPart(f: FormField, person: EvaluatedPerson | null = null) {
+    const rowSnapshot = requireResponse();
+
     const pid = person?.id || "",
       a =
         (person
-          ? F.evaluationAnswers(response.schema_snapshot, answers, pid)
+          ? F.evaluationAnswers(rowSnapshot.schema_snapshot, answers, pid)
           : answers)[f.id] || {},
       negative = F.outcome(f, a) === "NOK",
       key = f.id + (pid ? "-" + pid : "");
@@ -1856,8 +1955,8 @@ function create(adapter) {
           </label>
           <TextArea
             id={"fm-note-" + key}
-            rows={"3"}
-            maxLength={"2000"}
+            rows={3}
+            maxLength={2000}
             data-fm-note={f.id}
             placeholder={"Descreva o que foi observado"}
           >
@@ -1873,8 +1972,8 @@ function create(adapter) {
           </label>
           <TextArea
             id={"fm-plan-" + key}
-            rows={"3"}
-            maxLength={"2000"}
+            rows={3}
+            maxLength={2000}
             data-fm-plan={f.id}
             placeholder={"O que será feito para corrigir?"}
           >
@@ -1937,7 +2036,7 @@ function create(adapter) {
           <div className={"card fm-evaluated-bar"}>
             <strong>
               {"Área avaliada: "}
-              {schema.evaluation.area}
+              {schema.evaluation?.area}
             </strong>
             <p>
               {
@@ -2023,8 +2122,8 @@ function create(adapter) {
             <TextArea
               id={"formsSectionNote"}
               data-fm-section-note={section.id}
-              rows={"3"}
-              maxLength={"2000"}
+              rows={3}
+              maxLength={2000}
               placeholder={"Informações adicionais sobre esta seção"}
             >
               {answers.__sections?.[section.id] || ""}
@@ -2061,27 +2160,29 @@ function create(adapter) {
   function answerChanged() {
     dirty = true;
     persist();
-    if ($("formsSaveStatus"))
-      $("formsSaveStatus").textContent = "Alterações guardadas neste aparelho";
+    setText("formsSaveStatus", "Alterações guardadas neste aparelho");
     clearTimeout(saveTimer);
     if (navigator.onLine)
       saveTimer = setTimeout(
         () =>
           saveResponse(false).catch((e) => {
-            if ($("formsSaveStatus"))
-              $("formsSaveStatus").textContent = errorMessage(e);
+            setText("formsSaveStatus", errorMessage(e));
           }),
         1000,
       );
     updateProgress();
   }
   function requiredProgress() {
-    const rows = response.evaluated_people?.length
-        ? response.evaluated_people.map((p) =>
-            F.evaluationAnswers(response.schema_snapshot, answers, p.id),
+    const rowSnapshot = requireResponse();
+
+    const rows = rowSnapshot.evaluated_people?.length
+        ? rowSnapshot.evaluated_people.map((p) =>
+            F.evaluationAnswers(rowSnapshot.schema_snapshot, answers, p.id),
           )
         : [answers],
-      required = F.fields(response.schema_snapshot).filter((f) => f.required);
+      required = F.fields(rowSnapshot.schema_snapshot).filter(
+        (f) => f.required,
+      );
     return {
       total: rows.length * required.length,
       answered: rows.reduce(
@@ -2094,10 +2195,13 @@ function create(adapter) {
     if (!response) return;
     const s = F.score(response.schema_snapshot, answers),
       p = requiredProgress();
-    if ($("formsProgress"))
-      $("formsProgress").textContent =
-        `${p.answered} de ${p.total} obrigatórias respondidas`;
-    const bar = document.querySelector(".fm-application-bar .fm-progress i");
+    setText(
+      "formsProgress",
+      `${p.answered} de ${p.total} obrigatórias respondidas`,
+    );
+    const bar = document.querySelector<HTMLElement>(
+      ".fm-application-bar .fm-progress i",
+    );
     if (bar)
       bar.style.width = `${p.total ? (p.answered / p.total) * 100 : 100}%`;
     if ($("formsLiveScore"))
@@ -2106,7 +2210,7 @@ function create(adapter) {
         badge(pct(s.percent), tone(s.percent)),
       );
   }
-  async function saveResponse(finalize) {
+  async function saveResponse(finalize: boolean) {
     clearTimeout(saveTimer);
     const expectedId = response?.id,
       expectedContext = currentKey();
@@ -2135,7 +2239,7 @@ function create(adapter) {
         throw Error(check.errors[0].message);
       }
       const row = response,
-        submitted = JSON.parse(JSON.stringify(answers)),
+        submitted = jsonClone(answers),
         key = currentKey();
       setBusy(true);
       try {
@@ -2148,12 +2252,12 @@ function create(adapter) {
         if (key !== currentKey() || response?.id !== row.id) return;
         response = saved;
         dirty = JSON.stringify(answers) !== JSON.stringify(submitted);
-        if (!dirty) answers = JSON.parse(JSON.stringify(saved.answers || {}));
+        if (!dirty) answers = jsonClone(saved.answers || {});
         persist();
-        if ($("formsSaveStatus"))
-          $("formsSaveStatus").textContent = dirty
-            ? "Salvando novas alterações…"
-            : "Rascunho salvo no servidor";
+        setText(
+          "formsSaveStatus",
+          dirty ? "Salvando novas alterações…" : "Rascunho salvo no servidor",
+        );
         if (finalize) {
           localStorage.removeItem(localKey(saved));
           response = null;
@@ -2174,16 +2278,20 @@ function create(adapter) {
     saveChain = saveChain.catch(() => {}).then(operation);
     return saveChain;
   }
-  function showAnswerErrors(errors) {
+  function showAnswerErrors(errors: ValidationIssue[]) {
+    const rowSnapshot = requireResponse();
+
     if (errors[0].person) activePerson = errors[0].person;
-    const index = response.schema_snapshot.sections.findIndex((s) =>
+    const index = rowSnapshot.schema_snapshot.sections.findIndex((s) =>
       s.fields.some((f) => f.id === errors[0].id),
     );
     if (index >= 0) sectionIndex = index;
     renderResponse();
     const box = $("formsAnswerErrors");
-    box.classList.remove("hidden");
-    box.textContent = errors.map((e) => e.message).join(" ");
+    if (box) {
+      box.classList.remove("hidden");
+      box.textContent = errors.map((e) => e.message).join(" ");
+    }
     $(
       `fm-answer-${errors[0].id}${errors[0].person ? "-" + errors[0].person : ""}`,
     )?.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -2240,7 +2348,7 @@ function create(adapter) {
       }
     }
   }
-  function selfPlanHtml(row, f) {
+  function selfPlanHtml(row: FormReadRow, f: FormField) {
     const key = F.planField(f, row.evaluated_user_id),
       p = row.own_plans?.find((p) => p.field_id === key);
     return p ? (
@@ -2388,23 +2496,13 @@ function create(adapter) {
       </>,
     );
   }
-  function dayEnd(value) {
+  function dayEnd(value: string) {
     const d = new Date(value + "T00:00:00-03:00");
     d.setUTCDate(d.getUTCDate() + 1);
     return d.toISOString();
   }
-  async function loadPlans(rows) {
-    const result = [];
-    for (let i = 0; i < rows.length; i += 100) {
-      const ids = rows.slice(i, i + 100).map((r) => r.id);
-      if (ids.length)
-        result.push(
-          ...(await allRows("form_action_plans", (q) =>
-            q.in("response_id", ids).order("created_at"),
-          )),
-        );
-    }
-    return result;
+  async function loadPlans(rows: FormReadRow[]) {
+    return service.plans(rows.map((row) => row.id));
   }
   async function loadReport() {
     const key = currentKey(),
@@ -2415,30 +2513,19 @@ function create(adapter) {
     loading = true;
     renderReport();
     try {
-      const rows = await allRows("form_responses", (q) => {
-        q = q
-          .eq("unit", ctx().unit)
-          .neq("status", "CANCELLED")
-          .gte("started_at", dates.from + "T00:00:00-03:00")
-          .lt("started_at", dayEnd(dates.to))
-          .order("started_at", { ascending: false })
-          .order("id");
-        if (reportFilter.form) q = q.eq("form_id", reportFilter.form);
-        if (reportFilter.person && reportTab !== "execution")
-          q = q.eq("respondent_id", reportFilter.person);
-        return q;
+      const rows = await service.reportResponses({
+        from: dates.from + "T00:00:00-03:00",
+        until: dayEnd(dates.to),
+        form: reportFilter.form,
+        respondent: reportTab !== "execution" ? reportFilter.person : undefined,
       });
       const [p, a] = await Promise.all([
         loadPlans(rows),
-        allRows("form_assignments", (q) => {
-          q = q
-            .eq("unit", ctx().unit)
-            .gte("due_date", dates.from)
-            .lte("due_date", dates.to)
-            .order("due_date");
-          if (reportFilter.form) q = q.eq("form_id", reportFilter.form);
-          if (reportFilter.person) q = q.eq("user_id", reportFilter.person);
-          return q;
+        service.assignments({
+          from: dates.from,
+          to: dates.to,
+          form: reportFilter.form,
+          person: reportFilter.person,
         }),
       ]);
       if (key !== currentKey() || token !== generation) return;
@@ -2466,7 +2553,12 @@ function create(adapter) {
           F.key(r.form_name).includes(F.key(reportFilter.search))),
     );
   }
-  function metric(label, value, kind = "neutral", detail = "") {
+  function metric(
+    label: string,
+    value: ReactNode,
+    kind: Tone = "neutral",
+    detail: ReactNode = "",
+  ) {
     return (
       <article className={"fm-metric " + kind}>
         <small>{label}</small>
@@ -2475,7 +2567,7 @@ function create(adapter) {
       </article>
     );
   }
-  function metrics(rows, label = "") {
+  function metrics(rows: FormReadRow[], label = "") {
     const s = F.summarize(rows);
     return (
       <div className={"fm-metrics"}>
@@ -2587,7 +2679,9 @@ function create(adapter) {
                   [
                     ...new Set(
                       definitions.flatMap((f) =>
-                        [f.area, f.schema.evaluation?.area].filter(Boolean),
+                        [f.area, f.schema.evaluation?.area].filter(
+                          (value): value is string => !!value,
+                        ),
                       ),
                     ),
                   ].sort(),
@@ -2705,8 +2799,11 @@ function create(adapter) {
       </>,
     );
   }
-  function groupForms(rows) {
-    const map = new Map();
+  function groupForms(rows: FormReadRow[]) {
+    const map = new Map<
+      string,
+      { id: string; name: string; area?: string; rows: FormReadRow[] }
+    >();
     for (const r of rows) {
       if (!map.has(r.form_id))
         map.set(r.form_id, {
@@ -2715,11 +2812,11 @@ function create(adapter) {
           area: r.form_area,
           rows: [],
         });
-      map.get(r.form_id).rows.push(r);
+      map.get(r.form_id)?.rows.push(r);
     }
     return [...map.values()].sort((a, b) => b.rows.length - a.rows.length);
   }
-  function summaryHtml(rows) {
+  function summaryHtml(rows: FormReadRow[]) {
     const groups = groupForms(rows);
     return (
       <div className={"card"}>
@@ -2791,7 +2888,7 @@ function create(adapter) {
       </div>
     );
   }
-  function pager(total, size = 25) {
+  function pager(total: number, size = 25) {
     return (
       <div className={"fm-pagination"}>
         <span>
@@ -2814,7 +2911,7 @@ function create(adapter) {
       </div>
     );
   }
-  function applicationsHtml(rows) {
+  function applicationsHtml(rows: FormReadRow[]) {
     const paged = rows.slice(reportPage * 25, reportPage * 25 + 25);
     return (
       <div className={"card"}>
@@ -2825,11 +2922,14 @@ function create(adapter) {
       </div>
     );
   }
-  function executionHtml(rows, year) {
+  function executionHtml(rows: FormReadRow[], year: number) {
     const assessed = F.assessmentRows(rows).filter(
         (r) => r.status === "COMPLETED" && r.evaluated_user_id,
       ),
-      persons = new Map();
+      persons = new Map<
+        string,
+        { id: string; name: string; role: string; area?: string }
+      >();
     for (const f of definitions.filter(
       (f) =>
         (!reportFilter.form || f.id === reportFilter.form) &&
@@ -2840,17 +2940,19 @@ function create(adapter) {
       for (const p of people.filter(
         (p) =>
           p.units.includes(ctx().unit) &&
-          F.key(p.area) === F.key(f.schema.evaluation.area),
+          F.key(p.area) === F.key(f.schema.evaluation?.area),
       ))
-        persons.set(p.id, { ...p, area: f.schema.evaluation.area });
+        persons.set(p.id, { ...p, area: f.schema.evaluation?.area });
     }
-    for (const r of assessed)
+    for (const r of assessed) {
+      if (!r.evaluated_user_id || !r.evaluated_name) continue;
       persons.set(r.evaluated_user_id, {
         id: r.evaluated_user_id,
         name: r.evaluated_name,
-        role: r.evaluated_role,
+        role: r.evaluated_role || "",
         area: r.evaluated_area,
       });
+    }
     const list = [...persons.values()]
       .filter((p) => !reportFilter.person || p.id === reportFilter.person)
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -2949,7 +3051,7 @@ function create(adapter) {
       </div>
     );
   }
-  function personEvolutionHtml(rows, id, year) {
+  function personEvolutionHtml(rows: FormReadRow[], id: string, year: number) {
     const person = F.assessmentRows(rows).find(
         (r) => r.evaluated_user_id === id,
       ),
@@ -3031,7 +3133,7 @@ function create(adapter) {
     );
   }
 
-  function farolHtml(rows) {
+  function farolHtml(rows: FormReadRow[]) {
     if (!reportFilter.form)
       return (
         <div className={"card"}>
@@ -3045,7 +3147,7 @@ function create(adapter) {
         (r) => r.status === "COMPLETED",
       ),
       columns = completed.slice(reportPage * 8, reportPage * 8 + 8),
-      questions = new Map();
+      questions = new Map<string, ReturnType<typeof F.fields>[number]>();
     for (const r of completed)
       for (const f of F.fields(r.schema_snapshot))
         if (!questions.has(f.id)) questions.set(f.id, f);
@@ -3055,7 +3157,7 @@ function create(adapter) {
           {empty("Nenhuma aplicação finalizada no filtro")}
         </div>
       );
-    const row = (label, fn) => (
+    const row = (label: string, fn: (response: FormReadRow) => ReactNode) => (
       <tr>
         <th>{label}</th>
         {columns.map((r, rowIndex) => (
@@ -3146,7 +3248,7 @@ function create(adapter) {
       </div>
     );
   }
-  function annualChart(rows, year, quality = false) {
+  function annualChart(rows: FormReadRow[], year: number, quality = false) {
     const months = F.annual(rows, year),
       max = Math.max(1, ...months.map((m) => m.completed)),
       left = 44,
@@ -3244,7 +3346,7 @@ function create(adapter) {
       </figure>
     );
   }
-  function barRows(items, negative = false) {
+  function barRows(items: { name: string; count: number }[], negative = false) {
     const max = Math.max(1, ...items.map((x) => x.count));
     return (
       <div className={"fm-ranking"}>
@@ -3265,7 +3367,7 @@ function create(adapter) {
       </div>
     );
   }
-  function chartsHtml(rows, year) {
+  function chartsHtml(rows: FormReadRow[], year: number) {
     return (
       <>
         <div className={"card"}>
@@ -3286,10 +3388,10 @@ function create(adapter) {
       </>
     );
   }
-  function conformityHtml(rows, year) {
+  function conformityHtml(rows: FormReadRow[], year: number) {
     const negative = F.issues(rows),
-      byQuestion = new Map(),
-      all = new Map();
+      byQuestion = new Map<string, { name: string; count: number }>(),
+      all = new Map<string, { name: string; form: string; months: number[] }>();
     for (const r of rows.filter((r) => r.status === "COMPLETED"))
       for (const f of F.fields(r.schema_snapshot)) {
         if (f.scored) {
@@ -3306,9 +3408,11 @@ function create(adapter) {
       const k = x.response.form_id + ":" + x.field.id;
       if (!byQuestion.has(k))
         byQuestion.set(k, { name: x.field.label, count: 0 });
-      byQuestion.get(k).count++;
+      const question = byQuestion.get(k);
+      if (question) question.count++;
       const m = Number(F.localDay(x.response.started_at).slice(5, 7)) - 1;
-      if (all.has(k) && m >= 0) all.get(k).months[m]++;
+      const annualQuestion = all.get(k);
+      if (annualQuestion && m >= 0 && m < 12) annualQuestion.months[m]++;
     }
     return (
       <>
@@ -3360,10 +3464,10 @@ function create(adapter) {
       </>
     );
   }
-  function issuesHtml(rows) {
+  function issuesHtml(rows: FormReadRow[]) {
     const all = F.issues(rows, plans),
       withPlan = all.filter((x) => x.plan),
-      done = withPlan.filter((x) => x.plan.status === "DONE");
+      done = withPlan.filter((x) => x.plan?.status === "DONE");
     return (
       <>
         <div className={"fm-metrics three"}>
@@ -3410,7 +3514,7 @@ function create(adapter) {
                           <td>
                             <strong>{x.field.label}</strong>
                             <small>
-                              {x.answer.observation || "Sem observação"}
+                              {x.answer?.observation || "Sem observação"}
                             </small>
                           </td>
                           <td>
@@ -3460,8 +3564,8 @@ function create(adapter) {
       </>
     );
   }
-  let detailResponse = null;
-  function showDetail(row) {
+  let detailResponse: FormReadRow | null = null;
+  function showDetail(row: FormReadRow) {
     detailResponse = row;
     const s = F.score(row.schema_snapshot, row.answers);
     adapter.modal({
@@ -3599,7 +3703,7 @@ function create(adapter) {
     });
     void refreshPhotoLinks();
   }
-  async function openPlan(row, fieldId) {
+  async function openPlan(row: FormResponse, fieldId: string) {
     if (!people.length) await loadPeople();
     const f = F.fields(row.schema_snapshot).find(
       (f) => f.id === fieldId.split("@")[0],
@@ -3637,11 +3741,7 @@ function create(adapter) {
           <div className={"fm-grid"}>
             {field(
               "O que será feito? *",
-              <TextArea
-                id={"formsPlanDescription"}
-                rows={"4"}
-                maxLength={"2000"}
-              >
+              <TextArea id={"formsPlanDescription"} rows={4} maxLength={2000}>
                 {p.description}
               </TextArea>,
               true,
@@ -3685,11 +3785,7 @@ function create(adapter) {
             )}
             {field(
               "Descrição da conclusão · obrigatória ao concluir",
-              <TextArea
-                id={"formsPlanCompletion"}
-                rows={"3"}
-                maxLength={"2000"}
-              >
+              <TextArea id={"formsPlanCompletion"} rows={3} maxLength={2000}>
                 {p.completion_note || ""}
               </TextArea>,
               true,
@@ -3700,20 +3796,20 @@ function create(adapter) {
       actions: btn("save-plan", "Salvar plano", {}, "primary"),
     });
   }
-  let planContext = null;
-  async function rpcPlanFor(responseId, fieldId) {
-    const { data, error } = await ctx()
-      .client.from("form_action_plans")
-      .select("*")
-      .eq("response_id", responseId)
-      .eq("field_id", fieldId)
-      .maybeSingle();
-    if (error) throw error;
-    return data;
+  let planContext: {
+    row: FormResponse;
+    fieldId: string;
+    plan: ActionPlan;
+  } | null = null;
+  async function rpcPlanFor(responseId: string, fieldId: string) {
+    return service.plan(responseId, fieldId);
   }
   async function savePlan() {
     const c = planContext;
     if (!c || busy) return;
+    const status = controlValue("formsPlanStatus");
+    if (!oneOf(status, ["OPEN", "DONE"] as const))
+      throw Error("Selecione um status válido para o plano.");
     busy = true;
     try {
       await rpc(
@@ -3725,11 +3821,11 @@ function create(adapter) {
           p_field_id: c.fieldId,
           p_expected_revision: c.plan.revision,
           p_payload: {
-            description: $("formsPlanDescription").value,
-            responsible_id: $("formsPlanResponsible").value,
-            due_date: $("formsPlanDue").value,
-            status: $("formsPlanStatus").value,
-            completion_note: $("formsPlanCompletion").value,
+            description: controlValue("formsPlanDescription"),
+            responsible_id: controlValue("formsPlanResponsible"),
+            due_date: controlValue("formsPlanDue"),
+            status,
+            completion_note: controlValue("formsPlanCompletion"),
           },
         },
       );
@@ -3741,9 +3837,9 @@ function create(adapter) {
     }
   }
   async function exportData(
-    kind,
-    rows = reportRowsFiltered(),
-    suppliedPlans = null,
+    kind: "csv" | "xlsx",
+    rows: FormReadRow[] = reportRowsFiltered(),
+    suppliedPlans: PlanDisplay[] | null = null,
   ) {
     const currentPlans =
         suppliedPlans ?? (navigator.onLine ? await loadPlans(rows) : plans),
@@ -3761,8 +3857,8 @@ function create(adapter) {
       new Blob([F.csv(matrix)], { type: "text/csv;charset=utf-8" }),
     );
   }
-  let pdfLibPromise = null;
-  async function pdfReport(row) {
+  let pdfLibPromise: Promise<unknown> | null = null;
+  async function pdfReport(row: FormReadRow) {
     if (!window.PDFLib) {
       if (!pdfLibPromise)
         pdfLibPromise = new Promise((resolve, reject) => {
@@ -3777,19 +3873,22 @@ function create(adapter) {
         });
       await pdfLibPromise;
     }
-    const printedPhotos = new Set(),
-      { PDFDocument, StandardFonts, rgb } = window.PDFLib,
+    const pdf = window.PDFLib;
+    if (!pdf) throw Error("Não foi possível carregar o gerador de PDF.");
+    const printedPhotos = new Set<string>(),
+      { PDFDocument, StandardFonts, rgb } = pdf,
       doc = await PDFDocument.create(),
       font = await doc.embedFont(StandardFonts.Helvetica),
       bold = await doc.embedFont(StandardFonts.HelveticaBold),
       width = 595,
       height = 842,
       margin = 42;
-    let page, y;
-    const text = (v) =>
+    let page: PDFPage = doc.addPage([width, height]),
+      y = height - margin;
+    const text = (v: unknown) =>
       String(v ?? "").replace(/[^\x20-\x7e\u00a0-\u00ff]/g, " ");
-    const newPage = () => {
-      page = doc.addPage([width, height]);
+    const newPage = (first = false) => {
+      if (!first) page = doc.addPage([width, height]);
       y = height - margin;
       page.drawRectangle({
         x: 0,
@@ -3808,7 +3907,7 @@ function create(adapter) {
       y -= 27;
     };
     const line = (
-      value,
+      value: unknown,
       { size = 10, strong = false, color = rgb(0.12, 0.19, 0.28) } = {},
     ) => {
       const f = strong ? bold : font,
@@ -3825,13 +3924,13 @@ function create(adapter) {
         } else out += (out ? " " : "") + word;
       }
       draw(out);
-      function draw(v) {
+      function draw(v: string) {
         if (y < 55) newPage();
         page.drawText(v, { x: margin, y, font: f, size, color });
         y -= size + 6;
       }
     };
-    newPage();
+    newPage(true);
     line(row.form_name, { size: 18, strong: true });
     line(`${row.code} | ${row.unit} | Versão ${row.form_version}`);
     line(`Aplicador: ${row.respondent_name}`);
@@ -3917,13 +4016,13 @@ function create(adapter) {
       );
     return adapter.download(
       `${row.code}.pdf`,
-      new Blob([await doc.save()], { type: "application/pdf" }),
+      new Blob([new Uint8Array(await doc.save())], { type: "application/pdf" }),
     );
   }
 
-  let scheduleFilter = {},
-    scheduleResults = [];
-  function eligiblePerson(form, p) {
+  let scheduleFilter: ScheduleFilter = {},
+    scheduleResults: FormResponse[] = [];
+  function eligiblePerson(form: FormDefinition | undefined, p: FormPerson) {
     return (
       !!form &&
       p.units.includes(ctx().unit) &&
@@ -3947,26 +4046,10 @@ function create(adapter) {
       ).getDate();
     if (scheduleFilter.from > scheduleFilter.to)
       throw Error("Revise o intervalo dos agendamentos.");
-    const data = await allRows("form_assignments", (q) => {
-      q = q
-        .eq("unit", ctx().unit)
-        .gte("due_date", scheduleFilter.from)
-        .lte("due_date", scheduleFilter.to)
-        .order("due_date")
-        .order("user_name");
-      if (scheduleFilter.form) q = q.eq("form_id", scheduleFilter.form);
-      if (scheduleFilter.person) q = q.eq("user_id", scheduleFilter.person);
-      if (scheduleFilter.status) q = q.eq("status", scheduleFilter.status);
-      return q;
-    });
-    const results = [],
-      ids = data.map((a) => a.response_id).filter(Boolean);
-    for (let i = 0; i < ids.length; i += 100)
-      results.push(
-        ...(await allRows("form_responses", (q) =>
-          q.in("id", ids.slice(i, i + 100)).order("started_at"),
-        )),
-      );
+    const data = await service.assignments(scheduleFilter, true);
+    const results = await service.responsesByIds(
+      data.map((row) => row.response_id).filter((id): id is string => !!id),
+    );
     if (key !== currentKey()) return;
     assignments = data;
     scheduleResults = results;
@@ -4326,9 +4409,11 @@ function create(adapter) {
   }
   async function saveSchedule() {
     if (busy) return;
-    const model = $("formsScheduleModel").value,
+    const model = controlValue("formsScheduleModel"),
       users = [
-        ...document.querySelectorAll("[data-fm-schedule-user]:checked"),
+        ...document.querySelectorAll<HTMLInputElement>(
+          "[data-fm-schedule-user]:checked",
+        ),
       ].map((e) => e.value);
     if (!model || !users.length)
       throw Error("Selecione o formulário e os colaboradores.");
@@ -4338,11 +4423,11 @@ function create(adapter) {
         p_form_id: model,
         p_unit: ctx().unit,
         p_users: users,
-        p_start: $("formsScheduleStart").value,
-        p_end: $("formsScheduleEnd").value,
-        p_repeat: $("formsScheduleRepeat").value,
+        p_start: controlValue("formsScheduleStart"),
+        p_end: controlValue("formsScheduleEnd"),
+        p_repeat: controlValue("formsScheduleRepeat"),
         p_weekdays: [
-          ...document.querySelectorAll(
+          ...document.querySelectorAll<HTMLInputElement>(
             '[data-fm-list="schedule_weekdays"]:checked',
           ),
         ].map((e) => Number(e.value)),
@@ -4356,18 +4441,22 @@ function create(adapter) {
       busy = false;
     }
   }
-  const getQuestion = (id) =>
+  const getQuestion = (id: string) =>
     builder?.schema.sections.flatMap((s) => s.fields).find((f) => f.id === id);
-  const locateQuestion = (id) =>
+  const locateQuestion = (id: string) =>
     builder?.schema.sections.find((s) => s.fields.some((f) => f.id === id));
-  function move(list, index, delta) {
+  function move<T>(list: T[], index: number, delta: number) {
     const next = index + delta;
-    if (next < 0 || next >= list.length) return;
+    if (index < 0 || index >= list.length || next < 0 || next >= list.length)
+      return;
     [list[index], list[next]] = [list[next], list[index]];
   }
-  function refreshAnswerState(id, person) {
-    const f = F.fields(response.schema_snapshot).find((f) => f.id === id),
-      a = answerBag(id, person)[id],
+  function refreshAnswerState(id: string, person: string) {
+    const rowSnapshot = requireResponse();
+
+    const f = F.fields(rowSnapshot.schema_snapshot).find((f) => f.id === id);
+    if (!f) return;
+    const a = answerBag(id, person)[id],
       negative = F.outcome(f, a) === "NOK",
       card = $(`fm-answer-${id}${person ? "-" + person : ""}`);
     if (!card) return;
@@ -4379,13 +4468,18 @@ function create(adapter) {
       card.querySelector("[data-fm-note-box]")?.classList.remove("hidden");
     else card.querySelector("[data-fm-plan-box]")?.classList.add("hidden");
   }
-  function onInput(event) {
-    const target = event.target,
-      subject = target.closest("[data-fm-person]")?.dataset.fmPerson || "";
+  function onInput(event: Event) {
+    const target = event.target;
+    if (!isControl(target)) return;
+    const subject =
+      closestElement(target, "[data-fm-person]")?.dataset.fmPerson || "";
+    const checked = isInput(target) && target.checked;
     if (target.matches(".fm-people-search")) {
       const term = F.key(target.value);
       target.parentElement
-        .querySelectorAll(".fm-choice-list label,[data-fm-schedule-label]")
+        ?.querySelectorAll<HTMLElement>(
+          ".fm-choice-list label,[data-fm-schedule-label]",
+        )
         .forEach((label) =>
           label.classList.toggle(
             "hidden",
@@ -4400,7 +4494,9 @@ function create(adapter) {
       return;
     }
     if (target.dataset.fmCatalogFilter) {
-      catalogFilter[target.dataset.fmCatalogFilter] = target.value;
+      const key = target.dataset.fmCatalogFilter;
+      if (oneOf(key, ["search", "area", "type"] as const))
+        catalogFilter[key] = target.value;
       filterCatalog();
       return;
     }
@@ -4410,11 +4506,31 @@ function create(adapter) {
       return;
     }
     if (target.dataset.fmFilter) {
-      reportFilter[target.dataset.fmFilter] = target.value;
+      const key = target.dataset.fmFilter;
+      if (
+        oneOf(key, [
+          "form",
+          "person",
+          "area",
+          "type",
+          "year",
+          "from",
+          "to",
+          "search",
+        ] as const)
+      )
+        reportFilter[key] = target.value;
       return;
     }
     if (target.dataset.fmScheduleFilter) {
-      scheduleFilter[target.dataset.fmScheduleFilter] = target.value;
+      const key = target.dataset.fmScheduleFilter;
+      if (oneOf(key, ["form", "person", "from", "to"] as const))
+        scheduleFilter[key] = target.value;
+      else if (
+        key === "status" &&
+        oneOf(target.value, ["", "PENDING", "COMPLETED", "CANCELLED"] as const)
+      )
+        scheduleFilter.status = target.value;
       return;
     }
     if (builder && target.dataset.fmEvaluation) {
@@ -4423,14 +4539,15 @@ function create(adapter) {
         area: "",
         membership: "AREA",
       };
-      builder.schema.evaluation[target.dataset.fmEvaluation] =
-        target.type === "checkbox" ? target.checked : target.value;
+      if (target.dataset.fmEvaluation === "enabled")
+        builder.schema.evaluation.enabled = checked;
+      else if (target.dataset.fmEvaluation === "area")
+        builder.schema.evaluation.area = target.value;
       rememberBuilder();
       return;
     }
     if (builder && target.dataset.fmMeta) {
-      builder[target.dataset.fmMeta] =
-        target.type === "checkbox" ? target.checked : target.value;
+      updateBuilder(builder, target.dataset.fmMeta, target.value, checked);
       rememberBuilder();
       return;
     }
@@ -4448,26 +4565,29 @@ function create(adapter) {
       target.dataset.fmList !== "schedule_weekdays"
     ) {
       const name = target.dataset.fmList;
-      builder[name] = [
-        ...document.querySelectorAll(`[data-fm-list="${name}"]:checked`),
-      ].map((e) => e.value);
+      if (
+        oneOf(name, [
+          "units",
+          "apply_roles",
+          "apply_user_ids",
+          "report_roles",
+          "report_user_ids",
+        ] as const)
+      ) {
+        builder[name] = [
+          ...document.querySelectorAll<HTMLInputElement>(
+            `[data-fm-list="${name}"]:checked`,
+          ),
+        ].map((e) => e.value);
+      }
       rememberBuilder();
       return;
     }
     if (builder && target.dataset.fmQ) {
-      const q = getQuestion(target.dataset.id),
+      const q = getQuestion(target.dataset.id || ""),
         name = target.dataset.fmQ;
       if (!q) return;
-      q[name] =
-        target.type === "checkbox"
-          ? target.checked
-          : name === "options"
-            ? target.value.split("\n").map(F.clean).filter(Boolean)
-            : ["min", "max"].includes(name)
-              ? target.value === ""
-                ? null
-                : Number(target.value)
-              : target.value;
+      updateQuestion(q, name, target.value, checked);
       rememberBuilder();
       return;
     }
@@ -4475,6 +4595,7 @@ function create(adapter) {
     if (target.dataset.fmAnswer) {
       const id = target.dataset.fmAnswer,
         f = F.fields(response.schema_snapshot).find((f) => f.id === id);
+      if (!f) return;
       const bag = answerBag(id, subject);
       bag[id] ??= {};
       bag[id].value =
@@ -4491,7 +4612,9 @@ function create(adapter) {
       const bag = answerBag(id, subject);
       bag[id] ??= {};
       bag[id].value = [
-        ...document.querySelectorAll(`[data-fm-multiple="${id}"]:checked`),
+        ...document.querySelectorAll<HTMLInputElement>(
+          `[data-fm-multiple="${id}"]:checked`,
+        ),
       ].map((e) => e.value);
       answerChanged();
     }
@@ -4513,12 +4636,15 @@ function create(adapter) {
       answerChanged();
     }
   }
-  function onChange(event) {
+  function onChange(event: Event) {
     const target = event.target;
+    if (!isControl(target)) return;
     if (builder && target.dataset.fmEvaluation === "enabled") {
-      if (!builder.schema.evaluation.enabled)
-        for (const f of F.fields(builder.schema))
-          getQuestion(f.id).scope = "GROUP";
+      if (!builder.schema.evaluation?.enabled)
+        for (const f of F.fields(builder.schema)) {
+          const question = getQuestion(f.id);
+          if (question) question.scope = "GROUP";
+        }
       renderManage();
       return;
     }
@@ -4533,7 +4659,7 @@ function create(adapter) {
         target.dataset.fmQ,
       )
     ) {
-      const q = getQuestion(target.dataset.id);
+      const q = getQuestion(target.dataset.id || "");
       if (!q) return;
       if (target.dataset.fmQ === "type") {
         q.scored = q.type === "BOOLEAN";
@@ -4545,7 +4671,7 @@ function create(adapter) {
       if (
         q.type === "SINGLE_CHOICE" &&
         q.scored &&
-        !(q.options || []).includes(q.expected)
+        (q.expected == null || !(q.options || []).includes(q.expected))
       )
         q.expected = q.options?.[0] || "";
       rememberBuilder();
@@ -4561,16 +4687,20 @@ function create(adapter) {
       renderResponse();
       return;
     }
-    if (target.dataset.fmPhotoInput && target.files?.length) {
+    if (
+      target.dataset.fmPhotoInput &&
+      isInput(target) &&
+      target.files?.length
+    ) {
       void addPhotos(
         target.dataset.fmPhotoInput,
         [...target.files],
-        target.closest("[data-fm-person]")?.dataset.fmPerson || "",
+        closestElement(target, "[data-fm-person]")?.dataset.fmPerson || "",
       ).catch((e) => notify(errorMessage(e), "error"));
       return;
     }
     if (target.id === "formsScheduleRepeat")
-      $("formsScheduleWeekdays").classList.toggle(
+      $("formsScheduleWeekdays")?.classList.toggle(
         "hidden",
         target.value !== "WEEKLY",
       );
@@ -4605,24 +4735,35 @@ function create(adapter) {
       );
     }
   }
-  async function getResponse(id) {
-    const row =
-      responses.find((r) => r.id === id) ||
-      (detailResponse?.id === id ? detailResponse : null);
-    if (row) return row;
-    const { data, error } = await ctx()
-      .client.from("form_responses")
-      .select("*")
-      .eq("id", id)
-      .single();
-    if (error) throw error;
-    if (data.unit !== ctx().unit)
-      throw Error("Esta aplicação pertence a outra unidade.");
-    return data;
+  function isStoredResponse(row: FormReadRow): row is FormResponse {
+    return (
+      !row._self_view &&
+      typeof row.revision === "number" &&
+      typeof row.respondent_id === "string" &&
+      (!row.own_plans ||
+        row.own_plans.every(
+          (plan) =>
+            typeof plan.revision === "number" &&
+            typeof plan.response_id === "string" &&
+            "responsible_id" in plan,
+        ))
+    );
   }
-  async function handleAction(action, target) {
-    const id = target.dataset.id,
-      subject = target.closest("[data-fm-person]")?.dataset.fmPerson || "";
+  async function getResponse(id: string) {
+    const row =
+      responses.find((row) => row.id === id) ||
+      (detailResponse?.id === id ? detailResponse : null);
+    if (row && isStoredResponse(row)) {
+      if (row.unit !== ctx().unit)
+        throw Error("Esta aplicação pertence a outra unidade.");
+      return row;
+    }
+    return service.response(id);
+  }
+  async function handleAction(action: string, target: HTMLElement) {
+    const id = target.dataset.id || "",
+      subject =
+        closestElement(target, "[data-fm-person]")?.dataset.fmPerson || "";
     switch (action) {
       case "self-filter":
         return loadMyEvaluations();
@@ -4664,18 +4805,18 @@ function create(adapter) {
           ),
         );
       case "refresh":
-        return enter(lastView);
+        return enter(lastView || "forms-fill");
       case "new":
         return newBuilder();
       case "edit": {
         const f = findForm(id);
-        if (manage(f)) newBuilder(f);
+        if (f && manage(f)) newBuilder(f);
         return;
       }
       case "duplicate": {
         const f = findForm(id);
-        if (!manage(f)) return;
-        const copy = JSON.parse(JSON.stringify(f));
+        if (!f || !manage(f)) return;
+        const copy: FormBuilder = jsonClone(f);
         delete copy.id;
         delete copy.version;
         copy.name = (f.name + " (cópia)").slice(0, 200);
@@ -4684,9 +4825,11 @@ function create(adapter) {
         return;
       }
       case "restore-builder": {
-        const saved = JSON.parse(localStorage.getItem(builderKey()) || "null");
+        const saved = readBuilderDraft(localStorage.getItem(builderKey()));
         if (saved) {
           builder = saved;
+          builderTab = "data";
+          editingField = saved.schema.sections[0]?.fields[0]?.id || "";
           renderManage();
         }
         return;
@@ -4701,14 +4844,15 @@ function create(adapter) {
         }
         return;
       case "builder-tab":
+        if (!oneOf(id, ["data", "questions", "preview"] as const)) return;
         builderTab = id;
         renderManage();
         return;
       case "preview":
         adapter.modal({
-          title: findForm(id).name,
+          title: requireForm(id).name,
           subtitle: "Prévia do formulário",
-          html: previewHtml(findForm(id)),
+          html: previewHtml(requireForm(id)),
           actions: "",
         });
         return;
@@ -4717,29 +4861,28 @@ function create(adapter) {
       case "publish":
         return saveBuilder("PUBLISHED");
       case "save-status":
-        return saveBuilder(builder.status);
+        return saveBuilder(requireBuilder().status);
       case "add-section": {
-        const section = {
+        const section: FormSection = {
           id: F.id(),
-          title: `Seção ${builder.schema.sections.length + 1}`,
+          title: `Seção ${requireBuilder().schema.sections.length + 1}`,
           fields: [],
         };
-        builder.schema.sections.push(section);
+        requireBuilder().schema.sections.push(section);
         rememberBuilder();
         renderManage();
         return;
       }
       case "section-remove":
-        if (builder.schema.sections.length === 1)
+        if (requireBuilder().schema.sections.length === 1)
           throw Error("Mantenha ao menos uma seção.");
         if (
           confirm(
             "Remover esta seção e suas perguntas do modelo? Aplicações já iniciadas serão preservadas.",
           )
         ) {
-          builder.schema.sections = builder.schema.sections.filter(
-            (s) => s.id !== id,
-          );
+          requireBuilder().schema.sections =
+            requireBuilder().schema.sections.filter((s) => s.id !== id);
           rememberBuilder();
           renderManage();
         }
@@ -4747,26 +4890,27 @@ function create(adapter) {
       case "section-up":
       case "section-down":
         move(
-          builder.schema.sections,
-          builder.schema.sections.findIndex((s) => s.id === id),
+          requireBuilder().schema.sections,
+          requireBuilder().schema.sections.findIndex((s) => s.id === id),
           action === "section-up" ? -1 : 1,
         );
         rememberBuilder();
         renderManage();
         return;
       case "add-question": {
-        const s = builder.schema.sections.find((s) => s.id === id),
-          q = {
-            id: F.id(),
-            label: "",
-            type: "BOOLEAN",
-            required: true,
-            scored: true,
-            expected: "YES",
-            allow_na: true,
-            require_note: true,
-            help: "",
-          };
+        const s = requireBuilder().schema.sections.find((s) => s.id === id);
+        if (!s) return;
+        const q: FormField = {
+          id: F.id(),
+          label: "",
+          type: "BOOLEAN",
+          required: true,
+          scored: true,
+          expected: "YES",
+          allow_na: true,
+          require_note: true,
+          help: "",
+        };
         s.fields.push(q);
         editingField = q.id;
         rememberBuilder();
@@ -4780,6 +4924,7 @@ function create(adapter) {
       case "question-remove":
         if (confirm("Remover esta pergunta do modelo?")) {
           const s = locateQuestion(id);
+          if (!s) return;
           s.fields = s.fields.filter((f) => f.id !== id);
           rememberBuilder();
           renderManage();
@@ -4788,6 +4933,7 @@ function create(adapter) {
       case "question-up":
       case "question-down": {
         const s = locateQuestion(id);
+        if (!s) return;
         move(
           s.fields,
           s.fields.findIndex((f) => f.id === id),
@@ -4799,7 +4945,9 @@ function create(adapter) {
       }
       case "question-copy": {
         const s = locateQuestion(id),
-          q = JSON.parse(JSON.stringify(getQuestion(id)));
+          original = getQuestion(id);
+        if (!s || !original) return;
+        const q = jsonClone(original);
         q.id = F.id();
         s.fields.splice(s.fields.findIndex((f) => f.id === id) + 1, 0, q);
         editingField = q.id;
@@ -4831,9 +4979,9 @@ function create(adapter) {
           ["drafts", "Drafts"],
           ["completed", "Completed"],
         ])
-          $(`formsApplication${name}`).classList.toggle("hidden", key !== id);
+          $(`formsApplication${name}`)?.classList.toggle("hidden", key !== id);
         target.parentElement
-          .querySelectorAll("button")
+          ?.querySelectorAll<HTMLElement>("button")
           .forEach((b) => b.classList.toggle("active", b === target));
         return;
       case "start":
@@ -4841,7 +4989,9 @@ function create(adapter) {
       case "start-evaluated": {
         if (busy || !pendingStart) return;
         const people = [
-          ...document.querySelectorAll('[data-fm-list="start_people"]:checked'),
+          ...document.querySelectorAll<HTMLInputElement>(
+            '[data-fm-list="start_people"]:checked',
+          ),
         ].map((e) => e.value);
         if (!people.length) throw Error("Selecione ao menos uma pessoa.");
         const key = currentKey(),
@@ -4869,7 +5019,9 @@ function create(adapter) {
       case "answer": {
         const bag = answerBag(id, subject);
         bag[id] ??= {};
-        bag[id].value = target.dataset.value;
+        const value = target.dataset.value;
+        if (!oneOf(value, ["YES", "NO", "NA"] as const)) return;
+        bag[id].value = value;
         answerChanged();
         renderResponse();
         return;
@@ -4884,7 +5036,7 @@ function create(adapter) {
       case "photo-gallery":
         target
           .closest("[data-fm-person]")
-          .querySelector(
+          ?.querySelector<HTMLInputElement>(
             `[data-fm-photo-input="${id}"][data-source="${action === "photo-camera" ? "camera" : "gallery"}"]`,
           )
           ?.click();
@@ -4893,12 +5045,13 @@ function create(adapter) {
         if (uploading) throw Error("Aguarde o envio das fotos.");
         const bag = answerBag(id, subject),
           entry = bag[id];
+        if (!entry) return;
         entry.photos = (entry.photos || []).filter(
           (p) => p !== target.dataset.path,
         );
         if (
-          F.fields(response.schema_snapshot).find((f) => f.id === id)?.type ===
-          "PHOTO"
+          F.fields(requireResponse().schema_snapshot).find((f) => f.id === id)
+            ?.type === "PHOTO"
         )
           entry.value = entry.photos;
         answerChanged();
@@ -4908,13 +5061,13 @@ function create(adapter) {
       case "toggle-note":
         target
           .closest("[data-fm-person]")
-          .querySelector(`[data-fm-note-box="${id}"]`)
+          ?.querySelector<HTMLInputElement>(`[data-fm-note-box="${id}"]`)
           ?.classList.toggle("hidden");
         return;
       case "toggle-plan":
         target
           .closest("[data-fm-person]")
-          .querySelector(`[data-fm-plan-box="${id}"]`)
+          ?.querySelector<HTMLInputElement>(`[data-fm-plan-box="${id}"]`)
           ?.classList.toggle("hidden");
         return;
       case "section":
@@ -4924,10 +5077,10 @@ function create(adapter) {
       case "next-section":
         sectionIndex = Math.min(
           sectionIndex + 1,
-          response.schema_snapshot.sections.length - 1,
+          requireResponse().schema_snapshot.sections.length - 1,
         );
         renderResponse();
-        rootFor("forms-fill").scrollIntoView({ block: "start" });
+        rootFor("forms-fill")?.scrollIntoView({ block: "start" });
         return;
       case "previous-section":
         sectionIndex = Math.max(0, sectionIndex - 1);
@@ -4948,7 +5101,7 @@ function create(adapter) {
         ) {
           clearTimeout(saveTimer);
           await saveChain.catch(() => {});
-          const current = response;
+          const current = requireResponse();
           await rpc("cancel_form_response", { p_id: current.id });
           localStorage.removeItem(localKey(current));
           response = null;
@@ -4971,6 +5124,18 @@ function create(adapter) {
         return;
       case "report-tab":
         executionPerson = "";
+        if (
+          !oneOf(id, [
+            "summary",
+            "applications",
+            "execution",
+            "farol",
+            "charts",
+            "conformity",
+            "issues",
+          ] as const)
+        )
+          return;
         reportTab = id;
         reportPage = 0;
         return loadReport();
@@ -4994,6 +5159,7 @@ function create(adapter) {
       case "assignment-detail":
         return showDetail(await getResponse(id));
       case "plan":
+        if (!target.dataset.field) return;
         return openPlan(await getResponse(id), target.dataset.field);
       case "save-plan":
         return savePlan();
@@ -5033,8 +5199,9 @@ function create(adapter) {
       case "calendar-next":
         return changeCalendarMonth(1);
       case "calendar-assignment": {
-        const a = assignments.find((a) => a.id === id),
-          f = findForm(a.form_id);
+        const a = assignments.find((a) => a.id === id);
+        if (!a) return;
+        const f = findForm(a.form_id);
         adapter.modal({
           title: f?.name || "Agendamento",
           subtitle: day(a.due_date),
@@ -5075,6 +5242,7 @@ function create(adapter) {
         return loadSchedule();
       case "start-assignment": {
         const a = assignments.find((a) => a.id === id);
+        if (!a) return;
         return begin(a.form_id, a.id);
       }
       case "cancel-assignment":
@@ -5092,8 +5260,9 @@ function create(adapter) {
     onChange(event);
   });
   listen(document, "click", (event) => {
-    const target = event.target.closest("[data-fm-action]");
-    if (!target) return;
+    if (!isElement(event.target)) return;
+    const target = closestElement(event.target, "[data-fm-action]");
+    if (!target || !target.dataset.fmAction) return;
     event.preventDefault();
     Promise.resolve(handleAction(target.dataset.fmAction, target)).catch(
       (error) => notify(errorMessage(error), "error"),

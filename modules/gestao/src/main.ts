@@ -1,19 +1,13 @@
-import type { ReactNode } from "react";
-import { create as createController } from "./forms/controller.jsx";
+import { create as createController } from "./forms/controller";
 import { releaseContent, renderContent } from "./shared/react-host";
-import type { FormsAdapter, FormsModule, FormsModal } from "./forms/types";
-
-type ReactModal = Omit<FormsModal, "html" | "actions"> & {
-  html: ReactNode;
-  actions?: ReactNode;
-};
+import type { FormsAdapter, FormsModule, ReactFormsModal } from "./forms/types";
 export const engine = "react-typescript";
 export { releaseContent as release };
 
 export function create(adapter: FormsAdapter): FormsModule {
   const controller = createController({
     ...adapter,
-    modal({ html, actions, ...metadata }: ReactModal) {
+    modal({ html, actions, ...metadata }: ReactFormsModal) {
       for (const id of ["modalBody", "modalActions"]) {
         const element = document.getElementById(id);
         if (element) releaseContent(element);
