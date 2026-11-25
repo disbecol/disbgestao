@@ -2,7 +2,7 @@
 (() => {
  'use strict';
  const SCREENS={
-  home:['inicio','home'], 'modulos-config':['configuracoes','modules'],
+  home:['inicio','home'], 'staff-directory':['configuracoes','staff'], 'modulos-config':['configuracoes','modules'],
   'nri-cadastro':['nri','receipt'], 'nri-carretas':['nri','receiving'], 'marketplace-recebimento':['nri','marketplace'], 'nri-pendentes':['nri','printing'], 'nri-historico':['nri','history'], 'nri-avarias-historico':['nri','damaged-pallets'],
   'conf-cadastro':['conferencia','bottles'], 'conf-minhas':['conferencia','history'], 'conf-historico':['conferencia','history'], 'conf-dashboard':['conferencia','dashboard'],
   'fefo-contagem':['fefo','count'], 'fefo-andamento':['fefo','running'], 'fefo-relatorios':['fefo','history'],
@@ -15,6 +15,7 @@
   'returns-penalties':['devolucoes','penalties'], 'returns-monitoring':['devolucoes','monitoring'], 'returns-audited':['devolucoes','audited'], 'returns-priority-sheet':['devolucoes','priority-sheet'], 'returns-goals':['devolucoes','goals'], 'returns-import':['devolucoes','sources'],
   'fdr-reports':['raio','reports'], 'fdr-dashboard':['raio','dashboard'],
   'orders-new':['pedidos','new'], 'orders-own':['pedidos','own'], 'orders-queue':['pedidos','queue'], 'orders-manage':['pedidos','management'], 'orders-dashboard':['pedidos','dashboard'], 'orders-productivity':['pedidos','productivity'], 'orders-audit':['pedidos','audit'], 'orders-config':['pedidos','settings'],
+  'escala-calendar':['escala','calendar'], 'escala-teams':['escala','teams'], 'escala-staff':['escala','staff'], 'escala-trucks':['escala','trucks'], 'escala-holidays':['escala','holidays'], 'escala-reports':['escala','reports'], 'escala-history':['escala','history'], 'escala-settings':['escala','settings'],
   'forms-manage':['formularios','builder'], 'forms-fill':['formularios','application'], 'forms-self':['formularios','self'], 'forms-report':['formularios','report'], 'forms-schedule':['formularios','schedule'],
   'rating-clients':['vendas','rating'],
   'puxada-app-operations':['puxada','operations'], 'puxada-app-plans':['puxada','plans'], 'puxada-app-control':['puxada','control'], 'puxada-app-history':['puxada','history'], 'puxada-app-dashboard':['puxada','dashboard'], 'puxada-app-settings':['puxada','settings'],

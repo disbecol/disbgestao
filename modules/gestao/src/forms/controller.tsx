@@ -142,6 +142,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
     notify = (s: string, t = "success") => adapter.toast(s, t);
   let definitions: FormDefinition[] = [],
     people: FormPerson[] = [],
+    staffPeople: FormPerson[] = [],
     responses: FormResponse[] = [],
     assignments: FormAssignment[] = [],
     plans: ActionPlan[] = [],
@@ -241,8 +242,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
     } catch (_e) {}
   }
   function historicalNames<Row extends FormReadRow>(row: Row): Row {
-    if (row.source_kind !== 'DTO_XLSX') return row;
-    const nameFor = (id: string) => id === ctx().user.id ? ctx().profile.name : people.find(person => person.id === id)?.name;
+    const nameFor = (id: string) => staffPeople.find(person => person.id === id)?.name;
     return {...row, evaluated_people: row.evaluated_people?.map(person => ({...person,name:nameFor(person.id)||person.name})),
       ...(row.evaluated_user_id ? {evaluated_name:nameFor(row.evaluated_user_id)||row.evaluated_name} : {})};
   }
@@ -274,8 +274,8 @@ function create(adapter: ReactFormsAdapter): FormsModule {
   }
   async function loadPeople() {
     const key = currentKey(),
-      data = await rpc("forms_people_with_areas", {});
-    if (key === currentKey()) people = data || [];
+      [accounts, staff] = await Promise.all([rpc("forms_people_with_areas", {}),rpc("forms_staff_people", {})]);
+    if (key === currentKey()) {people = accounts || [];staffPeople = staff || [];}
   }
   async function start() {
     if (identity !== currentKey()) {
@@ -305,6 +305,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
     clearInterval(clock);
     definitions = [];
     people = [];
+    staffPeople = [];
     responses = [];
     assignments = [];
     plans = [];
@@ -831,7 +832,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
     const model = requireBuilder();
 
     const config = model.schema.evaluation || { enabled: false, area: "" },
-      members = people.filter((p) =>
+      members = staffPeople.filter((p) =>
         p.units.some((u) => model.units.includes(u)),
       ),
       areas = [
@@ -1539,7 +1540,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
         ) : (
           empty(
             "Nenhum colaborador disponível",
-            "Confira a área dos colaboradores em Usuários e perfis e as unidades de acesso.",
+            "Confira a área, a situação e as unidades das pessoas em Configurações → Cadastro de Equipes.",
           )
         ),
         actions: targets.length
@@ -2632,7 +2633,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
         ),
         name =
           rowsForPerson[0]?.evaluated_name ||
-          people.find((p) => p.id === executionPerson)?.name ||
+          staffPeople.find((p) => p.id === executionPerson)?.name ||
           "Colaborador";
       renderContent(
         box,
@@ -2690,7 +2691,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
               reportTab === "execution" ? "Pessoa avaliada" : "Aplicador",
               <Select data-fm-filter={"person"}>
                 {options(
-                  people
+                  (reportTab === "execution" ? staffPeople : people)
                     .filter((p) => p.units.includes(ctx().unit))
                     .map((p) => ({ value: p.id, label: p.name })),
                   reportFilter.person,
@@ -2963,7 +2964,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
         (!reportFilter.type || f.form_type === reportFilter.type),
     )) {
       if (!f.schema.evaluation?.enabled) continue;
-      for (const p of people.filter(
+      for (const p of staffPeople.filter(
         (p) =>
           p.units.includes(ctx().unit) &&
           evaluationAreas(f.schema.evaluation).some(area=>areaKey(area)===areaKey(p.area || "")),
@@ -3083,7 +3084,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
       ),
       name =
         person?.evaluated_name ||
-        people.find((p) => p.id === id)?.name ||
+        staffPeople.find((p) => p.id === id)?.name ||
         "Colaborador",
       questions = F.questionMonths(rows, id, year);
     return (
