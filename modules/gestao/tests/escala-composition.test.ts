@@ -1,6 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import {escalaFixture} from './escala-fixture';
-import {drawCrew,crewRole,manualCrew} from '../src/escala/composition';
+import {drawCrew,crewRole,manualCrew,refreshPlanMembers} from '../src/escala/composition';
+import {generateMonth} from '../src/escala/engine';
 function fixture(){const s=escalaFixture();s.staff.forEach(p=>{p.area='Entrega';});s.memberships=s.memberships.filter(m=>s.teams.slice(0,2).some(t=>m.team_id===t.id));return s;}
 describe('Sorteio dos colaboradores das equipes',()=>{
  it('preserva as equipes 1 e 2 e distribui 1 motorista e 2 ajudantes nas equipes 3 a 10',()=>{
@@ -23,5 +24,11 @@ describe('Sorteio dos colaboradores das equipes',()=>{
  it('permite ajustar ajudantes, informa falta de pessoal e respeita escalas protegidas',()=>{
   const s=fixture();s.staff[7].status='INACTIVE';expect(drawCrew(s,'2027-02-01','short').errors).toContain('Faltam 1 ajudante(s) disponível(is) para o mês.');expect(drawCrew(s,'2027-02-01','short',1).assignments).toHaveLength(8);expect(drawCrew(s,'2027-02-01','invalid',0).assignments).toEqual([]);
   s.plan={id:'p',month:'2027-02-01',status:'APPROVED',days:[],revision:1,seed:'',algorithm_version:'',notes:'',approved_at:null,approved_by:null};expect(drawCrew(s,'2027-02-01','locked').errors.some(e=>e.includes('protegida'))).toBe(true);
+ });
+ it('atualiza somente integrantes das escalas abertas e mantém os snapshots concluídos ou bloqueados',()=>{
+  const s=fixture();s.plan=generateMonth(s,'2027-02-01','history').plan;const completed=s.plan.days[1].duties[0],locked=s.plan.days[2];completed.completed=true;completed.members=[{id:'previous',name:'Pessoa anterior',job:'Motorista',profile_id:null}];locked.locked=true;
+  const before=structuredClone(s.plan),p=drawCrew(s,'2027-02-01','history-crew');expect(p.errors).toEqual([]);
+  for(const a of p.assignments)for(const id of a.members)s.memberships.push({id:'auto-'+id,team_id:a.team_id,staff_id:id,starts_on:'2027-02-01',ends_on:'2027-02-28',origin:'AUTO',draw_month:'2027-02-01',override_reason:'',revision:1});
+  const next=refreshPlanMembers(s,s.plan);expect(next.days[1].duties[0]).toEqual(before.days[1].duties[0]);expect(next.days[2]).toEqual(before.days[2]);expect(next.days[3].duties.find(d=>d.team_id===s.teams[4].id)!.members).toHaveLength(3);expect(s.plan).toEqual(before);
  });
 });
