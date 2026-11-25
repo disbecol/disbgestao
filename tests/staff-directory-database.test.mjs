@@ -27,7 +27,7 @@ before(async()=>{
  historical=await rpc('start_form_response_evaluated',[form.id,A,randomUUID(),[ids.employee],null],['::uuid','','::uuid','::uuid[]','::uuid']);
  historical=await rpc('save_form_response',[historical.id,historical.revision,JSON.stringify({__evaluations:{[ids.employee]:{q:{value:'YES'}}}}),true],['::uuid','','::jsonb','']);
  await db.exec('reset role');accountsBefore=(await q('select count(*)::int n from profiles'))[0].n;
- try{await db.exec(read('supabase/migrations/20261125180349_independent_staff_directory.sql'));}catch(e){throw Error(`${e.message}; ${e.where||''}; posição ${e.position}`);}
+ try{await db.exec(read('supabase/migrations/20261125180349_independent_staff_directory.sql'));await db.exec(read('supabase/migrations/20261125191110_escala_directory_auto_staff.sql'));await db.exec(read('supabase/migrations/20261125192341_staff_directory_archived_people.sql'));}catch(e){throw Error(`${e.message}; ${e.where||''}; posição ${e.position}`);}
  await as();
 });
 after(()=>db.close());
@@ -65,4 +65,37 @@ test('desvincular conta arquivada mantém o histórico e o cadastro de pessoas',
  await db.exec('reset role');await q('update staff_people set profile_id=null where id=$1',[ids.employee]);await q("update profiles set active=false,access_archived_at=now(),access_archive_reason='Teste' where id=$1",[ids.employee]);
  await as();assert.equal((await q('select count(*)::int n from form_responses where id=$1',[historical.id]))[0].n,1);assert.equal((await q('select * from staff_people where id=$1',[ids.employee]))[0].active,true);
  const targets=await q('select * from forms_evaluation_people($1,$2)',[form.id,A]);assert.ok(targets.some(p=>p.id===ids.employee));assert.equal((await q('select count(*)::int n from profiles'))[0].n,accountsBefore);
+});
+
+test('Escala mostra as pessoas da unidade automaticamente, sem vinculação manual ou conta de acesso',async()=>{
+ await as();const state=await rpc('escala_state',[A,'2026-11-01'],['','::date']);
+ const all=await q('select p.id,p.area from staff_people p join staff_people_units u on u.person_id=p.id where u.unit=$1 and p.active',[A]);
+ for(const p of all){const s=state.staff.find(s=>s.person_id===p.id&&!s.deleted_at);assert.ok(s,'Pessoa cadastrada deve estar na Escala');assert.equal(s.area,p.area);}
+ const added=await save(personPayload({name:'Cadastro automático',job:'Ajudante de armazém',area:'Armazém'}));
+ const staff=(await q('select * from escala_staff where person_id=$1 and unit=$2',[added.id,A]))[0];assert.equal(staff.profile_id,null);assert.equal(staff.job,'Ajudante de armazém');
+ await db.exec('reset role');await db.exec(read('supabase/migrations/20261125191110_escala_directory_auto_staff.sql'));await as();assert.equal((await q('select count(*)::int n from escala_staff where person_id=$1',[added.id]))[0].n,1);
+});
+
+test('atualizar o cadastro central mantém férias, observações, integrantes e snapshots de escalas',async()=>{
+ await as();let p=await save(personPayload({name:'Pessoa com férias'}));const s=(await q('select * from escala_staff where person_id=$1',[p.id]))[0];
+ const saved=await rpc('escala_command',[A,'STAFF_SAVE',s.id,s.revision,JSON.stringify({status:'VACATION',vacation_start:'2026-12-01',vacation_end:'2026-12-20',notes:'Observação da escala'}),randomUUID()],['','','::uuid','','::jsonb','::uuid']);assert.equal(saved.status,'VACATION');
+ const t=(await q('select id from escala_teams where unit=$1 limit 1',[A]))[0];await rpc('escala_command',[A,'MEMBERSHIP_SAVE',null,0,JSON.stringify({team_id:t.id,staff_id:s.id,starts_on:'2026-01-01'}),randomUUID()],['','','::uuid','','::jsonb','::uuid']);
+ await db.exec('reset role');const month=(await q("insert into escala_months(unit,month) values($1,'2026-11-01') returning id",[A]))[0];const day=(await q("insert into escala_days(unit,month_id,date,kind,required) values($1,$2,'2026-11-01','SUNDAY',0) returning id",[A,month.id]))[0];await q("insert into escala_duties(unit,day_id,team_id,mode,members) values($1,$2,$3,'REST',jsonb_build_array(jsonb_build_object('id',$4::text,'name','Pessoa com férias')))",[A,day.id,t.id,s.id]);await as();
+ p=await save(personPayload({name:'Nome corrigido',job:'Função atualizada',area:'Armazém'}),p.id,p.revision);
+ const current=(await q('select * from escala_staff where id=$1',[s.id]))[0];assert.equal(current.name,'Nome corrigido');assert.equal(current.status,'VACATION');assert.equal(current.notes,'Observação da escala');assert.equal(new Date(current.vacation_end).toISOString().slice(0,10),'2026-12-20');
+ assert.equal((await q('select count(*)::int n from escala_memberships where staff_id=$1',[s.id]))[0].n,1);assert.equal((await q('select members from escala_duties where day_id=$1',[day.id]))[0].members[0].name,'Pessoa com férias');
+});
+
+test('novos vínculos de unidade alimentam a Escala correspondente e remoções preservam o registro inativo',async()=>{
+ await db.exec('reset role');await q('insert into user_units values($1,$2)',[ids.admin,B]);await as();let p=await save(personPayload({name:'Pessoa de duas unidades',units:[A,B]}));
+ assert.equal((await q('select count(*)::int n from escala_staff where person_id=$1',[p.id]))[0].n,2);
+ p=await save(personPayload({name:p.name,units:[A]}),p.id,p.revision);const rows=await q('select unit,status from escala_staff where person_id=$1',[p.id]);assert.equal(rows.find(s=>s.unit===B).status,'INACTIVE');assert.equal(rows.find(s=>s.unit===A).status,'ACTIVE');
+ await db.exec('reset role;set role anon');await assert.rejects(()=>q('select staff_private.ensure_escala_person($1)',[p.id]),/permission denied/);await as(ids.applicator);await assert.rejects(()=>q('select staff_private.ensure_escala_person($1)',[p.id]),/permission denied/);await as();
+});
+
+test('retirar um cadastro genérico oculta a pessoa sem apagar as suas aplicações anteriores',async()=>{
+ await db.exec('reset role');await q('update staff_people set active=false,archived_at=now() where id=$1',[ids.employee]);await as();
+ const state=await rpc('staff_directory_state',[A]);assert.ok(!state.people.some(p=>p.id===ids.employee));assert.equal((await q('select * from staff_people where id=$1',[ids.employee])).length,0);
+ await assert.rejects(()=>save(personPayload(),ids.employee,1),/FORBIDDEN/);
+ const row=(await q('select * from form_responses where id=$1',[historical.id]))[0];assert.equal(Number(row.score),100);assert.equal(row.evaluated_people[0].id,ids.employee);
 });

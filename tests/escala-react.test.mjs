@@ -46,6 +46,19 @@ test('editing a staff record sends the typed values through the existing unit-sc
  assert.equal(saved.p_payload.notes,'Observação operacional');assert.equal(saved.p_id,h.state.staff[0].id);assert.equal(saved.p_unit,'Matriz Caicó');assert.ok(saved.p_request_id);h.destroy();
 });
 
+test('funcionários aparecem sem importação manual e podem ser filtrados por nome e área',async()=>{
+ const state=escalaFixture();state.staff[0].area='Entrega';state.staff[1].area='Armazém';
+ const h=harness({state});await h.enter('escala-staff');assert.match(h.get('#view-escala-staff').textContent,/aparecem automaticamente/);
+ assert.ok(![...h.document.querySelectorAll('#view-escala-staff button')].some(b=>b.textContent==='Vincular pessoas'));
+ await h.input('#view-escala-staff input[type="search"]',state.staff[0].name);assert.equal(h.document.querySelectorAll('#view-escala-staff tbody tr').length,1);assert.match(h.get('#view-escala-staff tbody').textContent,new RegExp(state.staff[0].name));
+ await h.input('#view-escala-staff input[type="search"]','');await h.change('#view-escala-staff .escala-form-grid select','Armazém');assert.equal(h.document.querySelectorAll('#view-escala-staff tbody tr').length,1);assert.match(h.get('#view-escala-staff tbody').textContent,/Armazém/);assert.equal(h.writes.length,0);h.destroy();
+});
+
+test('funcionários inativos ficam disponíveis no filtro próprio sem se misturar à equipe atual',async()=>{
+ const state=escalaFixture();state.staff[0].status='INACTIVE';const h=harness({state});await h.enter('escala-staff');assert.equal(h.document.querySelectorAll('#view-escala-staff tbody tr').length,state.staff.length-1);
+ await h.change('#view-escala-staff .escala-form-grid label:last-child select','INACTIVE');assert.equal(h.document.querySelectorAll('#view-escala-staff tbody tr').length,1);assert.match(h.get('#view-escala-staff tbody').textContent,/Inativo/);assert.equal(h.writes.length,0);h.destroy();
+});
+
 test('a desktop drag opens a movement dialog with the complete team and keeps the source date',async()=>{
  const state=escalaFixture();state.plan=generateMonth(state,'2026-11-01','drag').plan;
  const h=harness({state});await h.enter('escala-calendar');

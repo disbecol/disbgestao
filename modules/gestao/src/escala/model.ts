@@ -1,4 +1,4 @@
-export type Staff = {id:string;person_id?:string|null;profile_id:string|null;name:string;job:string;status:'ACTIVE'|'VACATION'|'LEAVE'|'INACTIVE';vacation_start:string|null;vacation_end:string|null;notes:string;revision:number;deleted_at?:string|null};
+export type Staff = {id:string;person_id?:string|null;area?:string;profile_id:string|null;name:string;job:string;status:'ACTIVE'|'VACATION'|'LEAVE'|'INACTIVE';vacation_start:string|null;vacation_end:string|null;notes:string;revision:number;deleted_at?:string|null};
 export type Team = {id:string;code:string;name:string;active:boolean;draw_enabled:boolean;notes:string;revision:number;deleted_at?:string|null};
 export type Truck = {id:string;label:string;plate:string;team_id:string|null;status:'AVAILABLE'|'MAINTENANCE'|'UNAVAILABLE';notes:string;revision:number;deleted_at?:string|null};
 export type Membership = {id:string;team_id:string;staff_id:string;starts_on:string;ends_on:string|null;override_reason:string;revision:number};
