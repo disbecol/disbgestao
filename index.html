@@ -137,7 +137,7 @@
           </div>
       </div>
 
-      <div class="nav-area" data-area="entrega" data-permission-any="DELIVERY_DAMAGE_CREATE,DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST,RETURNS_VIEW,RETURNS_EDIT,RETURNS_IMPORT,FDR_VIEW,FDR_EDIT">
+      <div class="nav-area" data-area="entrega" data-permission-any="DELIVERY_DAMAGE_CREATE,DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST,RETURNS_VIEW,RETURNS_EDIT,RETURNS_IMPORT,RATING_VIEW,RATING_EDIT,FDR_VIEW,FDR_EDIT">
         <button type="button" class="nav-area-toggle" aria-expanded="false"><span class="area-icon">⇢</span><span class="area-name">Entrega</span><span class="area-chevron">⌄</span></button>
         <div class="nav-area-items">
           <div class="nav-module role-avaria" data-module="avarias" data-permission-any="DELIVERY_DAMAGE_CREATE,DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST">
@@ -149,7 +149,7 @@
               <button class="nav-item" data-view="avaria-dashboard" data-permission-any="DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST"><span>▥</span>Dashboard</button>
             </div>
           </div>
-          <div class="nav-module" data-module="devolucoes" data-permission="RETURNS_VIEW">
+          <div class="nav-module" data-module="devolucoes" data-permission-any="RETURNS_VIEW,RATING_VIEW,RATING_EDIT">
             <button type="button" class="nav-module-toggle" aria-expanded="false"><span class="module-icon">↩</span><span class="module-name">Devoluções</span><span class="module-chevron">⌄</span></button>
             <div class="nav-module-items">
               <button class="nav-item" data-view="returns-followup" data-permission="RETURNS_VIEW"><span>◫</span>Acompanhamentos</button>
@@ -159,6 +159,7 @@
               <button class="nav-item" data-view="returns-priority-sheet" data-permission="RETURNS_VIEW"><span>▣</span>Prioridades por motorista</button>
               <button class="nav-item" data-view="returns-goals" data-permission="RETURNS_VIEW"><span>◎</span>Metas</button>
               <button class="nav-item" data-view="returns-import" data-permission="RETURNS_IMPORT"><span>↻</span>Bases do Google</button>
+              <button class="nav-item" data-view="rating-clients" data-permission-any="RATING_VIEW,RATING_EDIT"><span>★</span>Rating de clientes</button>
             </div>
           </div>
           <div class="nav-module" data-module="apontamento-fdr" data-permission="FDR_VIEW">
