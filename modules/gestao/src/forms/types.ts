@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { ReactNode } from "react";
 
 export type FormsView =
   | "forms-manage"
@@ -25,6 +26,13 @@ export interface FormsModal {
   html: string;
   actions?: string;
 }
+export type ReactFormsModal = Omit<FormsModal, "html" | "actions"> & {
+  html: ReactNode;
+  actions?: ReactNode;
+};
+export type ReactFormsAdapter = Omit<FormsAdapter, "modal"> & {
+  modal(options: ReactFormsModal): void;
+};
 export interface FormsAdapter {
   context(): FormsContext;
   hasPermission(code: string): boolean;

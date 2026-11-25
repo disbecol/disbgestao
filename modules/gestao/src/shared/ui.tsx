@@ -210,7 +210,7 @@ export function input(
 }
 export function options(
   items: OptionItem[],
-  value?: string | number,
+  value?: string | number | null,
   placeholder = "Todos",
 ) {
   return (
@@ -222,7 +222,7 @@ export function options(
           <Option
             key={key}
             value={key}
-            selected={String(key) === String(value)}
+              selected={value != null && String(key) === String(value)}
           >
             {typeof item === "string" ? item : (item.label ?? item.value)}
           </Option>

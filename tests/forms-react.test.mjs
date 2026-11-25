@@ -103,6 +103,71 @@ test('publication conflict keeps the local builder, selected controls and origin
   h.destroy();
 });
 
+test('builder edits made during publication remain local and use the newly saved version on retry', async () => {
+  let release, first = true;
+  const h = editable({ rpc: (name, args) => {
+    if (name !== 'save_form_definition' || !first) return;
+    first = false;
+    return new Promise(resolve => { release = () => resolve({ data: { ...copy(args.p_payload), id: args.p_id, version: args.p_expected_version + 1 }, error: null }); });
+  } });
+  await h.enter('forms-manage'); await clickAction(h, 'edit', '[data-id="theme-form"]');
+  await h.input('[data-fm-meta="name"]', 'Primeira versão enviada');
+  await clickAction(h, 'publish');
+  await h.input('[data-fm-meta="description"]', 'Alteração feita enquanto o envio estava pendente');
+  release(); await h.settle();
+  // LinkeDOM does not copy a textarea's defaultValue into its value on a fresh mount.
+  assert.equal(h.get('[data-fm-meta="description"]').defaultValue, 'Alteração feita enquanto o envio estava pendente');
+  const local = JSON.parse(h.memory.get(`disb_forms_builder_v1_admin_${unit}`));
+  assert.equal(local.version, 2); assert.equal(local.status, 'PUBLISHED');
+  assert.match(h.messages.at(-1)[0], /alterações feitas durante o envio/);
+  await clickAction(h, 'publish');
+  assert.equal(h.writes.at(-1).args.p_expected_version, 2);
+  assert.equal(h.writes.at(-1).args.p_payload.description, local.description);
+  h.destroy();
+});
+
+test('a stale builder save cannot erase a different user or unit local draft', async () => {
+  let release;
+  const h = editable({ rpc: (name, args) => name === 'save_form_definition' ? new Promise(resolve => {
+    release = () => resolve({ data: { ...copy(args.p_payload), id: args.p_id, version: 2 }, error: null });
+  }) : undefined });
+  await h.enter('forms-manage'); await clickAction(h, 'edit', '[data-id="theme-form"]');
+  await h.input('[data-fm-meta="name"]', 'Não perder esta criação');
+  await clickAction(h, 'publish');
+  h.api.stop(); h.context.user = { id: 'other' }; h.context.unit = 'Filial Pau dos Ferros';
+  const otherKey = 'disb_forms_builder_v1_other_Filial Pau dos Ferros';
+  h.memory.set(otherKey, 'Criação de outro usuário');
+  release(); await h.settle();
+  assert.equal(h.memory.get(otherKey), 'Criação de outro usuário');
+  assert.ok(h.memory.has(`disb_forms_builder_v1_admin_${unit}`));
+  assert.equal(h.get('#view-forms-manage').textContent, '');
+  h.destroy();
+});
+
+test('malformed local response drafts leave their stored copy and load server answers with a recovery message', async () => {
+  const row = draft(), key = `disb_forms_response_v1_admin_${row.id}`;
+  const memory = new Map([[key, '{invalid-json']]), h = formsThemeHarness({ memory });
+  await h.enter('forms-fill'); await clickAction(h, 'resume', '[data-id="draft"]');
+  assert.equal(memory.get(key), '{invalid-json');
+  assert.match(h.messages.at(-1)[0], /cópia foi mantida/);
+  assert.equal(h.get('[data-fm-answer="text"]').value, row.answers.text?.value || '');
+  assert.equal(h.writes.length, 0);
+  h.destroy();
+});
+
+test('an incomplete local builder restores empty questions without treating it as a published schema', async () => {
+  const stored = copy(definition); stored.name = ''; stored.schema.sections[0].fields[0].label = '';
+  stored.schema.sections[0].fields[0].type = 'SINGLE_CHOICE'; stored.schema.sections[0].fields[0].options = [];
+  const h = formsThemeHarness({ memory: new Map([[`disb_forms_builder_v1_admin_${unit}`, JSON.stringify(stored)]]) });
+  await h.enter('forms-manage'); await clickAction(h, 'restore-builder');
+  assert.equal(h.get('[data-fm-meta="name"]').value, '');
+  await clickAction(h, 'builder-tab', '[data-id="questions"]');
+  assert.equal(h.get('[data-fm-q="label"][data-id="q0"]').value, '');
+  assert.equal(h.get('[data-fm-q="type"][data-id="q0"]').value, 'SINGLE_CHOICE');
+  assert.equal(h.writes.length, 0);
+  h.destroy();
+});
+
 test('typed controls preserve text, dates, numbers and choice answers through autosave', async () => {
   const row = draft();
   row.schema_snapshot = { sections: [{ id: 'fields', title: 'Campos', fields: [
