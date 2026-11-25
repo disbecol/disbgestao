@@ -10,7 +10,7 @@
   'materiais-contagem':['materiais','inventory'], 'materiais-estoque':['materiais','stock'], 'materiais-cadastro':['materiais','catalog'], 'materiais-movimentacoes':['materiais','movement'],
   'refugo-afericao':['refugo','count'], 'refugo-historico':['refugo','history'], 'refugo-cadastros':['refugo','catalog'],
   'avaria-cadastro':['avarias','entry'], 'avaria-minhas':['avarias','own'], 'avaria-admin':['avarias','management'], 'avaria-dashboard':['avarias','dashboard'],
-  'sales-avaria-cadastro':['vendas','damage-entry'], 'sales-avaria-minhas':['vendas','damage-own'], 'sales-avaria-gestao':['vendas','damage-management'], 'sales-stock-validity':['vendas','validity'], 'sales-pricing':['vendas','pricing'],
+  'sales-avaria-cadastro':['vendas','damage-entry'], 'sales-avaria-minhas':['vendas','damage-own'], 'sales-avaria-gestao':['vendas','damage-management'], 'sales-stock-validity':['vendas','validity'], 'sales-pricing':['vendas','pricing'], 'rating-clients':['vendas','rating'],
   'returns-followup':['devolucoes','followup'], 'returns-summary':['devolucoes','summary'], 'returns-panel':['devolucoes','panel'], 'returns-city':['devolucoes','city'], 'returns-clients':['devolucoes','clients'], 'returns-new-clients':['devolucoes','new-clients'], 'returns-sellers':['devolucoes','sellers'], 'returns-team':['devolucoes','team'], 'returns-reasons':['devolucoes','reasons'],
   'returns-penalties':['devolucoes','penalties'], 'returns-monitoring':['devolucoes','monitoring'], 'returns-audited':['devolucoes','audited'], 'returns-priority-sheet':['devolucoes','priority-sheet'], 'returns-goals':['devolucoes','goals'], 'returns-import':['devolucoes','sources'],
   'fdr-reports':['raio','reports'], 'fdr-dashboard':['raio','dashboard'],
