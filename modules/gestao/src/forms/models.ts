@@ -22,6 +22,8 @@ export type FormField = {
   required?: boolean;
   scored?: boolean;
   expected?: string | null;
+  positive_label?: string;
+  negative_label?: string;
   allow_na?: boolean;
   require_note?: boolean;
   scope?: FieldScope;
@@ -35,6 +37,7 @@ export type FormSchema = {
   evaluation?: {
     enabled: boolean;
     area: string;
+    areas?: string[];
     membership?: "AREA";
     user_ids?: string[];
   };
@@ -67,6 +70,9 @@ export type FormDefinition = {
   report_user_ids: string[];
   status: DefinitionStatus;
   schema: FormSchema;
+  source_kind?: 'NATIVE' | 'DTO_XLSX';
+  source_key?: string | null;
+  source_metadata?: DtoSourceMetadata;
 };
 export type FormBuilder = Omit<FormDefinition, "id" | "version"> & {
   id?: string;
@@ -109,6 +115,22 @@ export type FormResponse = {
   _evaluation_view?: boolean;
   _self_view?: boolean;
   own_plans?: ActionPlan[];
+  source_kind?: 'NATIVE' | 'DTO_XLSX';
+  source_key?: string | null;
+  source_metadata?: DtoSourceMetadata;
+};
+export type DtoSourceMetadata = {
+  workbook?: string;
+  sheet?: string;
+  row?: number;
+  sha256?: string;
+  original_name?: string;
+  original_role?: string;
+  original_date?: string | number | null;
+  has_time?: boolean;
+  duration_minutes?: number | null;
+  estimated_date?: {method: string; intervals: number[]; intervalDays: number};
+  warnings?: string[];
 };
 export type FormAssignment = {
   id: string;

@@ -16,6 +16,7 @@
   'fdr-reports':['raio','reports'], 'fdr-dashboard':['raio','dashboard'],
   'orders-new':['pedidos','new'], 'orders-own':['pedidos','own'], 'orders-queue':['pedidos','queue'], 'orders-manage':['pedidos','management'], 'orders-dashboard':['pedidos','dashboard'], 'orders-productivity':['pedidos','productivity'], 'orders-audit':['pedidos','audit'], 'orders-config':['pedidos','settings'],
   'forms-manage':['formularios','builder'], 'forms-fill':['formularios','application'], 'forms-self':['formularios','self'], 'forms-report':['formularios','report'], 'forms-schedule':['formularios','schedule'],
+  'rating-clients':['vendas','rating'],
   'puxada-app-operations':['puxada','operations'], 'puxada-app-plans':['puxada','plans'], 'puxada-app-control':['puxada','control'], 'puxada-app-history':['puxada','history'], 'puxada-app-dashboard':['puxada','dashboard'], 'puxada-app-settings':['puxada','settings'],
   usuarios:['configuracoes','users'], 'contatos-clientes':['configuracoes','contacts'], produtos:['configuracoes','products'], bases:['configuracoes','imports']
  };

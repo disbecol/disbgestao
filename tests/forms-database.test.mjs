@@ -293,3 +293,74 @@ test('consulta própria não fica exposta a anônimos nem permite chamar o extra
  await as('a');await assert.rejects(()=>sql("select public.forms_person_answers('{}','{}',$1)",[ids.outsider]),/permission denied/);
  assert.equal((await sql('select * from public.form_staff_area_audit')).length,0);
 });
+
+const dtoSupportMigration=new URL('../supabase/migrations/20261125121851_dto_history_roles_and_multi_area_forms.sql',import.meta.url);
+test('suporte aos DTOs pode ser reaplicado sem apagar aplicações ou permissões',async()=>{
+ await db.exec('reset role');const before=(await sql('select count(*)::int as n from public.form_responses'))[0].n;
+ const migration=await readFile(dtoSupportMigration,'utf8');await db.exec(migration);await db.exec(migration);
+ assert.equal((await sql('select count(*)::int as n from public.form_responses'))[0].n,before);
+ assert.equal((await sql("select public.app_role_valid('EMPILHADOR') as valid,public.app_role_valid('INVALID') as invalid"))[0].valid,true);
+ assert.equal((await sql("select public.app_role_valid('INVALID') as value"))[0].value,false);
+ const catalog=JSON.parse(await readFile(new URL('../supabase/functions/_shared/user-roles.json',import.meta.url),'utf8'));
+ assert.deepEqual((await sql('select public.app_role_catalog() as value'))[0].value,catalog);
+ assert.ok((await sql("select permission_code from public.role_permissions where role='AJUDANTE_ENTREGA' and permission_code='FORMS_SELF_VIEW'")).length);
+});
+
+const multiAreaSchema=()=>({evaluation:{enabled:true,area:'Armazém',areas:['Armazém','Entrega']},sections:[{id:'multi',title:'Operação',fields:[{id:'check',label:'Procedimento seguido?',type:'BOOLEAN',scope:'INDIVIDUAL',scored:true,required:true,expected:'YES',allow_na:true}]}]});
+test('DTO seleciona várias áreas na unidade sem aceitar colaboradores de outra unidade',async()=>{
+ const form=await createForm({schema:multiAreaSchema(),apply_roles:['MOTORISTA','AJUDANTE_ENTREGA']});
+ const targets=await sql('select * from public.forms_evaluation_people($1,$2)',[form.id,A]);
+ assert.ok(targets.some(person=>person.id===ids.a));assert.ok(targets.some(person=>person.id===ids.manager));
+ assert.ok(!targets.some(person=>person.id===ids.b));
+ const row=await startEvaluated(form,[ids.a,ids.manager]);
+ assert.equal(row.evaluated_people.find(p=>p.id===ids.a).area,'Entrega');
+ assert.equal(row.evaluated_people.find(p=>p.id===ids.manager).area,'Armazém');
+ const other=await createForm({schema:multiAreaSchema()});
+ await assert.rejects(()=>startEvaluated(other,[ids.b]),/FORM_EVALUATION_USER_INVALID/);
+ await as('outsider');await assert.rejects(()=>startEvaluated(form,[ids.a]),/FORBIDDEN/);
+});
+
+test('áreas repetidas ou inválidas são rejeitadas e a configuração antiga de uma área continua válida',async()=>{
+ const duplicate=multiAreaSchema();duplicate.evaluation.areas=['Armazém','ARMAZEM'];
+ await assert.rejects(()=>createForm({schema:duplicate}),/FORM_EVALUATION_INVALID/);
+ const invalid=multiAreaSchema();invalid.evaluation.areas=[''];
+ await assert.rejects(()=>createForm({schema:invalid}),/FORM_EVALUATION_INVALID/);
+ const native=await createForm({schema:evaluationSchema()});
+ assert.equal(native.schema.evaluation.area,'Entrega');
+ assert.ok((await startEvaluated(native)).id);
+});
+
+test('chamadas nativas não podem forjar a origem de importação ou apagar sua rastreabilidade',async()=>{
+ const form=await createForm({source_kind:'DTO_XLSX',source_key:'forged',source_metadata:{sheet:'Fonte falsa'}});
+ assert.equal(form.source_kind,'NATIVE');assert.equal(form.source_key,null);
+ const row=await startResponse(form);assert.equal(row.source_kind,'NATIVE');
+ await assert.rejects(()=>sql("update public.form_responses set source_kind='DTO_XLSX' where id=$1",[row.id]),/permission denied/);
+});
+
+test('DTO importado acompanha a correção do nome no perfil, sem alterar os dados originais da fonte',async()=>{
+ const form=await createForm({schema:evaluationSchema()}),row=await saveResponse(await startEvaluated(form),evaluatedAnswers());
+ await db.exec('reset role');
+ await sql("update public.form_responses set source_kind='DTO_XLSX',source_key=$2,source_metadata=$3::jsonb where id=$1",[row.id,'fixture-dto-name',JSON.stringify({original_name:'Nome da planilha',sheet:'Entrega',row:29,estimated_date:{intervalDays:15}})]);
+ await sql("update public.profiles set name='Nome corrigido' where id=$1",[ids.a]);await as('a');
+ const own=(await myCurrentEvaluations()).find(value=>value.id===row.id);
+ assert.equal(own.evaluated_name,'Nome corrigido');assert.equal(own.source_kind,'DTO_XLSX');
+ assert.equal(own.source_metadata.original_name,'Nome da planilha');assert.equal(own.source_metadata.estimated_date.intervalDays,15);
+ await as('b');await assert.rejects(()=>myCurrentEvaluations(),/FORBIDDEN/);
+ await db.exec('reset role');await sql("update public.profiles set name='a' where id=$1",[ids.a]);
+});
+
+test('novos cargos mantêm sua família operacional sem ganhar acesso administrativo e usuários inativos continuam bloqueados',async()=>{
+ await db.exec('reset role');
+ await db.exec(`create or replace function public.current_role() returns text language sql stable security definer set search_path=public as $$select p.role from public.profiles p where p.id=auth.uid() and p.active=true limit 1$$;`);
+ const migration=await readFile(new URL('../supabase/migrations/20261125125540_dto_role_inheritance_and_area_compatibility.sql',import.meta.url),'utf8');
+ await db.exec(migration);await db.exec(migration);
+ for(const [role,parent] of [['MOTORISTA','COLABORADOR_ENTREGA'],['AJUDANTE_ENTREGA','COLABORADOR_ENTREGA'],['EMPILHADOR','COLABORADOR_ARMAZEM']]) {
+  await db.exec('reset role');await sql('update public.profiles set role=$2 where id=$1',[ids.a,role]);await as('a');
+  assert.equal((await sql('select public.has_role($1::text[]) as value',[[parent]]))[0].value,true);
+  assert.equal((await sql("select public.has_role('{ADMIN}') as value"))[0].value,false);
+ }
+ await db.exec('reset role');await sql('update public.profiles set active=false where id=$1',[ids.a]);await as('a');
+ assert.equal((await sql("select public.has_role('{EMPILHADOR,COLABORADOR_ARMAZEM,ADMIN}') as value"))[0].value,false);
+ await db.exec('reset role');await sql("update public.profiles set active=true,role='VENDEDOR' where id=$1",[ids.a]);
+ assert.deepEqual((await sql(`select public.forms_evaluation_areas('{"area":"Entrega","areas":["Armazém","ARMAZEM"]}') as value`))[0].value.sort(),['armazem','entrega']);
+});

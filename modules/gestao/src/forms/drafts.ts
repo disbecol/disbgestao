@@ -103,6 +103,8 @@ function isField(value: unknown): value is FormField {
       (key) => value[key] === undefined || typeof value[key] === "boolean",
     ) &&
     (value.help === undefined || typeof value.help === "string") &&
+    (value.positive_label === undefined || typeof value.positive_label === "string") &&
+    (value.negative_label === undefined || typeof value.negative_label === "string") &&
     (value.expected === undefined ||
       value.expected === null ||
       typeof value.expected === "string") &&
@@ -139,6 +141,7 @@ function isSchema(value: unknown): value is FormSchema {
     typeof config.enabled === "boolean" &&
     typeof config.area === "string" &&
     (config.membership === undefined || config.membership === "AREA") &&
+    (config.areas === undefined || strings(config.areas)) &&
     (config.user_ids === undefined || strings(config.user_ids))
   );
 }

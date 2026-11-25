@@ -13,6 +13,8 @@ const ROLE_LABELS = {
   VENDEDOR:'Vendedor',
   GERENTE_VENDAS:'Gerente de Vendas'
 };
+const userRoleCatalog = window.DISB_FORMS_UI?.roleCatalog || [];
+for (const role of userRoleCatalog) ROLE_LABELS[role.code] = role.label;
 
 const PERMISSION_CATALOG = [
   ['Pedidos','ORDERS_CREATE','Nova solicitação'],['Pedidos','ORDERS_OWN','Minhas solicitações'],['Pedidos','ORDERS_REVIEW','Analisar solicitações'],['Pedidos','ORDERS_VIEW_ALL','Consultar todas'],['Pedidos','ORDERS_MANAGE','Gerenciar análises'],['Pedidos','ORDERS_DASHBOARD','Dashboard gerencial'],['Pedidos','ORDERS_AUDIT','Auditoria'],['Pedidos','ORDERS_CONFIG','Configurar regras'],
@@ -63,6 +65,7 @@ const ROLE_PERMISSION_DEFAULTS = {
 };
 for(const role of ['VENDEDOR','GERENTE_VENDAS'])ROLE_PERMISSION_DEFAULTS[role].push('ORDERS_CREATE','ORDERS_OWN');
 ROLE_PERMISSION_DEFAULTS.GERENTE_VENDAS.push('ORDERS_VIEW_ALL','ORDERS_DASHBOARD');
+for (const role of userRoleCatalog) if (!ROLE_PERMISSION_DEFAULTS[role.code]) ROLE_PERMISSION_DEFAULTS[role.code] = [...(ROLE_PERMISSION_DEFAULTS[role.baseRole] || [])];
 Object.values(ROLE_PERMISSION_DEFAULTS).forEach(codes=>{for(const code of ['FORMS_FILL','FORMS_REPORT','FORMS_SELF_VIEW'])if(!codes.includes(code))codes.push(code);});
 const VALUE_TYPES = window.DISB_CONFERENCE?.types || [
   {key:'g300',label:'Garrafeiras de 300ml',unitsPerCrate:23,value:69.5,bottleValue:1.5},
@@ -252,7 +255,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.114-modules',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.115-modules',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -794,7 +797,7 @@ function bindBaseEvents(){
   $('btnCloseUserEditor')?.addEventListener('click',()=>{$('userEditor').open=false;$('btnUserEditorOpen').focus();});
   $('btnLimparUsuario').addEventListener('click',clearUserForm);
   $('tbodyUsuarios').addEventListener('click',onUserTableClick);
-  $('usuarioPerfil')?.addEventListener('change',()=>renderUserPermissionEditor(null,true));
+  $('usuarioPerfil')?.addEventListener('change',()=>{if($('usuarioArea')&&!$('usuarioArea').value)$('usuarioArea').value=userRoleCatalog.find(role=>role.code===$('usuarioPerfil').value)?.area||'';renderUserPermissionEditor(null,true);});
   $('btnRestaurarPermissoes')?.addEventListener('click',()=>renderUserPermissionEditor(null,true));
   $('btnImportarBase').addEventListener('click',importBaseCsv);
   $('importFile').addEventListener('change',previewCustomerImport);
@@ -8481,7 +8484,7 @@ loadUsers=async function(){
 };
 renderUsers=function(){
   const body=$('tbodyUsuarios');if(!body)return;
-  body.innerHTML=users.length?users.map(u=>{const enabled=effectiveUserPermissions(u),custom=userPermissionOverrides(u.id).length,units=userUnitsFor(u.id);return `<tr><td>${esc(u.username)}</td><td>${esc(u.name)}</td><td>${esc(ROLE_LABELS[u.role]||u.role)}</td><td><strong>${units.length?units.map(esc).join('<br>'):'Sem unidade'}</strong></td><td><strong>${enabled.size} habilitada${enabled.size===1?'':'s'}</strong><small>${u.role==='ADMIN'?'Acesso do perfil Admin':custom?`${custom} exceção(ões) individual(is)`:'Padrão do cargo'}</small></td><td>${u.active?'<span class="status ok">Ativo</span>':'<span class="status bad">Inativo</span>'}</td><td><button class="mini-btn" data-user="${esc(u.username)}">Editar</button></td></tr>`;}).join(''):'<tr><td colspan="7">Nenhum usuário cadastrado.</td></tr>';
+  body.innerHTML=users.length?users.map(u=>{const enabled=effectiveUserPermissions(u),custom=userPermissionOverrides(u.id).length,units=userUnitsFor(u.id);return `<tr><td>${esc(u.username)}</td><td>${esc(u.name)}${u.evaluation_area?`<small>Área: ${esc(u.evaluation_area)}</small>`:''}</td><td>${esc(ROLE_LABELS[u.role]||u.role)}</td><td><strong>${units.length?units.map(esc).join('<br>'):'Sem unidade'}</strong></td><td><strong>${enabled.size} habilitada${enabled.size===1?'':'s'}</strong><small>${u.role==='ADMIN'?'Acesso do perfil Admin':custom?`${custom} exceção(ões) individual(is)`:'Padrão do cargo'}</small></td><td>${u.active?'<span class="status ok">Ativo</span>':'<span class="status bad">Inativo</span>'}</td><td><button class="mini-btn" data-user="${esc(u.username)}">Editar</button></td></tr>`;}).join(''):'<tr><td colspan="7">Nenhum usuário cadastrado.</td></tr>';
 };
 onUserTableClick=function(e){
   const b=e.target.closest('button[data-user]');if(!b)return;const u=users.find(x=>x.username===b.dataset.user);if(!u)return;

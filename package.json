@@ -1,6 +1,6 @@
 {
   "name": "disb-gestao",
-  "version": "1.7.114",
+  "version": "1.7.115",
   "private": true,
   "scripts": {
     "prepare:web": "npm run build:puxada && npm run build:frontend && node scripts/copy-web.mjs",

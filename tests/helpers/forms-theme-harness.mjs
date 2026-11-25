@@ -38,6 +38,7 @@ export function formsThemeHarness(options={}){
  const settle=async()=>{for(let i=0;i<5;i++)await flush();};
  const set=(el,value)=>{if(el.tagName==='SELECT'){const options=[...el.querySelectorAll('option')];for(const option of options)option.selected=false;const selected=options.find(option=>option.value===value);if(selected)selected.selected=true;}else if(el.type==='checkbox'){el.checked=!!value;el.toggleAttribute('checked',!!value);}else el.value=value;};
  return{document,window,context,online,events,writes,reads,messages,memory,db,downloads,api,engine:fakeWindow.DISB_FORMS_UI.engine,settle,get,html:()=>document.toString(),
+  globalApi:ctx.DISB_FORMS_UI,
   release:element=>fakeWindow.DISB_FORMS_UI.release?.(element),
   appModals(){const ui=fakeWindow.DISB_FORMS_UI;fakeWindow.DISB_FORMS_UI=undefined;try{vm.runInContext(read('app.js').replace(/\}\)\(\);\s*$/,`window.__formsAppModals={open:openModal,close:closeModal};})();`),ctx);}finally{fakeWindow.DISB_FORMS_UI=ui;}return fakeWindow.__formsAppModals;},
   async enter(view){await api.enter(view);await settle();},

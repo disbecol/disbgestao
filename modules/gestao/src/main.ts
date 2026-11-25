@@ -1,7 +1,9 @@
 import { create as createController } from "./forms/controller";
 import { releaseContent, renderContent } from "./shared/react-host";
+import { USER_ROLES } from './forms/roles';
 import type { FormsAdapter, FormsModule, ReactFormsModal } from "./forms/types";
 export const engine = "react-typescript";
+export const roleCatalog = USER_ROLES;
 export { releaseContent as release };
 
 export function create(adapter: FormsAdapter): FormsModule {
@@ -60,5 +62,5 @@ export function create(adapter: FormsAdapter): FormsModule {
 
 // Existing navigation and the Android bridge keep the same module contract.
 Object.assign(window, {
-  DISB_FORMS_UI: { create, engine, release: releaseContent },
+  DISB_FORMS_UI: { create, engine, release: releaseContent, roleCatalog },
 });
