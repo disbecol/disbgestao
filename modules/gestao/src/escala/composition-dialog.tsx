@@ -1,0 +1,18 @@
+import {useState} from 'react';
+import {drawCrew,overlapsMonth,type CrewAssignment} from './composition';
+import type {EscalaState} from './model';
+export function CompositionDialog({data,month,busy,error,generateAfter,onSave,onCancel}:{data:EscalaState;month:string;busy:boolean;error:string;generateAfter:boolean;onSave(seed:string,assignments:CrewAssignment[],helpers:number,area:string):void;onCancel():void}){
+ const [seed,setSeed]=useState(()=>crypto.randomUUID()),[helpers,setHelpers]=useState(2),[area,setArea]=useState('Entrega');
+ const preview=drawCrew(data,month,seed,helpers,area),areas=[...new Set(['Entrega',...data.staff.map(p=>p.area).filter((a):a is string=>!!a)])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+ const person=(id:string)=>data.staff.find(p=>p.id===id);
+ return <form className="escala-dialog-body" onSubmit={e=>{e.preventDefault();if(!preview.errors.length&&data.composition_token)onSave(seed,preview.assignments,helpers,area);}}>
+  <p>As equipes com integrantes definidos manualmente serão preservadas. As demais receberão uma composição sorteada, válida para todo o mês.</p>
+  {error?<div className="escala-error" role="alert">{error}</div>:null}
+  <fieldset disabled={busy} style={{border:0,padding:0,margin:0}}><div className="escala-form-grid"><label>Área dos colaboradores<select value={area} onChange={e=>setArea(e.target.value)}><option value="">Todas as áreas</option>{areas.map(a=><option key={a} value={a}>{a}</option>)}</select></label><label>Ajudantes por equipe<select value={helpers} onChange={e=>setHelpers(Number(e.target.value))}>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n} ajudante{n===1?'':'s'}</option>)}</select></label></div>
+  <p>Serão sorteadas {preview.targets.length} equipe(s), com 1 motorista e {helpers} ajudante(s) cada. Disponíveis: {preview.drivers} motorista(s) e {preview.helpers} ajudante(s).</p><p>Participam pessoas disponíveis durante o mês inteiro e que não estejam reservadas em outra equipe. Os vínculos manuais também serão mantidos nos próximos meses, conforme as datas cadastradas.</p>
+  {preview.fixed.length?<details className="escala-panel"><summary>{preview.fixed.length} equipe(s) preservada(s)</summary>{preview.fixed.map(team=><p key={team.id}><strong>{team.name}</strong><small>{[...new Set(data.memberships.filter(m=>m.team_id===team.id&&overlapsMonth(m,month)).map(m=>person(m.staff_id)?.name).filter(Boolean))].join(' · ')}</small></p>)}</details>:null}
+  {preview.errors.length?<div className="escala-conflicts" role="status"><strong>Revise antes de salvar</strong><ul>{preview.errors.map(e=><li key={e}>{e}</li>)}</ul></div>:<><div className="escala-team-grid">{preview.assignments.map(crew=><article className="escala-panel" key={crew.team_id}><h3>{data.teams.find(t=>t.id===crew.team_id)?.name}</h3>{crew.members.map(id=><p key={id}><strong>{person(id)?.name}</strong><small>{person(id)?.job}</small></p>)}</article>)}</div>{preview.remaining.length?<details><summary>{preview.remaining.length} pessoa(s) disponível(is) sem equipe neste sorteio</summary><p>{preview.remaining.map(p=>p.name).join(' · ')}</p></details>:null}</>}
+  {!data.composition_token?<div className="escala-error" role="alert">Atualize os dados da Escala antes de salvar a composição.</div>:null}
+  <footer><button type="button" onClick={onCancel}>Cancelar</button><button type="button" onClick={()=>setSeed(crypto.randomUUID())}>Sortear novamente</button><button className="primary" type="submit" disabled={!!preview.errors.length||!data.composition_token}>{generateAfter?'Salvar equipes e gerar folgas':'Salvar equipes sorteadas'}</button></footer></fieldset>
+ </form>;
+}
