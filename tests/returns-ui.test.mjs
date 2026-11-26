@@ -24,22 +24,26 @@ function harness({rpc,permissions=['RETURNS_VIEW','RETURNS_EDIT','RETURNS_IMPORT
 }
 test('as visões, auditoria e importação renderizam sem HTML de dados ou objetos acidentais',async()=>{
  const h=harness();for(const v of Object.keys(R.VIEWS)){await h.module.enter(v);const root=h.document.getElementById('view-'+v);assert.ok(root.querySelector('h1'));assert.ok(!root.innerHTML.includes('[object Object]'),v);assert.equal(root.querySelectorAll('script').length,0);}
- assert.equal(h.document.querySelectorAll('#view-returns-import .rt-source').length,7);assert.equal(h.document.querySelectorAll('#view-returns-import input[type=file]').length,0);
+ assert.equal(h.document.querySelectorAll('#view-returns-import .rt-source').length,6);assert.equal(h.document.querySelectorAll('#view-returns-import input[type=file]').length,0);
 });
 test('Rating aparece em Devoluções e oferece links diretos para as abas Matriz e Filial',async()=>{
  const h=harness();await h.module.enter('returns-import');
  const grid=h.document.querySelector('#view-returns-import .rt-source-grid');
- assert.equal(grid.querySelectorAll('.rt-source').length,7);
+ assert.equal(grid.querySelectorAll('.rt-source').length,6);
  const links=[...grid.querySelectorAll('.rt-source a')].filter(link=>link.href.includes('?gid='));
  assert.deepEqual(links.map(link=>link.href),[
-  `https://docs.google.com/spreadsheets/d/${G.SPREADSHEET}/edit?gid=1949652663#gid=1949652663`,
-  `https://docs.google.com/spreadsheets/d/${G.SPREADSHEET}/edit?gid=1042578215#gid=1042578215`
+  `https://docs.google.com/spreadsheets/d/${G.SPREADSHEET}/edit?gid=1949652663#gid=1949652663`
  ]);
+ assert.doesNotMatch(grid.textContent,/Rating · Filial/);
  const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
  assert.match(html,/data-view="rating-clients" data-permission-any="RATING_VIEW,RATING_EDIT"[^>]*>.*Rating de clientes/);
  assert.match(html,/data-module="devolucoes" data-permission-any="RETURNS_VIEW,RATING_VIEW,RATING_EDIT"/);
  h.setUnit('Filial Pau dos Ferros');await h.module.enter('returns-import');
- assert.equal(h.document.querySelectorAll('#view-returns-import .rt-source-grid .rt-source').length,6);
+ const filialGrid=h.document.querySelector('#view-returns-import .rt-source-grid');
+ assert.equal(filialGrid.querySelectorAll('.rt-source').length,5);
+ const filialLinks=[...filialGrid.querySelectorAll('.rt-source a')].filter(link=>link.href.includes('?gid='));
+ assert.deepEqual(filialLinks.map(link=>link.href),[`https://docs.google.com/spreadsheets/d/${G.SPREADSHEET}/edit?gid=1042578215#gid=1042578215`]);
+ assert.doesNotMatch(filialGrid.textContent,/Rating · Matriz/);
 });
 test('Análise por raio consulta a unidade e período e exibe resultados por ocorrência',async()=>{
  const h=harness({permissions:['RETURNS_VIEW'],rpc:async(name)=>({data:name==='returns_radius_snapshot'?{available:true,matches:[{operation_date:today,customer_code:'42',map_number:'1',state:'OUTSIDE',justified:false,match_count:2}]}:sample,error:null})});await h.module.enter('returns-followup');await h.click(h.document.querySelector('[data-tab="returns-radius"]'));const root=h.document.querySelector('#view-returns-followup');assert.match(root.textContent,/Dentro e fora do raio por motorista/);assert.match(root.textContent,/Não justificada/);assert.ok(root.querySelector('.rt-radius-OUTSIDE'));assert.equal(root.querySelectorAll('script').length,0);const call=h.calls.find(c=>c.name==='returns_radius_snapshot');assert.equal(call.args.p_unit,'Matriz Caicó');assert.equal(call.args.p_to,today);
