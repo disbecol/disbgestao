@@ -29,6 +29,20 @@ test('generation is a reviewable local draft and Save sends a revisioned idempot
 test('opening teams, staff, vehicles, holidays, reports and history remains read only',async()=>{
  const h=harness();for(const view of ['escala-teams','escala-staff','escala-trucks','escala-holidays','escala-reports','escala-history','escala-settings']){await h.enter(view);assert.ok(h.get('#view-'+view).textContent.includes('Escala'));}assert.equal(h.writes.length,0);h.destroy();
 });
+test('rascunho recuperado da versão anterior permite sortear novas folgas sem gravar automaticamente',async()=>{
+ const state=escalaFixture();state.memberships.slice(0,6).forEach(m=>{m.origin='MANUAL';m.draw_month=null;});state.plan={...generateMonth(state,'2026-11-01','previous').plan,id:'saved-month',revision:3,algorithm_version:'escala-balanced-1'};
+ const local=structuredClone(state.plan);local.days[4].manual=true;local.days[4].notes='Ajuste manual a preservar';
+ const h=harness({state,memory:new Map([['disb_escala_draft_v1_admin|Matriz Caicó_2026-11-01',JSON.stringify(local)]])});await h.enter('escala-calendar');
+ assert.match(h.get('.escala-statusbar').textContent,/alterações neste aparelho/);
+ const redraw=[...h.document.querySelectorAll('button')].find(b=>b.textContent==='Sortear novas folgas');assert.equal(redraw.disabled,false);await clickText(h,'Sortear novas folgas');
+ assert.equal(h.document.querySelector('.escala-error')?.textContent||'','');const next=JSON.parse([...h.memory.values()][0]);assert.equal(next.algorithm_version,'escala-balanced-2-fixed-weekdays');assert.equal(next.days[4].notes,'Ajuste manual a preservar');
+ for(const day of next.days)for(const team of state.teams.slice(0,2)){const weekend=[0,6].includes(new Date(day.date+'T12:00:00Z').getUTCDay());assert.equal(day.duties.find(d=>d.team_id===team.id).mode,weekend?'REST':'ROUTE');}
+ assert.equal(h.writes.length,0);assert.equal(h.state.plan.algorithm_version,'escala-balanced-1');h.destroy();
+});
+test('o motivo do bloqueio de sorteio fica visível para consulta e escala protegida',async()=>{
+ const state=escalaFixture();state.plan={...generateMonth(state,'2026-11-01','protected').plan,status:'APPROVED'};
+ for(const permissions of [['ESCALA_VIEW'],['ESCALA_VIEW','ESCALA_MANAGE']]){const h=harness({state,permissions});await h.enter('escala-calendar');const step=h.document.querySelectorAll('.escala-planning-steps article')[1],redraw=step.querySelector('button');assert.equal(redraw.disabled,true);assert.match(step.textContent,permissions.includes('ESCALA_MANAGE')?/administrador precisa desbloqueá-la/:/perfil não tem permissão/);assert.equal(h.writes.length,0);h.destroy();}
+});
 test('approved calendars prevent a redraw and read-only users cannot edit operational records',async()=>{
  const state=escalaFixture();state.plan=generateMonth(state,'2026-11-01','approved').plan;state.plan.status='APPROVED';
  const h=harness({state,permissions:['ESCALA_VIEW']});await h.enter('escala-calendar');const redraw=[...h.document.querySelectorAll('button')].find(b=>b.textContent.includes('Sortear novas folgas'));assert.equal(redraw.disabled,true);await h.enter('escala-staff');const create=[...h.document.querySelectorAll('button')].find(b=>b.textContent==='Cadastrar pessoa');assert.equal(create.disabled,true);h.destroy();
