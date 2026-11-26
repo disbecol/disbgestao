@@ -1,6 +1,7 @@
 # Rating de Clientes: configuração da integração
 
 A tela consulta as abas `RATING - MATRIZ` e `RATING - FILIAL`; somente o campo `Comentário` é atualizado. Os demais dados permanecem na planilha original.
+Os links para as abas ficam em **Devoluções → Bases do Google** e também na tela de Rating, para a unidade selecionada. Abrir ou preencher diretamente no Google depende das permissões da própria planilha.
 
 ## 1. Aplicar permissões
 
@@ -24,7 +25,8 @@ supabase functions deploy rating-google
 ```
 
 O navegador chama a função usando a sessão existente do sistema. Ela verifica `RATING_VIEW`/`RATING_EDIT` e o vínculo do usuário à unidade antes de encaminhar qualquer operação à planilha.
+Se a função não estiver implantada, a tela não conseguirá consultar nem salvar; confira a implantação e a conectividade antes de tentar novamente. Ao alterar o Apps Script, publique uma nova versão da implantação.
 
 ## Cabeçalhos esperados
 
-As duas abas devem ter, na primeira linha, os cabeçalhos `Data Avaliação`, `Cod PDV`, `Nome PDV`, `Cidade`, `Motorista`, `Motivo` e `Comentário` (acentos e caixa são ignorados). O restante das colunas pode permanecer como está. Se a linha for alterada entre a consulta e a gravação, a alteração é recusada e a tela deve ser atualizada antes de tentar novamente.
+As duas abas devem ter, na primeira linha, os cabeçalhos `DATA DA AVALIAÇÃO`, `CÓDIGO DO PDV`, `NOME PDV`, `CIDADE`, `MOTORISTA`, `MOTIVO` e `COMENTÁRIO` (acentos e caixa são ignorados). Também são aceitos `Data Avaliação` e `Cod PDV`. Cada campo deve aparecer uma única vez. O restante das colunas pode permanecer como está. Se a linha for alterada entre a consulta e a gravação, a alteração é recusada e a tela deve ser atualizada antes de tentar novamente.

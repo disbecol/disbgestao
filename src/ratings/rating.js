@@ -6,6 +6,10 @@
   'use strict';
 
   const UNITS = ['Matriz Caicó', 'Filial Pau dos Ferros'];
+  const SHEET_URLS = {
+    'Matriz Caicó': 'https://docs.google.com/spreadsheets/d/1hYle_7TyEitARZOYgYPoO5hUcxHsj0xxhTP7YCccGTM/edit?gid=1949652663#gid=1949652663',
+    'Filial Pau dos Ferros': 'https://docs.google.com/spreadsheets/d/1hYle_7TyEitARZOYgYPoO5hUcxHsj0xxhTP7YCccGTM/edit?gid=1042578215#gid=1042578215'
+  };
   const clean = value => String(value ?? '').trim();
   const searchKey = value => clean(value).normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ');
@@ -55,6 +59,12 @@
       const units = availableUnits();
       tabs.innerHTML = units.map(name => `<button type="button" class="rating-unit-tab ${name === unit ? 'active' : ''}" data-rating-unit="${adapter.escapeHtml(name)}" aria-pressed="${name === unit}" ${editingRow !== null ? 'disabled' : ''}>${adapter.escapeHtml(name)}</button>`).join('');
       $('ratingUnitLabel').textContent = unit || '—';
+      const sheetLink = $('ratingSheetLink');
+      if (sheetLink) {
+        sheetLink.hidden = !SHEET_URLS[unit];
+        if (SHEET_URLS[unit]) sheetLink.href = SHEET_URLS[unit];
+        else sheetLink.removeAttribute('href');
+      }
       $('ratingAlert')?.classList.toggle('hidden', !error);
       if ($('ratingAlert')) $('ratingAlert').textContent = error;
       $('btnRatingRefresh').disabled = loading;
@@ -117,13 +127,16 @@
         FORBIDDEN: 'Seu usuário não tem permissão para esta operação.',
         UNIT_FORBIDDEN: 'Seu usuário não tem acesso a esta unidade.',
         ROW_CHANGED: 'A linha da planilha mudou desde a consulta. Atualize a tela e tente novamente.',
-        RATING_BRIDGE_NOT_CONFIGURED: 'A integração de gravação da planilha ainda precisa ser configurada.',
+        RATING_BRIDGE_NOT_CONFIGURED: 'A integração da planilha ainda precisa ser configurada pelo administrador.',
         RATING_SHEET_TIMEOUT: 'A planilha demorou mais que o esperado. Tente novamente.',
         RATING_SHEET_UNAVAILABLE: 'Não foi possível acessar a planilha. Tente novamente.',
         INVALID_HEADERS: 'Confira os cabeçalhos da primeira linha das abas de Rating.',
         SHEET_NOT_FOUND: 'Não foi encontrada a aba de Rating configurada na planilha.'
       };
       if (invokeError || !data || data.ok !== true) {
+        if (!errorCode && (invokeError?.name === 'FunctionsFetchError' || invokeError?.context?.status === 404)) {
+          throw new Error('Não foi possível conectar à integração de Rating. Verifique a conexão ou peça ao administrador para implantar a função rating-google.');
+        }
         throw new Error(messages[errorCode] || errorCode || invokeError?.message || 'Não foi possível concluir a operação.');
       }
       return data;

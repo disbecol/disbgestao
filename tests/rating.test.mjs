@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
+import {createHash} from 'node:crypto';
 import {parseHTML} from 'linkedom';
 import rating from '../src/ratings/rating.js';
 
@@ -24,7 +26,7 @@ test('pesquisa avaliacoes pelos campos apresentados ignorando acentos e caixa',(
 
 test('consulta a unidade e salva o comentário pela função autenticada',async()=>{
   const {document,window}=parseHTML(`<html><body>
-    <div id="ratingUnitTabs"></div><strong id="ratingUnitLabel"></strong>
+    <div id="ratingUnitTabs"></div><strong id="ratingUnitLabel"></strong><a id="ratingSheetLink"></a>
     <div id="ratingAlert"></div><button id="btnRatingRefresh"></button>
     <input id="ratingSearch"><span id="ratingStatus"></span>
     <table><tbody id="ratingRows"></tbody></table>
@@ -46,6 +48,7 @@ test('consulta a unidade e salva o comentário pela função autenticada',async(
   api.bind();
   await api.load('Matriz Caicó');
   assert.match(document.getElementById('ratingRows').textContent,/Mercado São João/);
+  assert.match(document.getElementById('ratingSheetLink').href,/#gid=1949652663$/);
 
   document.querySelector('[data-rating-edit]').dispatchEvent(new window.Event('click',{bubbles:true}));
   const textarea=document.querySelector('[data-rating-editor] textarea');
@@ -78,4 +81,48 @@ test('registra a tela Rating no menu e carrega o módulo antes do app principal'
   const scripts=[...document.querySelectorAll('script[src]')].map(script=>script.getAttribute('src').split('?')[0]);
   assert.ok(scripts.indexOf('src/ratings/rating.js')>=0);
   assert.ok(scripts.indexOf('src/ratings/rating.js')<scripts.indexOf('app.js'));
+});
+
+test('exibe orientação quando a função não pode ser alcançada',async()=>{
+  const {document}=parseHTML(`<html><body><div id="ratingUnitTabs"></div><strong id="ratingUnitLabel"></strong>
+    <a id="ratingSheetLink"></a><div id="ratingAlert"></div><button id="btnRatingRefresh"></button>
+    <input id="ratingSearch"><span id="ratingStatus"></span><table><tbody id="ratingRows"></tbody></table></body></html>`);
+  const api=rating.create({
+    document,getElement:id=>document.getElementById(id),
+    context:()=>({client:{functions:{invoke:async()=>({data:null,error:{name:'FunctionsFetchError',message:'Failed to send a request to the Edge Function'}})}},units:['Filial Pau dos Ferros'],hasPermission:()=>false}),
+    escapeHtml:value=>String(value??''),toast:()=>{}
+  });
+  await api.load('Filial Pau dos Ferros');
+  assert.match(document.getElementById('ratingAlert').textContent,/administrador para implantar/);
+  assert.match(document.getElementById('ratingSheetLink').href,/#gid=1042578215$/);
+  api.reset();
+  assert.equal(document.getElementById('ratingSheetLink').hasAttribute('href'),false);
+});
+
+test('script lê e atualiza os cabeçalhos reais das duas abas sem aceitar colunas ambíguas',()=>{
+  const code=readFileSync(new URL('../src/ratings/rating-google.gs',import.meta.url),'utf8');
+  for(const headers of [
+    ['DATA DA AVALIAÇÃO','AVALIAÇÃO','CLASSIFICAÇÃO','CÓDIGO DO PDV','NOME PDV','MOTIVO','COMENTÁRIO','CATEGORIA','ÚLTIMA COMPRA','SETOR','BAIRRO','CIDADE','UF','TELEFONE(S)','MOTORISTA','AJUDANTE 1','AJUDANTE 2'],
+    ['DATA DA AVALIAÇÃO','AVALIAÇÃO','CLASSIFICAÇÃO','CÓDIGO DO PDV','NOME PDV','MOTIVO','COMENTÁRIO','CATEGORIA','ÚLTIMA COMPRA','BAIRRO','CIDADE','UF','TELEFONE(S)','MOTORISTA','AJUDANTE 1','AJUDANTE 2']
+  ]) {
+    const cells=headers.map(()=>''),commentIndex=headers.indexOf('COMENTÁRIO');
+    cells[0]='25/11/2026';cells[3]='123';cells[4]='Cliente';cells[commentIndex]='Antes';
+    const sheet={
+      getDataRange:()=>({getDisplayValues:()=>[headers,cells]}),
+      getLastColumn:()=>headers.length,getLastRow:()=>2,
+      getRange:(row,column)=>({getDisplayValues:()=>[row===1?headers:cells],setValue:value=>{cells[column-1]=value;}})
+    };
+    const context=vm.createContext({
+      SpreadsheetApp:{openById:()=>({getSheetByName:()=>sheet}),flush:()=>{}},
+      Utilities:{DigestAlgorithm:{SHA_256:'sha256'},Charset:{UTF_8:'utf8'},computeDigest:(_algorithm,value)=>[...createHash('sha256').update(value).digest()].map(x=>x>127?x-256:x)}
+    });
+    vm.runInContext(code,context);
+    const [row]=context.listRows('RATING - MATRIZ');
+    assert.equal(row.code,'123');
+    const saved=context.saveComment('RATING - MATRIZ',{rowNumber:2,comment:'Depois',expected:{fingerprint:row.fingerprint}});
+    assert.equal(saved.ok,true);
+    assert.equal(cells[commentIndex],'Depois');
+    assert.equal(context.saveComment('RATING - MATRIZ',{rowNumber:2,comment:'Conflito',expected:{fingerprint:row.fingerprint}}).error,'ROW_CHANGED');
+    assert.throws(()=>context.columnIndexes([...headers,'Cod PDV']),/INVALID_HEADERS/);
+  }
 });

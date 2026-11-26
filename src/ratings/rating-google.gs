@@ -4,13 +4,13 @@ const RATING_SHEETS = {
   'Filial Pau dos Ferros': 'RATING - FILIAL'
 };
 const RATING_FIELDS = {
-  date: 'data avaliacao',
-  code: 'cod pdv',
-  name: 'nome pdv',
-  city: 'cidade',
-  driver: 'motorista',
-  motive: 'motivo',
-  comment: 'comentario'
+  date: ['data da avaliacao', 'data avaliacao'],
+  code: ['codigo do pdv', 'cod pdv'],
+  name: ['nome pdv'],
+  city: ['cidade'],
+  driver: ['motorista'],
+  motive: ['motivo'],
+  comment: ['comentario']
 };
 
 function configureRatingBridgeSecret() {
@@ -48,9 +48,9 @@ function normalizedHeader(value) {
 function columnIndexes(headers) {
   const normalized = headers.map(normalizedHeader);
   const indexes = {};
-  for (const [field, label] of Object.entries(RATING_FIELDS)) {
+  for (const [field, labels] of Object.entries(RATING_FIELDS)) {
     const matches = normalized.reduce((found, value, index) => {
-      if (value === label) found.push(index);
+      if (labels.includes(value)) found.push(index);
       return found;
     }, []);
     if (matches.length !== 1) throw new Error('INVALID_HEADERS');
