@@ -43,7 +43,7 @@ export function CompareMonths({adapter,month,current,currentPlan,currentDirty,in
   <p>Semanas de segunda a domingo. Cada colaborador deve ter duas folgas na semana, incluindo o domingo. Feriados ficam em azul. A coincidência com uma folga semanal já definida não gera outro dia de descanso.</p>
   <div className="escala-compare-controls"><label>Colaborador<select aria-label="Colaborador" value={selected?.id||''} onChange={e=>setPerson(e.target.value)}>{options.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>{months.map((m,i)=><label key={i}>{i===0?'Primeiro mês':'Segundo mês'}<input type="month" min="2020-01" max="2100-12" value={m.slice(0,7)} onChange={e=>setMonth(i,e.target.value)}/></label>)}</div>
   <div className="escala-compare-presets"><button onClick={()=>setMonths([monthShift(month,-1),month])}>Anterior × atual</button><button onClick={()=>setMonths([month,monthShift(month,1)])}>Atual × seguinte</button></div>
-  <div className="escala-availability-legend"><span className="available">Disponível</span><span className="rest">Folga</span><span className="holiday-rest">Feriado</span><span className="unavailable">Indisponível</span></div>
+  <div className="escala-availability-legend"><span className="available">Disponível</span><span className="rest">Folga</span><span className="holiday-rest">Domingo / feriado</span><span className="unavailable">Indisponível</span></div>
   {error?<p role="alert" className="escala-error">{error}</p>:null}
   {loading?<p role="status">Carregando os meses…</p>:loaded&&selected?<>
    <h3>{selected.name}</h3><p className="escala-compare-change">Folgas junto do domingo: <strong>{weekdayRest(loaded[0],selected.id)}</strong> → <strong>{weekdayRest(loaded[1],selected.id)}</strong></p>
