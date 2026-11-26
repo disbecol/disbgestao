@@ -38,3 +38,11 @@ A preparação e a aplicação da migração foram autorizadas explicitamente pe
 - Migração complementar: `20261126185256_escala_clt_5x2_policy.sql`. Somente as configurações iniciais ainda não conferidas passam de 8h24/42h para 8h/40h. Calendários, aprovações, vínculos e situações realizadas são preservados.
 
 Fontes: [EC 141/2026](https://www.planalto.gov.br/ccivil_03/constituicao/emendas/emc/emc141.htm), [Decreto 13.173/2026](https://www2.camara.leg.br/legin/fed/decret/2026/decreto-13173-19-novembro-2026-800207-publicacaooriginal-182072-pe.html), [Portaria MTE 2.041/2026](https://www.in.gov.br/web/dou/-/portaria-mte-n-2.041-de-19-de-novembro-de-2026-745783275), [CLT](https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452compilado.htm), [Lei 605/1949](https://www.planalto.gov.br/ccivil_03/leis/l0605.htm).
+
+## Visualização e organização por arraste
+
+- O calendário abre no resumo diário. As abas secundárias “Por colaborador” e “Equipes fixas” foram retiradas; a manutenção dos grupos continua na tela Equipes.
+- Semana mantém sete dias completos. Mês apresenta todos os dias em um calendário de segunda a domingo, com totais e grupos recolhidos inicialmente. A escolha acompanha a navegação entre meses.
+- Cada dia tem setas independentes para motoristas e ajudantes, com nomes em ordem alfabética e sem cargos abaixo.
+- É possível arrastar uma folga para outro dia da mesma semana. Soltar sobre um colega da mesma função troca as duas folgas. Quando o destino já está no limite, o formulário abre preenchido para escolher com quem trocar.
+- O arraste funciona por mouse e toque e usa o salvamento manual já existente, com revisão, identificação da operação e auditoria. Grupos fixos, domingos, feriados, dias bloqueados, situações realizadas e escalas aprovadas continuam protegidos. As leituras e as mudanças de visualização não gravam uma escala.
