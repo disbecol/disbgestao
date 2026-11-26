@@ -10,6 +10,13 @@
     'Matriz Caicó': 'https://docs.google.com/spreadsheets/d/1hYle_7TyEitARZOYgYPoO5hUcxHsj0xxhTP7YCccGTM/edit?gid=1949652663#gid=1949652663',
     'Filial Pau dos Ferros': 'https://docs.google.com/spreadsheets/d/1hYle_7TyEitARZOYgYPoO5hUcxHsj0xxhTP7YCccGTM/edit?gid=1042578215#gid=1042578215'
   };
+  const SHEET_IDS = { 'Matriz Caicó': 1949652663, 'Filial Pau dos Ferros': 1042578215 };
+  const HEADERS = {
+    date: ['data da avaliacao', 'data avaliacao'],
+    code: ['codigo do pdv', 'cod pdv'],
+    name: ['nome pdv'], city: ['cidade'], driver: ['motorista'],
+    motive: ['motivo'], sourceComment: ['comentario']
+  };
   const clean = value => String(value ?? '').trim();
   const searchKey = value => clean(value).normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ');
@@ -24,12 +31,40 @@
     return text;
   }
 
+  function parseSheet(values) {
+    const normalize = value => searchKey(value).replace(/[^a-z0-9]+/g, ' ').trim();
+    const headers = (values[0] || []).map(normalize);
+    const columns = {};
+    for (const [field, names] of Object.entries(HEADERS)) {
+      const matches = headers.flatMap((header, index) => names.includes(header) ? [index] : []);
+      if (matches.length !== 1) throw new Error('Confira os cabeçalhos da primeira linha da aba de Rating.');
+      columns[field] = matches[0];
+    }
+    const result = values.slice(1).flatMap((cells, index) => {
+      const value = field => clean(cells[columns[field]]);
+      const rawDate = cells[columns.date];
+      const date = typeof rawDate === 'number' && Number.isFinite(rawDate)
+        ? new Date(Date.UTC(1899, 11, 30) + Math.floor(rawDate) * 86400000).toISOString().slice(0, 10)
+        : value('date');
+      const code = value('code');
+      const name = value('name');
+      if (!date && !code && !name) return [];
+      return [{ rowNumber: index + 2, date, code, name, city: value('city'), driver: value('driver'),
+        motive: value('motive'), sourceComment: value('sourceComment'),
+        rowKey: date && code ? JSON.stringify([String(rawDate), code]) : '', comment: '', revision: 0 }];
+    });
+    const counts = new Map();
+    for (const row of result) if (row.rowKey) counts.set(row.rowKey, (counts.get(row.rowKey) || 0) + 1);
+    for (const row of result) row.ambiguous = !row.rowKey || counts.get(row.rowKey) > 1;
+    return result;
+  }
+
   function filterRows(rows, query) {
     const term = searchKey(query);
     if (!term) return rows;
     const words = term.split(' ');
     return rows.filter(row => words.every(word => searchKey([
-      row.date, row.code, row.name, row.city, row.driver, row.motive, row.comment
+      row.date, row.code, row.name, row.city, row.driver, row.motive, row.sourceComment, row.comment
     ].join(' ')).includes(word)));
   }
 
@@ -67,27 +102,27 @@
       }
       $('ratingAlert')?.classList.toggle('hidden', !error);
       if ($('ratingAlert')) $('ratingAlert').textContent = error;
-      $('btnRatingRefresh').disabled = loading;
+      $('btnRatingRefresh').disabled = loading || editingRow !== null;
       $('btnRatingRefresh').textContent = loading ? 'Atualizando…' : 'Atualizar';
 
       if (!units.length) {
         status.textContent = '';
-        body.innerHTML = '<tr><td colspan="7">Seu usuário não tem unidade Matriz ou Filial vinculada.</td></tr>';
+        body.innerHTML = '<tr><td colspan="8">Seu usuário não tem unidade Matriz ou Filial vinculada.</td></tr>';
         return;
       }
       if (loading && !rows.length) {
         status.textContent = 'Carregando avaliações…';
-        body.innerHTML = '<tr><td colspan="7">Consultando a planilha…</td></tr>';
+        body.innerHTML = '<tr><td colspan="8">Consultando a planilha…</td></tr>';
         return;
       }
       const filtered = filterRows(rows, search);
       status.textContent = `${filtered.length} de ${rows.length} ${rows.length === 1 ? 'avaliação' : 'avaliações'}`;
       if (error && !rows.length) {
-        body.innerHTML = '<tr><td colspan="7">Não foi possível carregar as avaliações.</td></tr>';
+        body.innerHTML = '<tr><td colspan="8">Não foi possível carregar as avaliações.</td></tr>';
         return;
       }
       if (!filtered.length) {
-        body.innerHTML = `<tr><td colspan="7">${rows.length ? 'Nenhum resultado para a busca.' : 'Nenhuma avaliação encontrada nesta planilha.'}</td></tr>`;
+        body.innerHTML = `<tr><td colspan="8">${rows.length ? 'Nenhum resultado para a busca.' : 'Nenhuma avaliação encontrada nesta planilha.'}</td></tr>`;
         return;
       }
       const canEdit = context().hasPermission('RATING_EDIT');
@@ -102,8 +137,9 @@
           <td>${adapter.escapeHtml(row.city || '—')}</td>
           <td>${adapter.escapeHtml(row.driver || '—')}</td>
           <td>${adapter.escapeHtml(row.motive || '—')}</td>
-          <td><div class="rating-comment">${comment || '<span class="rating-empty">Sem comentário</span>'}</div>
-            ${canEdit ? `<button type="button" class="mini-btn rating-edit" data-rating-edit="${key}">Editar</button>
+          <td><div class="rating-comment">${adapter.escapeHtml(row.sourceComment || '—')}</div></td>
+          <td><div class="rating-comment">${row.ambiguous ? '<span class="rating-empty">Data e código ausentes ou duplicados na planilha. Corrija a base para registrar a tratativa.</span>' : comment || '<span class="rating-empty">Sem tratativa</span>'}</div>
+            ${canEdit && !row.ambiguous ? `<button type="button" class="mini-btn rating-edit" data-rating-edit="${key}" ${editingRow !== null && editingRow !== key ? 'disabled' : ''}>Editar</button>
               <div class="rating-editor ${editorHidden}" data-rating-editor="${key}">
                 <textarea maxlength="5000" aria-label="Tratativa ou comentário para ${adapter.escapeHtml(row.name || row.code || 'cliente')}" ${savingRow === key ? 'disabled' : ''}>${comment}</textarea>
                 <div class="rating-editor-actions">
@@ -116,30 +152,46 @@
       }).join('');
     }
 
-    async function request(action, payload) {
+    async function loadComments(selectedUnit) {
       const client = context().client;
-      if (!client?.functions?.invoke) throw new Error('A conexão com o sistema não está disponível.');
-      const { data, error: invokeError } = await client.functions.invoke('rating-google', {
-        body: { action, ...payload }
-      });
-      const errorCode = data?.error || (invokeError?.context?.clone ? (await invokeError.context.clone().json().catch(() => ({})))?.error : '');
-      const messages = {
-        FORBIDDEN: 'Seu usuário não tem permissão para esta operação.',
-        UNIT_FORBIDDEN: 'Seu usuário não tem acesso a esta unidade.',
-        ROW_CHANGED: 'A linha da planilha mudou desde a consulta. Atualize a tela e tente novamente.',
-        RATING_BRIDGE_NOT_CONFIGURED: 'A integração da planilha ainda precisa ser configurada pelo administrador.',
-        RATING_SHEET_TIMEOUT: 'A planilha demorou mais que o esperado. Tente novamente.',
-        RATING_SHEET_UNAVAILABLE: 'Não foi possível acessar a planilha. Tente novamente.',
-        INVALID_HEADERS: 'Confira os cabeçalhos da primeira linha das abas de Rating.',
-        SHEET_NOT_FOUND: 'Não foi encontrada a aba de Rating configurada na planilha.'
-      };
-      if (invokeError || !data || data.ok !== true) {
-        if (!errorCode && (invokeError?.name === 'FunctionsFetchError' || invokeError?.context?.status === 404)) {
-          throw new Error('Não foi possível conectar à integração de Rating. Verifique a conexão ou peça ao administrador para implantar a função rating-google.');
-        }
-        throw new Error(messages[errorCode] || errorCode || invokeError?.message || 'Não foi possível concluir a operação.');
+      if (!client?.from) throw new Error('A conexão com o sistema não está disponível.');
+      const result = [];
+      for (let offset = 0; ; offset += 1000) {
+        const { data, error } = await client.from('rating_comments').select('row_key,comment,revision')
+          .eq('unit', selectedUnit).order('row_key').range(offset, offset + 999);
+        if (error) throw error;
+        if (!Array.isArray(data)) throw new Error('A consulta de tratativas retornou dados inválidos.');
+        result.push(...data);
+        if (data.length < 1000) return result;
       }
-      return data;
+    }
+
+    async function loadSheet(selectedUnit) {
+      const google = globalThis.DISB_RETURNS_GOOGLE;
+      if (!google?.readResponse || !google.SPREADSHEET) throw new Error('A integração de leitura do Google não está disponível.');
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 20000);
+      try {
+        const response = await (adapter.fetch || globalThis.fetch)(`https://docs.google.com/spreadsheets/d/${google.SPREADSHEET}/gviz/tq?tqx=out:json&gid=${SHEET_IDS[selectedUnit]}&headers=1`, { cache: 'no-store', signal: controller.signal });
+        if (!response.ok) throw new Error(`Não foi possível ler a planilha de Rating (${response.status}).`);
+        const text = await response.text();
+        if (text.length > 40 * 1024 * 1024) throw new Error('A planilha de Rating ultrapassa 40 MB.');
+        return parseSheet(google.readResponse(text));
+      } catch (e) {
+        if (e?.name === 'AbortError') throw new Error('A leitura da planilha demorou mais de 20 segundos.');
+        throw e;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    function errorMessage(e) {
+      const message = String(e?.message || e);
+      if (/RATING_VERSION_CONFLICT/.test(message)) return 'Outra pessoa alterou esta tratativa. Copie seu texto, cancele a edição e atualize antes de salvar.';
+      if (/PGRST205|PGRST202|42P01|42883|rating_comments|rating_save_comment/i.test(message)) return 'As tratativas de Rating aguardam a aplicação da migração do banco de dados.';
+      if (/FORBIDDEN|42501/.test(message)) return 'Seu usuário não tem permissão para esta operação ou unidade.';
+      if (/Failed to fetch|NetworkError/i.test(message)) return 'Não foi possível conectar ao Google ou ao sistema. Verifique a conexão e tente novamente.';
+      return message;
     }
 
     async function load(selectedUnit = unit) {
@@ -161,13 +213,16 @@
       error = '';
       render();
       try {
-        const result = await request('list', { unit });
+        const [sheetRows, comments] = await Promise.all([loadSheet(selectedUnit), loadComments(selectedUnit)]);
         if (requestId !== loadId) return;
-        if (!Array.isArray(result.rows)) throw new Error('A integração retornou uma lista inválida.');
-        rows = result.rows;
+        const byKey = new Map(comments.map(item => [item.row_key, item]));
+        rows = sheetRows.map(row => {
+          const saved = !row.ambiguous && byKey.get(row.rowKey);
+          return saved ? { ...row, comment: saved.comment, revision: saved.revision } : row;
+        });
       } catch (e) {
         if (requestId === loadId) {
-          error = String(e?.message || e);
+          error = errorMessage(e);
           adapter.toast(error, 'error');
         }
       } finally {
@@ -182,29 +237,31 @@
       const row = rows.find(item => Number(item.rowNumber) === rowNumber);
       const editor = adapter.document.querySelector(`[data-rating-editor="${rowNumber}"]`);
       const textarea = editor?.querySelector('textarea');
-      if (!row || !textarea || savingRow !== null) return;
+      if (!row || row.ambiguous || !textarea || savingRow !== null) return;
       const comment = textarea.value.trim();
+      const requestId = loadId;
+      const selectedUnit = unit;
       drafts.set(rowNumber, comment);
       savingRow = rowNumber;
       error = '';
       render();
       try {
-        const result = await request('save', {
-          unit,
-          rowNumber,
-          expected: { fingerprint: row.fingerprint },
-          comment
+        const { data: result, error: saveError } = await context().client.rpc('rating_save_comment', {
+          p_unit: selectedUnit, p_row_key: row.rowKey, p_revision: row.revision, p_comment: comment
         });
-        if (!/^[0-9a-f]{64}$/.test(result.fingerprint || '')) throw new Error('A integração não confirmou a atualização da linha.');
+        if (saveError) throw saveError;
+        if (requestId !== loadId) return;
+        if (!result || typeof result.comment !== 'string' || !Number.isInteger(result.revision)) throw new Error('O sistema não confirmou a gravação da tratativa.');
         row.comment = result.comment;
-        row.fingerprint = result.fingerprint;
+        row.revision = result.revision;
         drafts.delete(rowNumber);
         editingRow = null;
         savingRow = null;
-        adapter.toast('Tratativa/comentário salvo na planilha.', 'success');
+        adapter.toast('Tratativa salva no sistema.', 'success');
       } catch (e) {
+        if (requestId !== loadId) return;
         savingRow = null;
-        error = String(e?.message || e);
+        error = errorMessage(e);
         adapter.toast(error, 'error');
       }
       render();
@@ -266,5 +323,5 @@
     return { bind, enter, load, render, reset };
   }
 
-  return { UNITS, clean, formatDate, filterRows, create };
+  return { UNITS, clean, formatDate, filterRows, parseSheet, create };
 });

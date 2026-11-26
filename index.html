@@ -582,13 +582,13 @@
       </section>
 
       <section id="view-rating-clients" class="view" data-permission-any="RATING_VIEW,RATING_EDIT">
-        <div class="page-head"><div><div class="breadcrumb">Vendas / Rating de Clientes</div><h1>Avaliações de clientes</h1><p>Consulte as avaliações da Matriz e da Filial e atualize a tratativa/comentário diretamente na planilha.</p></div><span class="page-chip sales">RATING</span></div>
+        <div class="page-head"><div><div class="breadcrumb">Vendas / Rating de Clientes</div><h1>Avaliações de clientes</h1><p>Consulte as avaliações da planilha e registre as tratativas no sistema.</p></div><span class="page-chip sales">RATING</span></div>
         <div class="card rating-card">
           <div class="rating-context"><div><small>PLANILHA</small><strong>Google Sheets · Rating de Clientes</strong></div><div><small>UNIDADE</small><strong id="ratingUnitLabel">—</strong></div><a id="ratingSheetLink" class="btn secondary" target="_blank" rel="noopener" hidden>Abrir aba no Google ↗</a><button id="btnRatingRefresh" type="button" class="btn secondary">Atualizar</button></div>
           <div class="rating-controls"><div id="ratingUnitTabs" class="rating-unit-tabs" role="tablist" aria-label="Unidade do rating"></div><div class="field rating-search"><label for="ratingSearch">Pesquisar avaliações</label><input id="ratingSearch" type="search" autocomplete="off" placeholder="Cliente, código, cidade, motorista ou motivo"></div></div>
           <div id="ratingAlert" class="notice rating-alert hidden" role="alert"></div>
           <div id="ratingStatus" class="sales-pricing-status" role="status" aria-live="polite"></div>
-          <div class="rating-table-wrap"><table class="rating-table"><thead><tr><th>Data</th><th>Cód. Cliente</th><th>Nome</th><th>Cidade</th><th>Motorista</th><th>Motivo</th><th>Tratativa/comentário</th></tr></thead><tbody id="ratingRows"><tr><td colspan="7">Selecione uma unidade para consultar.</td></tr></tbody></table></div>
+          <div class="rating-table-wrap"><table class="rating-table"><thead><tr><th>Data</th><th>Cód. Cliente</th><th>Nome</th><th>Cidade</th><th>Motorista</th><th>Motivo</th><th>Comentário da avaliação</th><th>Tratativa no sistema</th></tr></thead><tbody id="ratingRows"><tr><td colspan="8">Selecione uma unidade para consultar.</td></tr></tbody></table></div>
         </div>
       </section>
 
@@ -1070,7 +1070,7 @@
   <script src="src/puxada/pull-camera.js?v=1.7.32-pull-camera"></script>
   <script src="src/estoque/stock-validity.js?v=1.7.41"></script>
   <script src="src/vendas/sales-pricing.js?v=1.7.52"></script>
-  <script src="src/ratings/rating.js?v=1.8.1-rating-fix"></script>
+  <script src="src/ratings/rating.js?v=1.8.1-rating-db"></script>
   <script src="src/shared/asset-conversion.js?v=1.7.49"></script>
   <script src="src/conferencia/conference.js?v=1.7.60"></script>
   <script src="src/forms/forms.js?v=1.8.1"></script>
@@ -1078,7 +1078,7 @@
   <script src="src/devolucoes/returns.js?v=1.8.1"></script>
   <script src="src/devolucoes/returns-google.js?v=1.8.1"></script>
   <script src="src/devolucoes/returns-file.js?v=1.8.1"></script>
-  <script src="src/devolucoes/returns-ui.js?v=1.8.1"></script>
+  <script src="src/devolucoes/returns-ui.js?v=1.8.1-rating-bases"></script>
   <script src="src/fdr/fdr.js?v=1.8.1"></script>
   <script src="src/fdr/fdr-ui.js?v=1.8.1"></script>
   <script src="src/shared/receipt-validation.js?v=1.8.1"></script>
