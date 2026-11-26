@@ -43,6 +43,7 @@ test('Rating aparece em Devoluções e oferece links diretos para as abas Matriz
  h.setUnit('Filial Pau dos Ferros');await h.module.enter('returns-import');
  const filialGrid=h.document.querySelector('#view-returns-import .rt-source-grid');
  assert.equal(filialGrid.querySelectorAll('.rt-source').length,5);
+ assert.ok([...filialGrid.querySelectorAll('.rt-source strong')].some(el=>el.textContent==='RATING - FILIAL'));
  const filialLinks=[...filialGrid.querySelectorAll('.rt-source a')].filter(link=>link.href.includes('?gid='));
  assert.deepEqual(filialLinks.map(link=>link.href),[`https://docs.google.com/spreadsheets/d/${G.SPREADSHEET}/edit?gid=1042578215#gid=1042578215`]);
  assert.doesNotMatch(filialGrid.textContent,/RATING - MATRIZ/);
