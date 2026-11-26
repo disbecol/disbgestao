@@ -1,12 +1,12 @@
-import type {EscalaState,Membership,MonthPlan,Staff,Team} from './model';
+import type {EscalaState,MonthPlan,Staff,Team} from './model';
 import {monthDates,teamMembers} from './engine.ts';
+import {manualCrew,overlapsMonth} from './crew-policy.ts';
+export {manualCrew,overlapsMonth} from './crew-policy.ts';
 
 export type CrewAssignment={team_id:string;members:string[]};
 export type CrewPreview={assignments:CrewAssignment[];fixed:Team[];targets:Team[];drivers:number;helpers:number;neededDrivers:number;neededHelpers:number;usedHelpers:number;automatic:boolean;remaining:Staff[];errors:string[]};
 const normalized=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
 export const crewRole=(job:string)=>/^motorista(?:[ _(-]|$)/i.test(job)?'DRIVER':/^ajudante(?:[ _(-]|$)/i.test(job)?'HELPER':null;
-export const overlapsMonth=(membership:Membership,month:string)=>membership.starts_on<=monthDates(month).at(-1)!&&(!membership.ends_on||membership.ends_on>=month);
-export function manualCrew(state:EscalaState,team:string,month:string){return state.memberships.some(m=>m.team_id===team&&m.origin!=='AUTO'&&overlapsMonth(m,month));}
 export function randomCrewTeams(state:EscalaState,month:string){return state.teams.filter(t=>t.active&&t.draw_enabled&&!t.deleted_at&&!manualCrew(state,t.id,month));}
 export function refreshPlanMembers(state:EscalaState,plan:MonthPlan):MonthPlan{
  if(plan.status!=='DRAFT')return plan;

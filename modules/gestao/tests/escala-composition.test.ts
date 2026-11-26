@@ -2,7 +2,7 @@ import {describe,it,expect} from 'vitest';
 import {escalaFixture} from './escala-fixture';
 import {crewAdjustmentErrors,drawCrew,crewRole,manualCrew,moveCrewHelper,refreshPlanMembers} from '../src/escala/composition';
 import {generateMonth} from '../src/escala/engine';
-function fixture(){const s=escalaFixture();s.staff.forEach(p=>{p.area='Entrega';});s.memberships=s.memberships.filter(m=>s.teams.slice(0,2).some(t=>m.team_id===t.id));return s;}
+function fixture(){const s=escalaFixture();s.staff.forEach(p=>{p.area='Entrega';});s.memberships=s.memberships.filter(m=>s.teams.slice(0,2).some(t=>m.team_id===t.id));s.memberships.forEach(m=>{m.origin='MANUAL';m.draw_month=null;});return s;}
 describe('Sorteio dos colaboradores das equipes',()=>{
  it('preserva as equipes 1 e 2 e distribui 1 motorista e 2 ajudantes nas equipes 3 a 10',()=>{
   const s=fixture(),before=structuredClone(s),p=drawCrew(s,'2027-02-01','crew');expect(p.errors).toEqual([]);expect(p.fixed.map(t=>t.id)).toEqual(s.teams.slice(0,2).map(t=>t.id));expect(p.assignments).toHaveLength(8);
