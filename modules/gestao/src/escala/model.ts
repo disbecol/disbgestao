@@ -14,5 +14,5 @@ export type PastDay = PlanDay & {status?:string};
 export type EscalaState = {rotation_history?:PastDay[];composition_token?:string;staff:Staff[];teams:Team[];trucks:Truck[];memberships:Membership[];unavailable:Unavailability[];holidays:Holiday[];rules:Rules;plan:MonthPlan|null;history:PastDay[];audit:Audit[];profiles:{id:string;name:string;role:string}[];months:{month:string;status:string;revision:number}[]};
 export type Issue = {severity:'ERROR'|'WARN';code:string;message:string;date?:string;team_id?:string};
 export const weekdayNames=['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
-export const modeNames={ROUTE:'Disponível',REST:'Folga',UNAVAILABLE:'Indisponível',RESERVE:'Reserva'};
+export const modeNames={ROUTE:'Disponível',REST:'Folga',UNAVAILABLE:'Indisponível',RESERVE:'Disponível (apoio)'};
 export const defaultRules:Rules={regime:'5X2',start_minute:420,work_minutes:504,break_minutes:60,weekly_minutes:2520,daily_limit:504,min_rest_minutes:660,weekly_rest_minutes:1440,max_consecutive:5,max_week_days:5,weekday_routes:9,saturday_routes:null,sunday_rest:true,holiday_treatment:'',collective_reference:'',reviewed_on:'',effective_from:'2026-01-01',effective_until:null,overtime_minutes:0,time_bank:false,agreement_notes:'Regime 5x2 informado pela gestão. Jornada de 8h24 e intervalo de 1h.',revision:0};

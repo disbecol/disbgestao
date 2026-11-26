@@ -1,6 +1,8 @@
 import {defaultRules,modeNames,type Duty,type EscalaState,type Holiday,type Issue,type MonthPlan,type PersonSnapshot,type PlanDay,type Rules,type Team} from './model.ts';
 import {manualCrew} from './crew-policy.ts';
-export const ALGORITHM='escala-people-3-rotation';
+import {restLedger} from './fairness.ts';
+import {holidayRest} from './rest-status.ts';
+export const ALGORITHM='escala-weekly-4-fair-rest';
 const DAY=86400000;
 export const dateKey=(d:Date)=>d.toISOString().slice(0,10);
 export const parseDay=(s:string)=>new Date(s+'T12:00:00Z');
@@ -27,7 +29,6 @@ function random(seed:string){let s=2166136261;for(const c of seed)s=Math.imul(s^
 const work=(d:Duty|undefined)=>d?.mode==='ROUTE'||d?.mode==='RESERVE';
 function monday(date:string){return plusDays(date,-((weekday(date)+6)%7));}
 export function requiredOpeningDates(month:string){const dow=weekday(month);return dow<2?[]:Array.from({length:dow-1},(_,i)=>plusDays(month,-dow+1+i));}
-function historyStats(state:EscalaState,month:string,teamId:string,dow:number){const history=(state.rotation_history||state.history).filter(d=>d.date<month);const rest=history.filter(d=>d.duties.some(x=>x.team_id===teamId&&x.mode==='REST'));const prev=plusDays(month,-1).slice(0,7);return {weekdayPrevious:rest.filter(d=>d.date.startsWith(prev)&&d.kind==='NORMAL'&&weekday(d.date)>0&&weekday(d.date)<6).length,total:rest.length,same:rest.filter(d=>weekday(d.date)===dow).length,previous:rest.filter(d=>d.date.startsWith(prev)&&weekday(d.date)===dow).length,previousSaturday:rest.filter(d=>d.date.startsWith(prev)&&weekday(d.date)===6).length};}
 export function legalWeeklyMinutes(date:string){return date>='2027-12-16'?2400:date>='2026-12-16'?2520:2640;}
 function attachTrucks(_state:EscalaState,day:PlanDay,_keepExisting=false){for(const duty of day.duties)if(!duty.completed)duty.truck_id=null;}
 export function preservedMode(state:EscalaState,team:Team,date:string):Duty['mode']{
@@ -38,37 +39,31 @@ export function preservedMode(state:EscalaState,team:Team,date:string):Duty['mod
 }
 export function generateMonth(state:EscalaState,month:string,seed:string):{plan:MonthPlan;issues:Issue[]}{
  if(state.plan?.status&&state.plan.status!=='DRAFT')throw Error('Desbloqueie a escala aprovada antes de realizar outro sorteio.');
- const rules=state.rules||defaultRules,teams=state.teams.filter(t=>t.active&&!t.deleted_at),rng=random(seed),prefs=new Map<string,number>();
- const fixed=new Set(teams.filter(t=>manualCrew(state,t.id,month)).map(t=>t.id));
- const quota=Math.max(0,teams.filter(t=>t.draw_enabled||fixed.has(t.id)).length-rules.weekday_routes),rotating=teams.filter(t=>t.draw_enabled&&!fixed.has(t.id)).sort((a,b)=>a.code.localeCompare(b.code,'pt-BR'));
- const serial=(Number(month.slice(0,4))-2020)*12+Number(month.slice(5,7))-1,offset=rotating.length?serial*quota*5%rotating.length:0;
- const order=[...rotating.slice(offset),...rotating.slice(0,offset)],rank=new Map(order.map((t,i)=>[t.id,i]));
- const cohort=rotating.map(t=>({id:t.id,...historyStats(state,month,t.id,6)})).sort((a,b)=>b.previousSaturday-a.previousSaturday||a.weekdayPrevious-b.weekdayPrevious||(rank.get(a.id)||0)-(rank.get(b.id)||0)).slice(0,quota*5);
- const remaining=new Set(cohort.map(t=>t.id));
- for(let dow=1;dow<=5;dow++)for(let slot=0;slot<quota;slot++){
-  const ranked=[...remaining].map(id=>({id,...historyStats(state,month,id,dow),jitter:rng()})).sort((a,b)=>b.previousSaturday-a.previousSaturday||a.previous-b.previous||a.same-b.same||a.total-b.total||a.jitter-b.jitter);
-  if(ranked[0]){prefs.set(ranked[0].id,dow);remaining.delete(ranked[0].id);}
- }
- const days:PlanDay[]=[],allPast=state.history.filter(d=>d.date<month);const counts=new Map<string,number>();
+ const rules=state.rules||defaultRules,teams=state.teams.filter(t=>t.active&&!t.deleted_at),rng=random(seed),fixed=new Set(teams.filter(t=>manualCrew(state,t.id,month)).map(t=>t.id));
+ const prior=new Map([...(state.rotation_history||[]),...state.history].filter(d=>d.date<month).map(d=>[d.date,d]));const allPast=[...prior.values()].sort((a,b)=>a.date.localeCompare(b.date)),days:PlanDay[]=[],ledger=restLedger(state,allPast);
+ const remember=(day:PlanDay)=>{days.push(day);ledger.remember(day);};
  for(const date of monthDates(month)){
-  const stored=state.plan?.days.find(d=>d.date===date),preserved=stored&&(stored.locked||stored.manual)?stored:null;if(preserved){const copy=structuredClone(preserved);let changed=false;if(!copy.locked)for(const duty of copy.duties){if(fixed.has(duty.team_id)&&!duty.completed){const team=teams.find(t=>t.id===duty.team_id);if(team){const mode=preservedMode(state,team,date);if(mode!==duty.mode){duty.mode=mode;changed=true;}}}}if(changed)attachTrucks(state,copy,true);for(const duty of copy.duties)if(duty.mode==='REST')counts.set(duty.team_id,(counts.get(duty.team_id)||0)+1);days.push(copy);continue;}
+  const stored=state.plan?.days.find(d=>d.date===date),protectedDay=stored&&(stored.locked||stored.manual)?stored:null;
+  if(protectedDay){const copy=structuredClone(protectedDay);let changed=false;if(!copy.locked)for(const duty of copy.duties){if(fixed.has(duty.team_id)&&!duty.completed){const team=teams.find(t=>t.id===duty.team_id);if(team){const mode=preservedMode(state,team,date);if(mode!==duty.mode){duty.mode=mode;changed=true;}}}}if(changed)attachTrucks(state,copy,true);remember(copy);continue;}
   const dow=weekday(date),holiday=state.holidays.find(h=>h.enabled&&h.kind!=='OPTIONAL'&&h.date===date),sunday=dow===0&&rules.sunday_rest;
   const day:PlanDay={date,kind:holiday?'HOLIDAY':dow===0?'SUNDAY':dow===6?'SATURDAY':'NORMAL',required:sunday||holiday&&!holiday.operates?0:dow===6?0:rules.weekday_routes,notes:'',confirmed:!holiday?.operates&&!specialSaturday(state,date).length,locked:false,manual:false,duties:[]};
   const completed=new Map((stored?.duties||[]).filter(a=>a.completed).map(a=>[a.team_id,a])),completedRoutes=[...completed.values()].filter(a=>a.mode==='ROUTE').length;
-  const eligible=teams.filter(t=>available(state,t,date)),mutable=eligible.filter(t=>!completed.has(t.id)),availableIds=new Set(eligible.map(t=>t.id)),rests=new Set<string>();
+  const eligible=teams.filter(t=>available(state,t,date)),mutable=eligible.filter(t=>!completed.has(t.id)),availableIds=new Set(eligible.map(t=>t.id)),rests=new Set<string>(),reserves=new Set<string>();
+  const week=[...allPast,...days].filter(d=>d.date>=monday(date)&&d.date<date),score=(id:string)=>ledger.score(teamMembers(state,id,date).map(p=>p.id),dow);
   if(sunday||holiday&&!holiday.operates)eligible.forEach(t=>rests.add(t.id));
   else if(dow===6){
-   const week=[...allPast,...days].filter(d=>d.date>=monday(date)&&d.date<date);
    const canWork=mutable.filter(t=>!fixed.has(t.id)&&week.filter(d=>work(d.duties.find(x=>x.team_id===t.id))).length<rules.max_week_days);
    const maximum=Math.max(completedRoutes,Math.min(completedRoutes+canWork.length,rules.saturday_routes??Infinity));
-   const ordered=canWork.map(t=>({t,n:historyStats(state,month,t.id,6).same,j:rng()})).sort((a,b)=>b.n-a.n||a.j-b.j);
+   const ordered=canWork.map(t=>({t,...score(t.id),j:rng()})).sort((a,b)=>b.privileged-a.privileged||b.saturdays-a.saturdays||a.j-b.j);
    const route=new Set(ordered.slice(0,Math.max(0,maximum-completedRoutes)).map(x=>x.t.id));eligible.filter(t=>!route.has(t.id)).forEach(t=>rests.add(t.id));day.required=maximum;
   }else{
-   const slots=Math.max(0,mutable.length+completedRoutes-day.required);
-   mutable.filter(t=>!fixed.has(t.id)).map(t=>({t,preferred:prefs.get(t.id)===dow?0:1,n:counts.get(t.id)||0,...historyStats(state,month,t.id,dow),j:rng()})).sort((a,b)=>a.preferred-b.preferred||a.n-b.n||a.previous-b.previous||a.same-b.same||a.j-b.j).slice(0,slots).forEach(x=>rests.add(x.t.id));
+   const slots=Math.max(0,mutable.length+completedRoutes-day.required),holidayWeek=state.holidays.some(h=>h.enabled&&h.kind!=='OPTIONAL'&&!h.operates&&h.date>=monday(date)&&h.date<=plusDays(monday(date),5));
+   const candidates=mutable.filter(t=>!fixed.has(t.id)).map(t=>({t,...score(t.id),used:week.filter(d=>weekday(d.date)>0&&weekday(d.date)<6&&d.duties.some(a=>a.team_id===t.id&&a.mode==='REST'&&!holidayRest(state,d,a.mode))).length,j:rng()}));
+   if(holidayWeek)candidates.sort((a,b)=>a.reserves-b.reserves||a.j-b.j).slice(0,slots).forEach(x=>reserves.add(x.t.id));
+   else candidates.sort((a,b)=>a.used-b.used||(dow===1?a.privileged-b.privileged||a.mondays-b.mondays||a.recent-b.recent:b.privileged-a.privileged||b.recent-a.recent)||a.same-b.same||a.j-b.j).slice(0,slots).forEach(x=>rests.add(x.t.id));
   }
-  for(const team of teams){const recorded=completed.get(team.id);if(recorded){day.duties.push(structuredClone(recorded));if(recorded.mode==='REST')counts.set(team.id,(counts.get(team.id)||0)+1);continue;}const mode=fixed.has(team.id)?preservedMode(state,team,date):!availableIds.has(team.id)?'UNAVAILABLE':rests.has(team.id)?'REST':'ROUTE';day.duties.push({team_id:team.id,mode,truck_id:null,members:teamMembers(state,team.id,date)});if(mode==='REST')counts.set(team.id,(counts.get(team.id)||0)+1);}
-  attachTrucks(state,day,completed.size>0);days.push(day);
+  for(const team of teams){const recorded=completed.get(team.id);if(recorded){day.duties.push(structuredClone(recorded));continue;}const mode=fixed.has(team.id)?preservedMode(state,team,date):!availableIds.has(team.id)?'UNAVAILABLE':rests.has(team.id)?'REST':reserves.has(team.id)?'RESERVE':'ROUTE';day.duties.push({team_id:team.id,mode,truck_id:null,members:teamMembers(state,team.id,date)});}
+  attachTrucks(state,day,completed.size>0);remember(day);
  }
  const plan:MonthPlan={id:state.plan?.id||'',month,status:'DRAFT',revision:state.plan?.revision||0,days,seed,algorithm_version:ALGORITHM,notes:state.plan?.notes||'',approved_at:null,approved_by:null};return {plan,issues:validatePlan(state,plan)};
 }

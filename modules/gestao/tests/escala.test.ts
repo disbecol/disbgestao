@@ -8,12 +8,7 @@ describe('Escala 5x2 operacional',()=>{
   for(const row of statistics(state,plan.days)){expect(row.worked).toBe(20);expect(row.total).toBe(8);}
   expect(generateMonth(state,'2027-02-01','reproducible').plan.days).toEqual(plan.days);
  });
- it('repete o dia útil dentro do mês e alterna os grupos de sábado conforme o histórico anterior',()=>{
-  const state=escalaFixture(),first=generateMonth(state,'2027-02-01','first').plan;state.history=first.days;const next=generateMonth(state,'2027-03-01','second').plan;
-  const weekdayRest=(plan:typeof first)=>new Set(plan.days.filter(d=>weekday(d.date)>=1&&weekday(d.date)<=5).flatMap(d=>d.duties.filter(x=>x.mode==='REST').map(x=>x.team_id)));
-  const before=weekdayRest(first),after=weekdayRest(next);expect(before.size).toBe(5);expect(after.size).toBe(5);expect([...before].filter(id=>after.has(id))).toEqual([]);
-  for(const id of before){const dates=first.days.filter(d=>weekday(d.date)>0&&weekday(d.date)<6&&d.duties.some(x=>x.team_id===id&&x.mode==='REST'));expect(new Set(dates.map(d=>weekday(d.date))).size).toBe(1);}
- });
+ it('alterna os dias úteis ao longo das semanas em vez de fixar o dia no mês',()=>{const state=escalaFixture(),plan=generateMonth(state,'2027-02-01','weekly').plan;const sets=state.teams.map(t=>new Set(plan.days.filter(d=>weekday(d.date)>0&&weekday(d.date)<6&&d.duties.some(x=>x.team_id===t.id&&x.mode==='REST')).map(d=>weekday(d.date))));expect(sets.filter(days=>days.size>1).length).toBeGreaterThan(5);});
  it('preserva dias bloqueados e alterações manuais ao repetir o sorteio e não altera escala aprovada',()=>{
   const state=escalaFixture();state.plan=generateMonth(state,'2027-02-01','one').plan;state.plan.days[0].locked=true;state.plan.days[2].manual=true;
   const next=generateMonth(state,'2027-02-01','two').plan;expect(next.days[0]).toEqual(state.plan.days[0]);expect(next.days[2]).toEqual(state.plan.days[2]);state.plan.status='APPROVED';expect(()=>generateMonth(state,'2027-02-01','three')).toThrow(/Desbloqueie/);

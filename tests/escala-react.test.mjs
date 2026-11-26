@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {formsThemeHarness} from './helpers/forms-theme-harness.mjs';
 import {escalaFixture} from '../modules/gestao/tests/escala-fixture.ts';
-import {ALGORITHM,generateMonth} from '../modules/gestao/src/escala/engine.ts';
+import {ALGORITHM,generateMonth,officialHolidays} from '../modules/gestao/src/escala/engine.ts';
 function harness(options={}){
  const state=structuredClone(options.state||escalaFixture());let api;
  const h=formsThemeHarness({...options,factory:'createEscala',openView:view=>{void api?.enter(view);},async rpc(name,args,context){
@@ -17,6 +17,16 @@ function harness(options={}){
  }});api=h.api;return {...h,state};
 }
 const clickText=async(h,text)=>{const button=[...h.document.querySelectorAll('.escala-app button')].find(b=>b.textContent.trim()===text);assert.ok(button,'Button '+text);button.click();await h.settle();};
+
+test('folga por feriado fica distinta nas quatro visões e a comparação não grava uma projeção futura',async()=>{
+ const state=escalaFixture();state.holidays=officialHolidays(2026).map((h,i)=>({...h,id:'holiday-'+i,revision:1}));state.memberships.slice(0,6).forEach(m=>{m.origin='MANUAL';m.draw_month=null;});state.plan=generateMonth(state,'2026-11-01','holiday-colors').plan;const before=structuredClone(state);
+ const h=harness({state,rpc:(name,args)=>name==='escala_state'&&args.p_month==='2026-12-01'?{data:{...structuredClone(state),plan:null,memberships:state.memberships.filter(m=>m.origin==='MANUAL')},error:null}:undefined});await h.enter('escala-calendar');await h.change('[aria-label="Semana exibida"]','2026-11-02');assert.equal(h.document.querySelectorAll('.escala-people-table .holiday-rest').length,30);assert.ok(h.document.querySelector('.escala-people-table .rest'));
+ await clickText(h,'Resumo por dia');await h.change('[aria-label="Semana exibida"]','2026-11-02');await h.change('.escala-availability-head select','2026-11-02');assert.equal(h.document.querySelectorAll('.escala-person-group.holiday-rest li').length,30);assert.equal(h.document.querySelectorAll('.escala-person-group.rest').length,0);
+ await clickText(h,'Calendário mensal');assert.equal(h.get('[data-escala-day="2026-11-02"]').querySelectorAll('.holiday-rest button').length,10);
+ await clickText(h,'Folgas por equipe');assert.ok(h.document.querySelector('.escala-rest-dates .holiday-rest'));assert.ok(h.document.querySelector('.escala-rest-dates .rest'));
+ await clickText(h,'Folgas no mês');assert.equal(h.document.querySelectorAll('.escala-month-counts tbody tr').length,30);assert.match(h.get('.escala-month-counts').textContent,/Segundas/);assert.match(h.get('.escala-month-counts').textContent,/Seg \+ Sáb/);await h.change('.escala-count-filters select','ajudante');assert.equal(h.document.querySelectorAll('.escala-month-counts tbody tr').length,20);
+ await clickText(h,'Por colaborador');await clickText(h,'Comparar meses');assert.match(h.get('.escala-dialog').textContent,/Comparar meses por colaborador/);assert.equal(h.document.querySelectorAll('.escala-compare-month').length,2);assert.ok(h.document.querySelector('.escala-compare-month .holiday-rest'));await clickText(h,'Gerar prévia');const next=h.document.querySelectorAll('.escala-compare-month')[1];assert.match(next.textContent,/Prévia · não salva/);assert.equal(next.querySelectorAll('.escala-compare-date').length,31);assert.ok(next.querySelector('.holiday-rest'));assert.equal(h.writes.length,0);assert.equal(h.memory.size,0);assert.deepEqual(h.state,before);h.destroy();
+});
 test('Escala uses the shared React entry and displays a real monthly calendar without writing on load',async()=>{
  const h=harness();assert.equal(typeof h.globalApi.createEscala,'function');await h.enter('escala-calendar');
  assert.ok(h.document.querySelector('.escala-calendar-actions'));assert.equal(h.document.querySelectorAll('[data-view="escala-trucks"]').length,0);assert.match(h.get('.escala-empty').textContent,/Este mês ainda não tem escala/);assert.equal(h.writes.length,0);assert.ok(h.reads.some(r=>r.name==='escala_state'));h.destroy();
@@ -76,8 +86,9 @@ test('funcionários inativos ficam disponíveis no filtro próprio sem se mistur
 test('a visão principal mostra cada pessoa e seus dias; o resumo diário tem cores e a navegação troca os meses sem gravar',async()=>{
  const state=escalaFixture();state.trucks=[];state.plan=generateMonth(state,'2026-11-01','people').plan;
  const h=harness({state});await h.enter('escala-calendar');assert.equal(h.document.querySelectorAll('.escala-people-table tbody tr').length,30);assert.ok(h.document.querySelector('.escala-people-table button.available'));assert.ok(h.document.querySelector('.escala-people-table button.rest'));assert.equal(h.document.querySelectorAll('.escala-side').length,0);
+ assert.equal(h.document.querySelectorAll('.escala-people-table thead th').length,8);await h.change('[aria-label="Semana exibida"]','2026-11-30');assert.match(h.get('.escala-people-table tbody tr').textContent,/Semana parcial/);assert.equal([...h.get('.escala-people-table tbody tr').querySelectorAll('td button')].filter(b=>b.disabled).length,6);await h.change('[aria-label="Semana exibida"]','2026-11-23');
  await h.input('.escala-availability-head input[type="search"]',state.staff[0].name);assert.equal(h.document.querySelectorAll('.escala-people-table tbody tr').length,1);
- await clickText(h,'Resumo por dia');assert.equal(h.document.querySelectorAll('.escala-daily-card').length,30);assert.ok(h.document.querySelector('.escala-person-group.available'));assert.ok(h.document.querySelector('.escala-person-group.rest'));
+ await clickText(h,'Resumo por dia');assert.equal(h.document.querySelectorAll('.escala-daily-card').length,7);assert.ok(h.document.querySelector('.escala-person-group.available'));assert.ok(h.document.querySelector('.escala-person-group.rest'));
  await clickText(h,'Calendário mensal');assert.equal(h.document.querySelectorAll('[data-escala-day]').length,30);const workday=h.get('[data-escala-day="2026-11-03"]');assert.equal(workday.querySelectorAll('.escala-day-group button').length,10);assert.ok(!h.document.querySelector('.escala-app').textContent.includes('Lista de dias'));assert.ok(!h.document.querySelector('.escala-tabs').textContent.includes('Caminhões'));
  await clickText(h,'Próximo mês ›');assert.equal(h.get('input[type="month"]').value,'2026-12');await clickText(h,'‹ Mês anterior');assert.equal(h.get('input[type="month"]').value,'2026-11');assert.equal(h.writes.length,0);h.destroy();
 });

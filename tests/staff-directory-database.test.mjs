@@ -197,4 +197,11 @@ test('equipes preservadas têm jornada fixa validada no servidor sem permitir fo
  await db.exec('reset role');await q("update escala_duties a set mode='ROUTE' from escala_days d where a.day_id=d.id and a.unit=$1 and a.team_id=$2 and d.date=$3::date",[U,fixed,sat.date]);await as();await assert.rejects(()=>command('APPROVE',{month},saved.id,saved.revision),/ESCALA_APPROVAL_CONFLICT/);
  await db.exec('reset role');await q("update escala_duties a set mode='REST',truck_id=null from escala_days d where a.day_id=d.id and a.unit=$1 and a.team_id=$2 and d.date=$3::date",[U,fixed,sat.date]);await as();assert.equal((await command('APPROVE',{month},saved.id,saved.revision)).status,'APPROVED');
  await as(ids.branch);await assert.rejects(()=>command('MONTH_SAVE',generated.plan),/FORBIDDEN/);await as();assert.equal((await q("select has_function_privilege('authenticated','escala_private.preserved_schedule_issues(text,date,jsonb)','EXECUTE') allowed"))[0].allowed,false);
+test('aprova semana com feriado e disponibilidade em apoio sem exigir veículos nem criar folga útil extra',async()=>{
+ const U='Unidade fictícia de jornada fixa',month='2027-02-01';await as();const state=()=>rpc('escala_state',[U,month],['','::date']),command=(action,payload={},id=null,revision=0)=>rpc('escala_command',[U,action,id,revision,JSON.stringify(payload),randomUUID()],['','','::uuid','','::jsonb','::uuid']);
+ let s=await state();await command('UNLOCK',{month,reason:'Conferência da semana com feriado'},s.plan.id,s.plan.revision);
+ await command('HOLIDAY_SAVE',{date:'2027-02-08',name:'Feriado fictício para teste',kind:'MUNICIPAL',enabled:true,operates:false,previous_saturday:false,confirmed:true});s=await state();const next=generateMonth(s,month,'holiday-week-db');const week=next.plan.days.filter(d=>d.date>='2027-02-08'&&d.date<='2027-02-14');assert.ok(week.some(d=>d.duties.some(a=>a.mode==='RESERVE')));const fixed=new Set(s.memberships.filter(m=>m.origin==='MANUAL').map(m=>m.team_id));for(const t of s.teams.filter(t=>!fixed.has(t.id)))assert.equal(week.filter(d=>d.duties.some(a=>a.team_id===t.id&&a.mode==='REST')).length,2);
+ const saved=await command('MONTH_SAVE',next.plan,s.plan.id,s.plan.revision);assert.equal((await command('APPROVE',{month},saved.id,saved.revision)).status,'APPROVED');
+});
+
 });
