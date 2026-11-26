@@ -8,6 +8,7 @@ export function comparisonPreview(target:EscalaState,reference:MonthPlan,month:s
  if(month<=reference.month)throw Error('A prévia é destinada aos meses seguintes. O histórico precisa de uma escala registrada.');
  if(target.plan)throw Error('Este mês já possui uma escala. Abra o calendário para alterá-la.');
  const state=structuredClone(target),end=monthDates(month).at(-1)!;
+ if(state.individual_enabled){const history=new Map([...(state.rotation_history||[]),...state.history,...reference.days].map(d=>[d.date,d]));state.rotation_history=[...history.values()];state.plan=generateMonth(state,month,reference.seed+'|comparison|'+month).plan;return state;}
  const reserved=new Set(state.memberships.filter(m=>m.starts_on<=end&&(!m.ends_on||m.ends_on>=month)).map(m=>m.staff_id));
  for(const team of state.teams.filter(t=>t.active&&!t.deleted_at)){
   if(manualCrew(state,team.id,month)||teamMembers(state,team.id,month).length)continue;

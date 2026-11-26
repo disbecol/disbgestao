@@ -3,11 +3,13 @@ import type {EscalaState,MonthPlan} from './model';
 import {teamMembers,weekday} from './engine';
 import {holidayRest} from './rest-status';
 import {crewRole,manualCrew} from './composition';
+import {deliveryPeople,fixedTeam,personRole} from './person-policy';
 
 const shortDate=(date:string)=>date.slice(8)+'/'+date.slice(5,7);
 const weekdays=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 
 export function PlanningSteps({data,plan,month,dirty,busy,canEdit,onCrew,onGenerate,onSave}:{data:EscalaState;plan:MonthPlan|null;month:string;dirty:boolean;busy:boolean;canEdit:boolean;onCrew():void;onGenerate():void;onSave():void}){
+ if(data.individual_enabled){const people=deliveryPeople(data),rotating=people.filter(p=>!fixedTeam(data,p.id,month)),locked=!!plan&&plan.status!=='DRAFT';return <section className="escala-calendar-actions escala-individual-actions" aria-label="Planejamento individual do mês"><div><strong>{people.length} colaboradores · {rotating.length} em revezamento</strong><p>Domingo + uma folga entre segunda e sábado. Por dia útil: até 1 motorista e 2 ajudantes. Equipes fixas folgam Sáb/Dom.</p><small>{rotating.filter(p=>personRole(p.job)==='DRIVER').length} motoristas e {rotating.filter(p=>personRole(p.job)==='HELPER').length} ajudantes no sorteio · {plan?plan.status==='DRAFT'?'Rascunho':'Escala protegida':'Mês sem escala'}{dirty?' · alterações neste aparelho':''}</small></div><div className="escala-action-buttons"><button className={dirty?'':'primary'} disabled={busy||!canEdit||locked||!rotating.length} onClick={onGenerate}>{plan?'Sortear novas folgas':'Sortear folgas'}</button><button className={dirty?'primary':''} disabled={busy||!canEdit||!dirty} onClick={onSave}>Salvar escala{dirty?' •':''}</button></div></section>;}
  const teams=data.teams.filter(t=>t.active&&(t.draw_enabled||manualCrew(data,t.id,month))&&!t.deleted_at),ready=teams.filter(t=>{const people=teamMembers(data,t.id,month);return people.some(p=>crewRole(p.job)==='DRIVER')&&people.some(p=>crewRole(p.job)==='HELPER');}).length;
  const locked=!!plan&&plan.status!=='DRAFT';
  const drawBlocked=busy?'Aguarde a operação em andamento.':!canEdit?'Seu perfil não tem permissão para sortear folgas.':locked?'A escala está protegida. Um administrador precisa desbloqueá-la para sortear novamente.':!teams.length?'Cadastre ou ative as equipes na aba Equipes para sortear as folgas.':'';
@@ -19,7 +21,7 @@ export function PlanningSteps({data,plan,month,dirty,busy,canEdit,onCrew,onGener
 export function RestByTeam({data,plan,canEdit,onMove,onDay}:{data:EscalaState;plan:MonthPlan;canEdit:boolean;onMove(team:string,from:string):void;onDay(date:string):void}){
  const [search,setSearch]=useState(''),[sundays,setSundays]=useState(false);
  const key=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR');
- const teams=data.teams.filter(t=>t.active&&!t.deleted_at&&key(t.name+' '+teamMembers(data,t.id,plan.month).map(p=>p.name).join(' ')).includes(key(search)));
+ const teams=data.teams.filter(t=>t.active&&!t.deleted_at&&(!data.individual_enabled||t.fixed_group||manualCrew(data,t.id,plan.month))&&key(t.name+' '+teamMembers(data,t.id,plan.month).map(p=>p.name).join(' ')).includes(key(search)));
  return <section className="escala-rest-browser" aria-label="Folgas por equipe">
   <div className="escala-rest-filters"><label>Buscar equipe ou colaborador<input type="search" value={search} placeholder="Nome da equipe, motorista ou ajudante" onChange={e=>setSearch(e.target.value)} onInput={e=>setSearch(e.currentTarget.value)}/></label><label className="escala-checkbox-field"><input type="checkbox" checked={sundays} onChange={e=>setSundays(e.target.checked)}/><span>Mostrar domingos</span></label></div>
   <p>Selecione uma folga para mudar a data ou trocar com outra equipe. Equipes preservadas têm descanso fixo aos sábados e domingos.</p>

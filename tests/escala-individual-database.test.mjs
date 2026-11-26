@@ -1,0 +1,81 @@
+import test,{before,after,describe} from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {randomUUID} from 'node:crypto';
+import {PGlite} from '@electric-sql/pglite';
+import {drawCrew,moveCrewHelper} from '../modules/gestao/src/escala/composition.ts';
+import {generateMonth} from '../modules/gestao/src/escala/engine.ts';
+const db=new PGlite(),A='Matriz Caicó',B='Filial Pau dos Ferros',ids={admin:randomUUID(),branch:randomUUID(),applicator:randomUUID(),employee:randomUUID()};
+const q=async(s,a=[])=>{try{return(await db.query(s,a)).rows;}catch(e){throw Error(e.message+'; '+(e.where||''));}};
+async function as(id=ids.admin){await db.exec('reset role');await q("select set_config('request.jwt.claim.sub',$1,false)",[id]);await db.exec('set role authenticated');}
+const read=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
+const rpc=async(name,args,casts)=> (await q(`select to_jsonb(public.${name}(${args.map((_,i)=>'$'+(i+1)+(casts?.[i]||'')).join(',')})) value`,args))[0]?.value;
+const save=(payload,id=null,revision=0,unit=A)=>rpc('staff_directory_save',[unit,id,revision,JSON.stringify(payload)],['','::uuid','','::jsonb']);
+const personPayload=(extra={})=>({name:'Pessoa sem conta',job:'Ajudante de entrega',area:'Entrega',active:true,units:[A],notes:'',...extra});
+const formPayload={name:'DTO de teste',area:'Entrega',units:[A],description:'',form_type:'DTO',apply_everyone:true,apply_roles:[],apply_user_ids:[],report_roles:[],report_user_ids:[],status:'PUBLISHED',schema:{evaluation:{enabled:true,area:'Entrega',areas:['Entrega']},sections:[{id:'s',title:'DTO',fields:[{id:'q',label:'Usa EPI?',type:'BOOLEAN',required:true,scope:'INDIVIDUAL',scored:true,expected:'YES',allow_na:true}]}]}};
+let form,historical,created,accountsBefore;
+async function setupBase(){
+ await db.exec(`create role anon;create role authenticated;create schema auth;create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;grant usage on schema auth to authenticated,anon;
+ create table profiles(id uuid primary key,name text,role text,active bool default true);grant select on profiles to authenticated;create table units(name text primary key,active bool default true);create table user_units(user_id uuid,unit_name text);create table permissions(code text primary key,module text,name text,description text,sort_order int,active bool);create table role_permissions(role text,permission_code text,primary key(role,permission_code));create table user_permissions(user_id uuid,permission_code text,allowed bool);create table module_settings(module_name text primary key,active bool default true,updated_at timestamptz default now());
+ create schema storage;create table storage.buckets(id text primary key,name text,public bool,file_size_limit bigint,allowed_mime_types text[]);create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text,unique(bucket_id,name));alter table storage.objects enable row level security;grant usage on schema storage to authenticated,anon;grant select,insert,update,delete on storage.objects to authenticated,anon;
+ create function public.is_admin() returns boolean language sql stable security definer set search_path=public as $$select coalesce((select role='ADMIN' and active from profiles where id=auth.uid()),false)$$;`);
+ await db.exec(read('supabase/18_v1_4_0_permissoes_avarias_vendas.sql').match(/create or replace function public\.has_permission\([\s\S]*?\$\$;/)[0]);
+ await db.exec(read('supabase/26_v1_6_0_unidades_por_usuario.sql').match(/create or replace function public\.user_has_unit\([\s\S]*?\$\$;/)[0]);
+ await q('insert into units values($1,true),($2,true)',[A,B]);
+ for(const [key,id]of Object.entries(ids)){await q('insert into profiles values($1,$2,$3,true)',[id,key,key==='admin'||key==='branch'?'ADMIN':'MOTORISTA']);await q('insert into user_units values($1,$2)',[id,key==='branch'?B:A]);}
+ for(const path of ['supabase/79_forms_module.sql','supabase/80_forms_evaluated_people.sql','supabase/81_forms_area_and_self_results.sql','supabase/migrations/20261125121851_dto_history_roles_and_multi_area_forms.sql','supabase/migrations/20261125165526_escala_team_planning.sql'])await db.exec(read(path));
+ await q("update profiles set evaluation_area='Entrega' where id=$1",[ids.employee]);
+ await as();form=await rpc('save_form_definition',[null,0,JSON.stringify(formPayload)],['::uuid','','::jsonb']);
+ historical=await rpc('start_form_response_evaluated',[form.id,A,randomUUID(),[ids.employee],null],['::uuid','','::uuid','::uuid[]','::uuid']);
+ historical=await rpc('save_form_response',[historical.id,historical.revision,JSON.stringify({__evaluations:{[ids.employee]:{q:{value:'YES'}}}}),true],['::uuid','','::jsonb','']);
+ await db.exec('reset role');accountsBefore=(await q('select count(*)::int n from profiles'))[0].n;
+ try{await db.exec(read('supabase/migrations/20261125180349_independent_staff_directory.sql'));await db.exec(read('supabase/migrations/20261125191110_escala_directory_auto_staff.sql'));await db.exec(read('supabase/migrations/20261125192341_staff_directory_archived_people.sql'));await db.exec(read('supabase/migrations/20261125194359_escala_random_team_members.sql'));await db.exec(read('supabase/migrations/20261125200715_escala_private_api_handlers.sql'));await db.exec(read('supabase/migrations/20261125201924_escala_composition_preserve_drafts.sql'));await db.exec(read('supabase/migrations/20261126111855_escala_qlp_helper_distribution.sql'));await db.exec(read('supabase/migrations/20261126121627_escala_preserved_weekday_schedule.sql'));await db.exec(read('supabase/migrations/20261126125919_escala_staff_only_planning.sql'));}catch(e){throw Error(`${e.message}; ${e.where||''}; posição ${e.position}`);}
+ await as();
+}
+after(()=>db.close());
+const U='Escala individual fictícia',month='2027-02-01';let roster,initial;
+const individualState=(m=month)=>rpc('escala_state',[U,m],['','::date']);
+const individualCommand=(action,payload={},id=null,revision=0,request=randomUUID(),unit=U)=>rpc('escala_command',[unit,action,id,revision,JSON.stringify(payload),request],['','','::uuid','','::jsonb','::uuid']);
+async function setupIndividual(){
+ await db.exec('reset role');await db.exec(read('supabase/migrations/20261126165054_escala_individual_weekly_rest.sql'));await q('insert into units values($1,true)',[U]);await q('insert into user_units values($1,$2)',[ids.admin,U]);await as();
+ await individualCommand('SETUP',{teams:2,trucks:1});for(let n=0;n<27;n++)await save(personPayload({name:'Colaborador fictício '+String(n).padStart(2,'0'),job:n<10?'Motorista de distribuição':'Ajudante de distribuição',units:[U]}),null,0,U);
+ roster=await individualState();await individualCommand('RULES_SAVE',{collective_reference:'Regime de teste',reviewed_on:'2026-11-26'},roster.rules.id,roster.rules.revision);
+ const drivers=roster.staff.filter(p=>p.job.startsWith('Motorista')),helpers=roster.staff.filter(p=>p.job.startsWith('Ajudante'));
+ for(let n=0;n<2;n++)for(const person of [drivers[n],helpers[n*2],helpers[n*2+1]])await individualCommand('MEMBERSHIP_SAVE',{team_id:roster.teams[n].id,staff_id:person.id,starts_on:'2026-01-01'});
+ roster=await individualState();initial=generateMonth(roster,month,'individual-db').plan;
+}
+before(async()=>{await setupBase();try{await setupIndividual();}catch(e){await db.exec('rollback');throw Error(e.message+'; '+(e.where||'')+'; posição '+e.position);}});
+test('salva 27 pessoas com apenas duas equipes, reenvio idempotente, revisão e histórico para o mês seguinte',async()=>{
+ assert.equal(roster.individual_enabled,true);assert.equal(roster.teams.filter(t=>t.fixed_group).length,2);assert.equal(roster.memberships.length,6);assert.equal(initial.days[0].people.length,27);
+ const request=randomUUID(),saved=await individualCommand('MONTH_SAVE',initial,null,0,request);assert.deepEqual(saved.issues,[]);assert.equal(saved.planning_mode,'INDIVIDUAL');assert.equal(saved.days[0].people.length,27);assert.deepEqual(await individualCommand('MONTH_SAVE',initial,null,0,request),saved);
+ await assert.rejects(()=>individualCommand('MONTH_SAVE',initial),/ESCALA_VERSION_CONFLICT/);const reopened=await individualState();assert.deepEqual(reopened.plan,savedWithoutIssues(saved));const future=await individualState('2027-03-01');assert.equal(future.rotation_history.length,28);assert.equal(future.rotation_history[0].people.length,27);assert.equal(reopened.memberships.length,6);
+});
+function savedWithoutIssues(value){const result=structuredClone(value);delete result.issues;return result;}
+test('o servidor valida pessoas da unidade e reconstrói nomes, funções e vínculo fixo',async()=>{
+ const m='2027-03-01',s=await individualState(m),plan=generateMonth(s,m,'canonical').plan,person=plan.days[0].people.find(p=>!p.fixed_team_id);person.person.name='Nome forjado';person.person.job='Motorista forjado';person.fixed_team_id=s.teams[0].id;const saved=await individualCommand('MONTH_SAVE',plan);const row=saved.days[0].people.find(p=>p.person.id===person.person.id);assert.equal(row.person.name,s.staff.find(p=>p.id===person.person.id).name);assert.equal(row.person.job,s.staff.find(p=>p.id===person.person.id).job);assert.equal(row.fixed_team_id,null);
+ const missing=structuredClone(saved);missing.days[0].people.pop();await assert.rejects(()=>individualCommand('MONTH_SAVE',missing,saved.id,saved.revision),/ESCALA_PERSON_MISSING/);
+ const foreign=structuredClone(saved);foreign.days[0].people[0].person.id=ids.employee;await assert.rejects(()=>individualCommand('MONTH_SAVE',foreign,saved.id,saved.revision),/ESCALA_PERSON_INVALID/);
+ const duplicate=structuredClone(saved);duplicate.days[0].people.push(duplicate.days[0].people[0]);await assert.rejects(()=>individualCommand('MONTH_SAVE',duplicate,saved.id,saved.revision),/ESCALA_PEOPLE_INVALID/);
+});
+test('impede domingo trabalhando, forjar realização, equipe fixa fora do padrão e terceira equipe fixa',async()=>{
+ const s=await individualState(),plan=s.plan;const sunday=structuredClone(plan);sunday.days[6].people.find(p=>!p.fixed_team_id).mode='ROUTE';await assert.rejects(()=>individualCommand('MONTH_SAVE',sunday,plan.id,plan.revision),/ESCALA_SUNDAY_REST|ESCALA_PERSON_UNAVAILABLE/);
+ const fixed=structuredClone(plan);fixed.days[5].people.find(p=>p.fixed_team_id).mode='ROUTE';await assert.rejects(()=>individualCommand('MONTH_SAVE',fixed,plan.id,plan.revision),/ESCALA_FIXED_TEAM_SCHEDULE/);
+ const completed=structuredClone(plan);completed.days[0].people[0].completed=true;await assert.rejects(()=>individualCommand('MONTH_SAVE',completed,plan.id,plan.revision),/ESCALA_ACTUAL_PROTECTED/);
+ await assert.rejects(()=>individualCommand('TEAM_SAVE',{code:'03',name:'Terceira fixa',fixed_group:true}),/ESCALA_FIXED_LIMIT/);
+});
+test('a aprovação recusa ultrapassar 1 motorista/2 ajudantes e folga na semana mais sábado',async()=>{
+ let s=await individualState(),plan=structuredClone(s.plan);const person=plan.days[0].people.find(p=>!p.fixed_team_id&&p.person.job.startsWith('Ajudante')&&p.mode==='ROUTE');plan.days[0].people.find(p=>p.person.id===person.person.id).mode='REST';plan.days[5].people.find(p=>p.person.id===person.person.id).mode='REST';const bad=await individualCommand('MONTH_SAVE',plan,plan.id,plan.revision);assert.ok(bad.issues.some(i=>i.code==='REST_CAPACITY'));assert.ok(bad.issues.some(i=>i.code==='DOUBLE_REST'));await assert.rejects(()=>individualCommand('APPROVE',{month},bad.id,bad.revision),/ESCALA_APPROVAL_CONFLICT/);
+ s=await individualState();s.plan.days.forEach(d=>d.manual=false);const next=generateMonth(s,month,'valid-again').plan,saved=await individualCommand('MONTH_SAVE',next,s.plan.id,s.plan.revision);assert.deepEqual(saved.issues,[]);assert.equal((await individualCommand('APPROVE',{month},saved.id,saved.revision)).status,'APPROVED');await assert.rejects(()=>individualCommand('MONTH_SAVE',saved,saved.id,saved.revision+1),/ESCALA_LOCKED/);
+});
+test('consulta, funções privadas e salvamento continuam isolados por unidade e sem acesso anônimo',async()=>{
+ await as(ids.branch);await assert.rejects(()=>individualState(),/FORBIDDEN/);await assert.rejects(()=>individualCommand('MONTH_SAVE',initial),/FORBIDDEN/);await assert.rejects(()=>q('select escala_private.escala_command($1,$2,null,0,$3::jsonb,$4::uuid)',[U,'MONTH_SAVE',JSON.stringify(initial),randomUUID()]),/FORBIDDEN/);
+ await db.exec('reset role;set role anon');await assert.rejects(()=>individualState(),/permission denied/);await assert.rejects(()=>individualCommand('MONTH_SAVE',initial),/permission denied/);await as();
+ const exposed=await q("select p.proname,p.prosecdef,has_function_privilege('anon',p.oid,'EXECUTE') anonymous from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in('escala_state','escala_command')");for(const f of exposed){assert.equal(f.prosecdef,false);assert.equal(f.anonymous,false);}assert.equal((await q("select has_function_privilege('authenticated','escala_private.individual_roster(text,date)','EXECUTE') allowed"))[0].allowed,false);
+});
+test('preserva situações realizadas e dias bloqueados mesmo após inativação de um colaborador',async()=>{
+ const m='2026-02-01';await as();let s=await individualState(m),plan=generateMonth(s,m,'protected-people').plan,saved=await individualCommand('MONTH_SAVE',plan);const day=saved.days.find(d=>d.date==='2026-02-03'),person=day.people.find(p=>!p.fixed_team_id&&p.mode==='ROUTE'),id=person.person.id;
+ await db.exec('reset role');await q("update escala_days set people=(select jsonb_agg(case when a->'person'->>'id'=$2 then jsonb_set(a,'{completed}','true') else a end) from jsonb_array_elements(people) a) where unit=$1 and date='2026-02-03'",[U,id]);await q("update escala_days set locked=true where unit=$1 and date='2026-02-04'",[U]);await q("update escala_staff set status='INACTIVE' where unit=$1 and id=$2",[U,id]);await as();
+ s=await individualState(m);const completed=s.plan.days.find(d=>d.date==='2026-02-03').people.find(p=>p.person.id===id),locked=s.plan.days.find(d=>d.date==='2026-02-04').people;plan=generateMonth(s,m,'protected-again').plan;saved=await individualCommand('MONTH_SAVE',plan,s.plan.id,s.plan.revision);assert.deepEqual(saved.days.find(d=>d.date==='2026-02-03').people.find(p=>p.person.id===id),completed);assert.deepEqual(saved.days.find(d=>d.date==='2026-02-04').people,locked);
+ const changed=structuredClone(saved);changed.days.find(d=>d.date==='2026-02-03').people.find(p=>p.person.id===id).mode='REST';await assert.rejects(()=>individualCommand('MONTH_SAVE',changed,saved.id,saved.revision),/ESCALA_ACTUAL_PROTECTED/);
+ const changedLocked=structuredClone(saved);changedLocked.days.find(d=>d.date==='2026-02-04').people[0].mode='REST';await assert.rejects(()=>individualCommand('MONTH_SAVE',changedLocked,saved.id,saved.revision),/ESCALA_DAY_LOCKED/);
+});

@@ -8,13 +8,14 @@ import {availabilityKind,availabilityKinds,availabilityLabels,type AvailabilityK
 import {comparisonPreview,monthShift} from './comparison-model';
 import {comparisonWeeks} from './comparison-weeks';
 import {monthlyRestCounts} from './rest-counts';
+import {dailyPeople,personAt} from './person-policy';
 
 type Loaded={state:EscalaState;plan:MonthPlan|null;origin:'saved'|'local'|'updated'|'preview'|'empty'};
 const week=['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
 const shortDate=(date:string)=>date.slice(8)+'/'+date.slice(5,7);
 const monthName=(month:string)=>new Date(month+'T12:00:00Z').toLocaleDateString('pt-BR',{month:'long',year:'numeric',timeZone:'UTC'});
-function personStatus(view:Loaded,person:string,date:string):AvailabilityKind|null{const day=view.plan?.days.find(d=>d.date===date),duty=day?.duties.find(d=>d.members.some(p=>p.id===person));return day&&duty?availabilityKind(view.state,day,duty.mode):null;}
-function weekdayRest(view:Loaded|null,person:string){if(!view?.plan)return 'Sem escala';if(!view.plan.days.some(d=>d.duties.some(a=>a.members.some(p=>p.id===person))))return 'Sem vínculo';const count=(dow:number)=>view.plan!.days.filter(d=>weekday(d.date)===dow&&personStatus(view,person,d.date)==='rest').length;return 'Seg: '+count(1)+' · Sáb: '+count(6);}
+function personStatus(view:Loaded,person:string,date:string):AvailabilityKind|null{const day=view.plan?.days.find(d=>d.date===date),duty=personAt(day,person);return day&&duty?availabilityKind(view.state,day,duty.mode):null;}
+function weekdayRest(view:Loaded|null,person:string){if(!view?.plan)return 'Sem escala';if(!view.plan.days.some(d=>!!personAt(d,person)))return 'Sem vínculo';const count=(dow:number)=>view.plan!.days.filter(d=>weekday(d.date)===dow&&personStatus(view,person,d.date)==='rest').length;return 'Seg: '+count(1)+' · Sáb: '+count(6);}
 
 export function CompareMonths({adapter,month,current,currentPlan,currentDirty,initialPerson,onOpenMonth}:{adapter:EscalaAdapter;month:string;current:EscalaState;currentPlan:MonthPlan|null;currentDirty:boolean;initialPerson:string;onOpenMonth(month:string):void}){
  const service=useRef(createEscalaService(adapter)).current;
@@ -31,7 +32,7 @@ export function CompareMonths({adapter,month,current,currentPlan,currentDirty,in
   return()=>{active=false;};
  },[months[0],months[1]]);
  const people=new Map<string,PersonSnapshot>();
- for(const plan of [currentPlan,...(loaded?.map(v=>v.plan)||[])])for(const day of plan?.days||[])for(const duty of day.duties)for(const p of duty.members)people.set(p.id,p);
+ for(const plan of [currentPlan,...(loaded?.map(v=>v.plan)||[])])for(const day of plan?.days||[])for(const duty of dailyPeople(day))people.set(duty.person.id,duty.person);
  const options=[...people.values()].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')),selected=options.find(p=>p.id===person)||options[0];
  function setMonth(index:number,value:string){if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(value)||value<'2020-01'||value>'2100-12')return;setMonths(old=>index===0?[value+'-01',old[1]]:[old[0],value+'-01']);}
  function preview(index:number){

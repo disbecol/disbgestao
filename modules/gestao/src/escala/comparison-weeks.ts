@@ -1,6 +1,7 @@
 import type {EscalaState,MonthPlan,PlanDay} from './model';
 import {monthWeeks,weekDates} from './weeks.ts';
 import {availabilityKind,type AvailabilityKind} from './rest-status.ts';
+import {personAt} from './person-policy.ts';
 
 export type CalendarSource={state:EscalaState;plan:MonthPlan|null};
 export function comparisonWeeks(view:CalendarSource,person:string,adjacent:CalendarSource[]=[]){
@@ -10,7 +11,7 @@ export function comparisonWeeks(view:CalendarSource,person:string,adjacent:Calen
  for(const source of [...adjacent,view])for(const day of source.plan?.days||[])known.set(day.date,{state:source.state,day});
  return monthWeeks(view.plan.month).map(start=>{
   const dates=weekDates(start).map(date=>{
-   const record=known.get(date),duty=record?.day.duties.find(d=>d.members.some(p=>p.id===person));
+   const record=known.get(date),duty=personAt(record?.day,person);
    const kind:AvailabilityKind|null=record&&duty?availabilityKind(record.state,record.day,duty.mode):null;
    return {date,kind,outside:!date.startsWith(view.plan!.month.slice(0,7))};
   });

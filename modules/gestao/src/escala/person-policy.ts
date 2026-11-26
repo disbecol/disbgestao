@@ -1,0 +1,8 @@
+import type {EscalaState,PersonDuty,PlanDay,Staff} from './model';
+export const personRole=(job:string)=>/^motorista(?:[ _(-]|$)/i.test(job)?'DRIVER':/^ajudante(?:[ _(-]|$)/i.test(job)?'HELPER':null;
+const key=(text:string)=>text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
+export const deliveryPeople=(state:EscalaState)=>state.staff.filter(p=>!p.deleted_at&&p.status!=='INACTIVE'&&personRole(p.job)&&(!p.area||key(p.area)==='entrega'));
+export function fixedTeam(state:EscalaState,id:string,date:string){return state.memberships.find(m=>m.staff_id===id&&m.origin!=='AUTO'&&m.starts_on<=date&&(!m.ends_on||m.ends_on>=date)&&state.teams.some(t=>t.id===m.team_id&&t.active&&!t.deleted_at&&(t.fixed_group||m.origin==='MANUAL')))?.team_id||null;}
+export function personAvailable(state:EscalaState,p:Staff,date:string){const team=fixedTeam(state,p.id,date);return !p.deleted_at&&!['INACTIVE','LEAVE'].includes(p.status)&&!(p.status==='VACATION'&&(!p.vacation_start||p.vacation_start<=date&&(!p.vacation_end||p.vacation_end>=date)))&&!state.unavailable.some(u=>!u.cancelled_at&&(u.staff_id===p.id||team&&u.team_id===team)&&u.starts_on<=date&&u.ends_on>=date);}
+export function dailyPeople(day:PlanDay):PersonDuty[]{if(Array.isArray(day.people))return day.people;const seen=new Set<string>();return day.duties.flatMap(d=>d.members.filter(p=>!seen.has(p.id)&&!!seen.add(p.id)).map(person=>({person,fixed_team_id:d.team_id,mode:d.mode,completed:d.completed,work_minutes:d.work_minutes})));}
+export const personAt=(day:PlanDay|undefined,id:string)=>day?dailyPeople(day).find(d=>d.person.id===id):undefined;

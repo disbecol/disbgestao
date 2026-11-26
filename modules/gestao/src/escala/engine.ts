@@ -2,6 +2,8 @@ import {defaultRules,modeNames,type Duty,type EscalaState,type Holiday,type Issu
 import {manualCrew} from './crew-policy.ts';
 import {restLedger} from './fairness.ts';
 import {holidayRest} from './rest-status.ts';
+import {generateIndividualMonth,validateIndividualPlan} from './individual-engine.ts';
+import {dailyPeople} from './person-policy.ts';
 export const ALGORITHM='escala-weekly-5-person-rest';
 const DAY=86400000;
 export const dateKey=(d:Date)=>d.toISOString().slice(0,10);
@@ -38,6 +40,7 @@ export function preservedMode(state:EscalaState,team:Team,date:string):Duty['mod
  return 'ROUTE';
 }
 export function generateMonth(state:EscalaState,month:string,seed:string):{plan:MonthPlan;issues:Issue[]}{
+ if(state.individual_enabled)return generateIndividualMonth(state,month,seed);
  if(state.plan?.status&&state.plan.status!=='DRAFT')throw Error('Desbloqueie a escala aprovada antes de realizar outro sorteio.');
  const rules=state.rules||defaultRules,teams=state.teams.filter(t=>t.active&&!t.deleted_at),rng=random(seed),fixed=new Set(teams.filter(t=>manualCrew(state,t.id,month)).map(t=>t.id));
  const prior=new Map([...(state.rotation_history||[]),...state.history].filter(d=>d.date<month).map(d=>[d.date,d]));const allPast=[...prior.values()].sort((a,b)=>a.date.localeCompare(b.date)),days:PlanDay[]=[],ledger=restLedger(state,allPast);
@@ -68,6 +71,7 @@ export function generateMonth(state:EscalaState,month:string,seed:string):{plan:
  const plan:MonthPlan={id:state.plan?.id||'',month,status:'DRAFT',revision:state.plan?.revision||0,days,seed,algorithm_version:ALGORITHM,notes:state.plan?.notes||'',approved_at:null,approved_by:null};return {plan,issues:validatePlan(state,plan)};
 }
 export function validatePlan(state:EscalaState,plan:MonthPlan):Issue[]{
+ if(plan.planning_mode==='INDIVIDUAL')return validateIndividualPlan(state,plan);
  const errors:Issue[]=[],rules=state.rules;const add=(code:string,message:string,date?:string,team_id?:string,severity:Issue['severity']='ERROR')=>errors.push({code,message,date,team_id,severity});
  const known=new Map([...(state.rotation_history||[]),...state.history,...plan.days].map(d=>[d.date,d]));
  const opening=requiredOpeningDates(plan.month);if(opening.some(date=>state.teams.some(t=>t.active&&!t.deleted_at&&!known.get(date)?.duties.some(x=>x.team_id===t.id))))add('MISSING_HISTORY','Informe o saldo inicial dos dias anteriores ao mês para concluir a validação da primeira semana.');
@@ -134,4 +138,4 @@ export function restMoveIssues(state:EscalaState,original:MonthPlan,candidate:Mo
  return introduced;
 }
 export function statistics(state:EscalaState,days:PlanDay[]){return state.teams.filter(t=>!t.deleted_at).map(team=>{const rows=days.map(d=>({day:d,duty:d.duties.find(x=>x.team_id===team.id)}));return {team,total:rows.filter(r=>r.duty?.mode==='REST').length,worked:rows.filter(r=>work(r.duty)).length,routes:rows.filter(r=>r.duty?.mode==='ROUTE').length,unavailable:rows.filter(r=>r.duty?.mode==='UNAVAILABLE').length,weekdays:Array.from({length:7},(_,i)=>rows.filter(r=>weekday(r.day.date)===i&&r.duty?.mode==='REST').length),holidays:rows.filter(r=>r.day.kind==='HOLIDAY'&&r.duty?.mode==='REST').length};});}
-export function exportMatrix(state:EscalaState,plan:MonthPlan){return [['Data','Colaborador','Função','Grupo de folga','Situação','Observação'],...plan.days.flatMap(day=>day.duties.flatMap(d=>d.members.map(p=>[day.date,p.name,p.job,state.teams.find(t=>t.id===d.team_id)?.name||d.team_id,modeNames[d.mode],day.notes])))];}
+export function exportMatrix(state:EscalaState,plan:MonthPlan){return [['Data','Colaborador','Função','Grupo de folga','Situação','Observação'],...plan.days.flatMap(day=>dailyPeople(day).map(d=>[day.date,d.person.name,d.person.job,d.fixed_team_id?(state.teams.find(t=>t.id===d.fixed_team_id)?.name||'Equipe fixa'):'Revezamento individual',modeNames[d.mode],day.notes]))];}
