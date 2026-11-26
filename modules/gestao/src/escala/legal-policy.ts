@@ -9,6 +9,8 @@ export function weeklyRest(state:Pick<EscalaState,'holidays'>,date:string,duty:P
  if(dow===0||duty.fixed_team_id&&dow===6)return true;
  const holiday=state.holidays.some(h=>h.date===date&&h.enabled&&h.kind!=='OPTIONAL'&&!h.operates);
  if(!holiday)return true;
+ // A closed weekday holiday cannot consume the rotating weekly rest slot.
+ if(dow>=1&&dow<=5)return false;
  // Keep the old calendar interpretation without rewriting historical rows.
  return duty.weekly_rest??dow===6;
 }

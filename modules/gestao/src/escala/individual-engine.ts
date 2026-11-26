@@ -4,7 +4,7 @@ import {dailyPeople,deliveryPeople,fixedTeam,personAt,personAvailable,personRole
 import {restLedger} from './fairness.ts';
 import {weeklyRest,legalRuleIssues} from './legal-policy.ts';
 import {assignRest,type RestChoice} from './rest-assignment.ts';
-export const INDIVIDUAL_ALGORITHM='escala-individual-3-clt';
+export const INDIVIDUAL_ALGORITHM='escala-individual-4-weekday-holidays';
 const startWeek=(date:string)=>plusDays(date,-((weekday(date)+6)%7));
 const works=(d:PersonDuty|undefined)=>d?.mode==='ROUTE'||d?.mode==='RESERVE';
 const closed=(s:EscalaState,date:string)=>s.holidays.some(h=>h.date===date&&h.enabled&&h.kind!=='OPTIONAL'&&!h.operates);
@@ -26,7 +26,7 @@ export function generateIndividualMonth(state:EscalaState,month:string,seed:stri
    const capacity=role==='DRIVER'?1:2,pool=roster.filter(p=>personRole(p.job)===role&&!week.some(d=>fixedTeam(state,p.id,d))),limits=Array.from({length:5},(_,i)=>Math.max(0,capacity-(peopleByDay.get(week[i])||[]).filter(a=>pool.some(p=>p.id===a.person.id)&&weeklyRest(state,week[i],a)).length));
    const choices:RestChoice[]=pool.flatMap(p=>{
     if(week.slice(0,6).some(d=>weeklyRest(state,d,d<month?personAt(known.get(d),p.id):peopleByDay.get(d)?.find(a=>a.person.id===p.id))))return [];
-    const allowed=week.slice(0,6).flatMap((date,index)=>{const assignment=peopleByDay.get(date)!.find(a=>a.person.id===p.id)!;if(date<month||protectedPeople.has(date+'|'+p.id)||assignment.mode==='UNAVAILABLE'||!personAvailable(state,p,date))return [];const dow=index+1,score=ledger.score([p.id],dow),privileged=dow===1||dow===6;return [{day:dow,cost:(privileged?(2*score.privileged+1)*10000:0)+(privileged?(dow===1?score.mondays:score.saturdays)*100:score.same*20)+tie(seed,start+'|'+p.id+'|'+dow)}];});return [{id:p.id,days:allowed}];
+    const allowed=week.slice(0,6).flatMap((date,index)=>{const assignment=peopleByDay.get(date)!.find(a=>a.person.id===p.id)!;if(date<month||closed(state,date)&&weekday(date)!==6||protectedPeople.has(date+'|'+p.id)||assignment.mode==='UNAVAILABLE'||!personAvailable(state,p,date))return [];const dow=index+1,score=ledger.score([p.id],dow),privileged=dow===1||dow===6;return [{day:dow,cost:(privileged?(2*score.privileged+1)*10000:0)+(privileged?(dow===1?score.mondays:score.saturdays)*100:score.same*20)+tie(seed,start+'|'+p.id+'|'+dow)}];});return [{id:p.id,days:allowed}];
    });
    const maxWeekday=assignRest(choices.map(p=>({...p,days:p.days.filter(d=>d.day<6).map(d=>({...d,cost:0}))})),[...limits,0]).flow;
    let result=assignRest(choices,[...limits,choices.length-maxWeekday]);
