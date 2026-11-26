@@ -32,7 +32,7 @@ describe('Escala 5x2 operacional',()=>{
  });
  it('aplica as datas da transição de jornada e bloqueia excesso de dias, horas e descanso reduzido',()=>{
   expect(legalWeeklyMinutes('2026-12-15')).toBe(2640);expect(legalWeeklyMinutes('2026-12-16')).toBe(2520);expect(legalWeeklyMinutes('2027-12-16')).toBe(2400);
-  const state=escalaFixture(),plan=generateMonth(state,'2027-02-01','rules').plan;state.rules.min_rest_minutes=600;expect(validatePlan(state,plan).some(i=>i.code==='REST_BASELINE')).toBe(true);state.rules.min_rest_minutes=660;
+  const state=escalaFixture(),plan=generateMonth(state,'2027-02-01','rules').plan;state.rules.max_consecutive=5;state.rules.min_rest_minutes=600;expect(validatePlan(state,plan).some(i=>i.code==='REST_BASELINE')).toBe(true);state.rules.min_rest_minutes=660;
   for(const day of plan.days.slice(0,6)){const d=day.duties[0];d.mode='ROUTE';d.truck_id=state.trucks[0].id;}const issues=validatePlan(state,plan);expect(issues.some(i=>i.code==='WEEKLY_HOURS')).toBe(true);expect(issues.some(i=>i.code==='CONSECUTIVE')).toBe(true);
   expect(monthDates('2028-02-01')).toHaveLength(29);expect(()=>monthDates('2027-13-01')).toThrow();
  });

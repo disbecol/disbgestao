@@ -2,8 +2,9 @@ import type {EscalaState,Issue,MonthPlan,PersonDuty,PlanDay,Staff} from './model
 import {monthDates,plusDays,weekday,teamMembers,preservedMode,legalWeeklyMinutes} from './engine.ts';
 import {dailyPeople,deliveryPeople,fixedTeam,personAt,personAvailable,personRole} from './person-policy.ts';
 import {restLedger} from './fairness.ts';
+import {weeklyRest,legalRuleIssues} from './legal-policy.ts';
 import {assignRest,type RestChoice} from './rest-assignment.ts';
-export const INDIVIDUAL_ALGORITHM='escala-individual-1-balanced';
+export const INDIVIDUAL_ALGORITHM='escala-individual-3-clt';
 const startWeek=(date:string)=>plusDays(date,-((weekday(date)+6)%7));
 const works=(d:PersonDuty|undefined)=>d?.mode==='ROUTE'||d?.mode==='RESERVE';
 const closed=(s:EscalaState,date:string)=>s.holidays.some(h=>h.date===date&&h.enabled&&h.kind!=='OPTIONAL'&&!h.operates);
@@ -18,13 +19,13 @@ export function generateIndividualMonth(state:EscalaState,month:string,seed:stri
    if(original?.locked){const people=structuredClone(dailyPeople(original));for(const p of people)protectedPeople.add(date+'|'+p.person.id);peopleByDay.set(date,people);continue;}
    const people=roster.map(p=>{const old=personAt(original,p.id),historical=personAt(prior,p.id);if(date<month&&historical)return structuredClone(historical);const fixed=fixedTeam(state,p.id,date),dow=weekday(date),mode=dow===0?'REST':!personAvailable(state,p,date)?'UNAVAILABLE':closed(state,date)||fixed&&dow===6?'REST':'ROUTE';
     if(original&&(original.locked||original.manual||old?.completed)&&old){protectedPeople.add(date+'|'+p.id);const copy=structuredClone(old);if(!old.completed&&!original.locked){copy.fixed_team_id=fixed;if(dow===0)copy.mode='REST';}return copy;}
-    return {person:{id:p.id,name:p.name,job:p.job,profile_id:p.profile_id},fixed_team_id:fixed,mode,completed:false} as PersonDuty;
+    return {person:{id:p.id,name:p.name,job:p.job,profile_id:p.profile_id},fixed_team_id:fixed,mode,completed:false,weekly_rest:mode==='REST'&&(dow===0||!!fixed&&dow===6)} as PersonDuty;
    });for(const old of original?dailyPeople(original):[])if(old.completed&&!people.some(p=>p.person.id===old.person.id))people.push(structuredClone(old));peopleByDay.set(date,people);
   }
   for(const role of ['DRIVER','HELPER'] as const){
-   const capacity=role==='DRIVER'?1:2,pool=roster.filter(p=>personRole(p.job)===role&&!week.some(d=>fixedTeam(state,p.id,d))),limits=Array.from({length:5},(_,i)=>Math.max(0,capacity-(peopleByDay.get(week[i])||[]).filter(a=>pool.some(p=>p.id===a.person.id)&&a.mode==='REST'&&!closed(state,week[i])).length));
+   const capacity=role==='DRIVER'?1:2,pool=roster.filter(p=>personRole(p.job)===role&&!week.some(d=>fixedTeam(state,p.id,d))),limits=Array.from({length:5},(_,i)=>Math.max(0,capacity-(peopleByDay.get(week[i])||[]).filter(a=>pool.some(p=>p.id===a.person.id)&&weeklyRest(state,week[i],a)).length));
    const choices:RestChoice[]=pool.flatMap(p=>{
-    if(week.slice(0,6).some(d=>d<month?personAt(known.get(d),p.id)?.mode==='REST':peopleByDay.get(d)?.some(a=>a.person.id===p.id&&a.mode==='REST')))return [];
+    if(week.slice(0,6).some(d=>weeklyRest(state,d,d<month?personAt(known.get(d),p.id):peopleByDay.get(d)?.find(a=>a.person.id===p.id))))return [];
     const allowed=week.slice(0,6).flatMap((date,index)=>{const assignment=peopleByDay.get(date)!.find(a=>a.person.id===p.id)!;if(date<month||protectedPeople.has(date+'|'+p.id)||assignment.mode==='UNAVAILABLE'||!personAvailable(state,p,date))return [];const dow=index+1,score=ledger.score([p.id],dow),privileged=dow===1||dow===6;return [{day:dow,cost:(privileged?(2*score.privileged+1)*10000:0)+(privileged?(dow===1?score.mondays:score.saturdays)*100:score.same*20)+tie(seed,start+'|'+p.id+'|'+dow)}];});return [{id:p.id,days:allowed}];
    });
    const maxWeekday=assignRest(choices.map(p=>({...p,days:p.days.filter(d=>d.day<6).map(d=>({...d,cost:0}))})),[...limits,0]).flow;
@@ -32,7 +33,7 @@ export function generateIndividualMonth(state:EscalaState,month:string,seed:stri
    // A protected Saturday or absence may make maximum weekday coverage
    // infeasible. Keep daily limits and report anyone without a possible rest.
    if(result.flow<choices.length)result=assignRest(choices,[...limits,choices.length]);
-   for(const [id,dow]of result.assignments){const date=week[dow-1],assignment=peopleByDay.get(date)!.find(p=>p.person.id===id)!;assignment.mode='REST';}
+   for(const [id,dow]of result.assignments){const date=week[dow-1],assignment=peopleByDay.get(date)!.find(p=>p.person.id===id)!;assignment.mode='REST';assignment.weekly_rest=true;}
   }
   for(const date of week.filter(d=>d>=month&&d<=end)){
    const original=stored.get(date),holiday=state.holidays.find(h=>h.date===date&&h.enabled&&h.kind!=='OPTIONAL'),people=peopleByDay.get(date)!;
@@ -44,7 +45,7 @@ export function generateIndividualMonth(state:EscalaState,month:string,seed:stri
  return {plan,issues:validateIndividualPlan(state,plan)};
 }
 export function validateIndividualPlan(state:EscalaState,plan:MonthPlan):Issue[]{
- const issues:Issue[]=[],add=(code:string,message:string,date?:string)=>issues.push({code,message,date,severity:'ERROR'}),roster=deliveryPeople(state),known=new Map([...(state.rotation_history||[]),...state.history,...plan.days].map(d=>[d.date,d])),rules=state.rules;
+ const issues:Issue[]=legalRuleIssues(state.rules),add=(code:string,message:string,date?:string)=>issues.push({code,message,date,severity:'ERROR'}),roster=deliveryPeople(state),known=new Map([...(state.rotation_history||[]),...state.history,...plan.days].map(d=>[d.date,d])),rules=state.rules;
  if(!rules.collective_reference||!rules.reviewed_on)add('RULES_REVIEW','Revise as regras de jornada antes de aprovar.');
  if(rules.work_minutes>rules.daily_limit+rules.overtime_minutes||rules.break_minutes<60||rules.start_minute+rules.work_minutes+rules.break_minutes>1440||1440-rules.work_minutes-rules.break_minutes<rules.min_rest_minutes)add('WORK_RULES','Revise a jornada, o almoço e o intervalo entre jornadas.');
  if(rules.max_week_days>5||!rules.sunday_rest)add('REST_RULES','Use no máximo cinco dias de trabalho e descanso aos domingos.');
@@ -55,11 +56,10 @@ export function validateIndividualPlan(state:EscalaState,plan:MonthPlan):Issue[]
   if(rules.weekly_minutes>legalWeeklyMinutes(day.date))add('LEGAL_TRANSITION','Revise o limite semanal vigente nas configurações.',day.date);
  }
  for(const p of roster)for(let start=startWeek(plan.month);start<=plan.days.at(-1)!.date;start=plusDays(start,7)){
-  const week=Array.from({length:7},(_,i)=>({date:plusDays(start,i),duty:personAt(known.get(plusDays(start,i)),p.id)})),present=week.filter(d=>d.duty),off=present.filter(d=>d.duty?.mode==='REST'),worked=present.filter(d=>works(d.duty)),ordinary=off.filter(d=>weekday(d.date)>0&&!closed(state,d.date));
-  if(present.length===7&&!present.some(d=>d.duty?.mode==='UNAVAILABLE')&&off.length<2)add('PERSON_WEEKLY_REST',p.name+': faltam duas folgas na semana de '+start.split('-').reverse().join('/')+'.',week[6].date);
+  const week=Array.from({length:7},(_,i)=>({date:plusDays(start,i),duty:personAt(known.get(plusDays(start,i)),p.id)})),present=week.filter(d=>d.duty),off=present.filter(d=>d.duty?.mode==='REST'),worked=present.filter(d=>works(d.duty)),ordinary=off.filter(d=>weekday(d.date)>0&&weeklyRest(state,d.date,d.duty)),weeklyOff=off.filter(d=>weeklyRest(state,d.date,d.duty));
+  if(present.length===7&&!present.some(d=>d.duty?.mode==='UNAVAILABLE')&&weeklyOff.length<2)add('PERSON_WEEKLY_REST',p.name+': faltam duas folgas na semana de '+start.split('-').reverse().join('/')+'.',week[6].date);
   if(!week.some(d=>d.duty?.fixed_team_id)&&ordinary.some(d=>weekday(d.date)<6)&&ordinary.some(d=>weekday(d.date)===6))add('DOUBLE_REST',p.name+': quem folga na semana deve estar disponível no sábado.',week[5].date);
-  const holidayOff=off.filter(d=>weekday(d.date)>0&&closed(state,d.date)).length;
-  if(!week.some(d=>d.duty?.fixed_team_id)&&ordinary.length>Math.max(0,1-holidayOff))add('DOUBLE_REST',p.name+': há folga comum extra entre segunda e sábado.',week[5].date);
+  if(!week.some(d=>d.duty?.fixed_team_id)&&ordinary.length>1)add('DOUBLE_REST',p.name+': há folga comum extra entre segunda e sábado.',week[5].date);
   if(worked.length>5||worked.reduce((sum,d)=>sum+(d.duty?.work_minutes??rules.work_minutes),0)>rules.weekly_minutes+rules.overtime_minutes*worked.length)add('PERSON_WEEKLY',p.name+': dias ou horas de trabalho acima do limite semanal.',week[6].date);
  }
  return issues;

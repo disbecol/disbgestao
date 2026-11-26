@@ -3,6 +3,7 @@ import {manualCrew} from './crew-policy.ts';
 import {restLedger} from './fairness.ts';
 import {holidayRest} from './rest-status.ts';
 import {generateIndividualMonth,validateIndividualPlan} from './individual-engine.ts';
+import {legalWeeklyMinutes,legalRuleIssues} from './legal-policy.ts';
 import {dailyPeople} from './person-policy.ts';
 export const ALGORITHM='escala-weekly-5-person-rest';
 const DAY=86400000;
@@ -31,7 +32,7 @@ function random(seed:string){let s=2166136261;for(const c of seed)s=Math.imul(s^
 const work=(d:Duty|undefined)=>d?.mode==='ROUTE'||d?.mode==='RESERVE';
 function monday(date:string){return plusDays(date,-((weekday(date)+6)%7));}
 export function requiredOpeningDates(month:string){const dow=weekday(month);return dow<2?[]:Array.from({length:dow-1},(_,i)=>plusDays(month,-dow+1+i));}
-export function legalWeeklyMinutes(date:string){return date>='2027-12-16'?2400:date>='2026-12-16'?2520:2640;}
+export {legalWeeklyMinutes} from './legal-policy.ts';
 function attachTrucks(_state:EscalaState,day:PlanDay,_keepExisting=false){for(const duty of day.duties)if(!duty.completed)duty.truck_id=null;}
 export function preservedMode(state:EscalaState,team:Team,date:string):Duty['mode']{
  if(weekday(date)===0||weekday(date)===6)return 'REST';
@@ -72,7 +73,7 @@ export function generateMonth(state:EscalaState,month:string,seed:string):{plan:
 }
 export function validatePlan(state:EscalaState,plan:MonthPlan):Issue[]{
  if(plan.planning_mode==='INDIVIDUAL')return validateIndividualPlan(state,plan);
- const errors:Issue[]=[],rules=state.rules;const add=(code:string,message:string,date?:string,team_id?:string,severity:Issue['severity']='ERROR')=>errors.push({code,message,date,team_id,severity});
+ const errors:Issue[]=legalRuleIssues(state.rules),rules=state.rules;const add=(code:string,message:string,date?:string,team_id?:string,severity:Issue['severity']='ERROR')=>errors.push({code,message,date,team_id,severity});
  const known=new Map([...(state.rotation_history||[]),...state.history,...plan.days].map(d=>[d.date,d]));
  const opening=requiredOpeningDates(plan.month);if(opening.some(date=>state.teams.some(t=>t.active&&!t.deleted_at&&!known.get(date)?.duties.some(x=>x.team_id===t.id))))add('MISSING_HISTORY','Informe o saldo inicial dos dias anteriores ao mês para concluir a validação da primeira semana.');
  if(!rules.collective_reference||!rules.reviewed_on)add('RULES_REVIEW','Revise o regime e informe a referência do acordo ou convenção antes de aprovar.');

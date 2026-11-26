@@ -22,7 +22,7 @@ before(async()=>{
  for(const t of baseline.trucks)await cmd('TRUCK_SAVE',{plate:'ABC1D'+String(baseline.trucks.indexOf(t)+1).padStart(2,'0'),status:'AVAILABLE'},t.id,t.revision);
  for(const team of baseline.teams){for(let i=0;i<3;i++){const person=await cmd('STAFF_SAVE',{name:`Pessoa fictícia ${team.code}-${i}`,job:i?'Ajudante':'Motorista',status:'ACTIVE'});await cmd('MEMBERSHIP_SAVE',{team_id:team.id,staff_id:person.id,starts_on:'2026-01-01'});}}
  await db.exec('reset role');await db.exec("update escala_memberships set origin='AUTO'");await as();
- const rules=(await state()).rules;await cmd('RULES_SAVE',{collective_reference:'Regime 5x2 para teste',reviewed_on:'2026-11-25'},rules.id,rules.revision);baseline=await state();
+ const rules=(await state()).rules;await cmd('RULES_SAVE',{work_minutes:480,daily_limit:480,weekly_minutes:2400,collective_reference:'Regime 5x2 para teste',reviewed_on:'2026-11-25'},rules.id,rules.revision);baseline=await state();
 });
 after(async()=>db.close());
 test('migração e configuração real são idempotentes e não concedem acesso anônimo',async()=>{
