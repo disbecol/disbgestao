@@ -1,6 +1,8 @@
 import type {EscalaState,Rules} from './model';
 import {defaultRules} from './model';
 import type {CrewAssignment} from './composition';
+import {readEscalaDraft} from './drafts.ts';
+import {prepareEscalaDraft} from './draft-policy.ts';
 export type EscalaAdapter={context():{client:unknown;user:{id:string}|null;profile:{name:string;role:string}|null;unit:string;units:string[]};hasPermission(code:string):boolean;toast(message:string,kind?:string):void;openView(view:string):void;download(name:string,data:Blob):Promise<void>|void};
 type Response={data:unknown;error:{message:string;details?:string}|null};
 type Client={rpc(name:string,args:Record<string,unknown>):PromiseLike<Response>};
@@ -10,7 +12,15 @@ export function createEscalaService(adapter:EscalaAdapter){
  const rpc=async(name:string,args:Record<string,unknown>)=>{const context=session(),key=context.user.id+'|'+context.unit,result=await context.client.rpc(name,args);if(key!==session().user.id+'|'+session().unit)throw Error('A unidade ou sessão foi alterada.');if(result.error)throw result.error;return result.data;};
  return {
   key:()=>{const c=session();return c.user.id+'|'+c.unit;},
-  async load(month:string):Promise<EscalaState>{const c=session(),data=await rpc('escala_state',{p_unit:c.unit,p_month:month}) as EscalaState;const priorDate=new Date(month+'T12:00:00Z');priorDate.setUTCMonth(priorDate.getUTCMonth()-1);const priorMonth=priorDate.toISOString().slice(0,7)+'-01';let rotation=data.history||[];if(priorMonth>='2020-01-01'){const previous=await rpc('escala_state',{p_unit:c.unit,p_month:priorMonth}) as EscalaState;if(previous?.plan?.month===priorMonth){const days=new Map(rotation.map(d=>[d.date,d]));for(const day of previous.plan.days)days.set(day.date,day);rotation=[...days.values()];}}return {...data,rotation_history:rotation,rules:{...defaultRules,...(data.rules||{})} as Rules};},
+  async load(month:string):Promise<EscalaState>{
+   const c=session(),data=await rpc('escala_state',{p_unit:c.unit,p_month:month}) as EscalaState,priorDate=new Date(month+'T12:00:00Z');priorDate.setUTCMonth(priorDate.getUTCMonth()-1);const priorMonth=priorDate.toISOString().slice(0,7)+'-01';let rotation=data.history||[];
+   if(priorMonth>='2020-01-01'){
+    const previous=await rpc('escala_state',{p_unit:c.unit,p_month:priorMonth}) as EscalaState;let priorPlan=previous?.plan?.month===priorMonth?previous.plan:null;
+    try{const local=readEscalaDraft(JSON.parse(localStorage.getItem('disb_escala_draft_v1_'+c.user.id+'|'+c.unit+'_'+priorMonth)||'null'),priorMonth,priorPlan?.revision||0);if(local&&(!priorPlan||priorPlan.status==='DRAFT'))priorPlan=local;}catch{/* The saved calendar remains the fallback for an invalid local draft. */}
+    if(priorPlan){priorPlan=prepareEscalaDraft({...previous,rules:{...defaultRules,...previous.rules}},priorPlan).plan;const days=new Map(rotation.map(d=>[d.date,d]));for(const day of priorPlan?.days||[])days.set(day.date,day);rotation=[...days.values()];}
+   }
+   return {...data,rotation_history:rotation,rules:{...defaultRules,...(data.rules||{})} as Rules};
+  },
   async command(action:string,payload:Record<string,unknown>,id:string|null=null,revision=0):Promise<unknown>{const c=session(),args={p_unit:c.unit,p_action:action,p_id:id,p_revision:revision,p_payload:payload},key=JSON.stringify(args);if(!pending.has(key))pending.set(key,crypto.randomUUID());const result=await rpc('escala_command',{...args,p_request_id:pending.get(key)});pending.delete(key);return result;},
   async saveComposition(month:string,token:string,seed:string,assignments:CrewAssignment[],helpers:number,area:string){const args={p_unit:session().unit,p_month:month,p_token:token,p_seed:seed,p_assignments:assignments,p_helpers:helpers,p_area:area},key='crew|'+JSON.stringify(args);if(!pending.has(key))pending.set(key,crypto.randomUUID());const result=await rpc('escala_save_composition',{...args,p_request_id:pending.get(key)});pending.delete(key);return result;},
   audit:(offset:number)=>rpc('escala_audit_page',{p_unit:session().unit,p_offset:offset}),

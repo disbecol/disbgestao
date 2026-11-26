@@ -1,5 +1,5 @@
 import type {MonthPlan} from './model';
-import {monthDates} from './engine';
+import {monthDates} from './engine.ts';
 export function readEscalaDraft(value:unknown,month:string,revision:number):MonthPlan|null{
  if(value===null)return null;if(!value||typeof value!=='object')throw Error('Rascunho inválido.');const p=value as Partial<MonthPlan>;
  if(p.month!==month||p.revision!==revision)return null;
