@@ -30,6 +30,8 @@ test('Rating aparece em Devoluções e oferece links diretos para as abas Matriz
  const h=harness();await h.module.enter('returns-import');
  const grid=h.document.querySelector('#view-returns-import .rt-source-grid');
  assert.equal(grid.querySelectorAll('.rt-source').length,6);
+ assert.ok([...grid.querySelectorAll('.rt-source strong')].some(el=>el.textContent==='PRIORIDADES - MATRIZ'));
+ assert.ok([...grid.querySelectorAll('.rt-source strong')].some(el=>el.textContent==='RATING - MATRIZ'));
  const links=[...grid.querySelectorAll('.rt-source a')].filter(link=>link.href.includes('?gid='));
  assert.deepEqual(links.map(link=>link.href),[
   `https://docs.google.com/spreadsheets/d/${G.SPREADSHEET}/edit?gid=1949652663#gid=1949652663`
@@ -43,7 +45,7 @@ test('Rating aparece em Devoluções e oferece links diretos para as abas Matriz
  assert.equal(filialGrid.querySelectorAll('.rt-source').length,5);
  const filialLinks=[...filialGrid.querySelectorAll('.rt-source a')].filter(link=>link.href.includes('?gid='));
  assert.deepEqual(filialLinks.map(link=>link.href),[`https://docs.google.com/spreadsheets/d/${G.SPREADSHEET}/edit?gid=1042578215#gid=1042578215`]);
- assert.doesNotMatch(filialGrid.textContent,/Rating · Matriz/);
+ assert.doesNotMatch(filialGrid.textContent,/RATING - MATRIZ/);
 });
 test('Análise por raio consulta a unidade e período e exibe resultados por ocorrência',async()=>{
  const h=harness({permissions:['RETURNS_VIEW'],rpc:async(name)=>({data:name==='returns_radius_snapshot'?{available:true,matches:[{operation_date:today,customer_code:'42',map_number:'1',state:'OUTSIDE',justified:false,match_count:2}]}:sample,error:null})});await h.module.enter('returns-followup');await h.click(h.document.querySelector('[data-tab="returns-radius"]'));const root=h.document.querySelector('#view-returns-followup');assert.match(root.textContent,/Dentro e fora do raio por motorista/);assert.match(root.textContent,/Não justificada/);assert.ok(root.querySelector('.rt-radius-OUTSIDE'));assert.equal(root.querySelectorAll('script').length,0);const call=h.calls.find(c=>c.name==='returns_radius_snapshot');assert.equal(call.args.p_unit,'Matriz Caicó');assert.equal(call.args.p_to,today);
