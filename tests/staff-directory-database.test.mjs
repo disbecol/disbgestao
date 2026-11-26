@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import {PGlite} from '@electric-sql/pglite';
-import {drawCrew} from '../modules/gestao/src/escala/composition.ts';
+import {drawCrew,moveCrewHelper} from '../modules/gestao/src/escala/composition.ts';
 import {generateMonth} from '../modules/gestao/src/escala/engine.ts';
 const db=new PGlite(),A='Matriz Caicó',B='Filial Pau dos Ferros',ids={admin:randomUUID(),branch:randomUUID(),applicator:randomUUID(),employee:randomUUID()};
 const q=async(s,a=[])=>(await db.query(s,a)).rows;
@@ -173,10 +173,10 @@ describe('composição mensal das equipes com integrantes sorteados',()=>{
   const m='2027-03-01';await as();let s=await rpc('escala_state',[C,m],['','::date']);const reserved=new Set(s.memberships.filter(x=>x.origin==='MANUAL'&&x.starts_on<=m&&(!x.ends_on||x.ends_on>=m)).map(x=>x.staff_id));
   const helpers=s.staff.filter(p=>p.job==='Ajudante'&&!reserved.has(p.id));for(const p of helpers.slice(0,3))await command('STAFF_SAVE',{status:'LEAVE'},p.id,p.revision);
   s=await rpc('escala_state',[C,m],['','::date']);const p=drawCrew(s,m,'qlp-db');assert.equal(p.helpers,13);assert.equal(p.errors.length,0);assert.equal(p.assignments.filter(a=>a.members.length===2).length,3);
-  const a=args(s,p,'qlp-db');a[1]=m;a[5]=0;const bad=[...a],invalid=structuredClone(p.assignments);invalid[0].members=invalid[0].members.slice(0,1);bad[4]=JSON.stringify(invalid);await assert.rejects(()=>persist(bad),/ESCALA_COMPOSITION_TEAMS|ESCALA_COMPOSITION_ROLE/);
+  const source=p.assignments.find(a=>a.members.length===3),target=p.assignments.find(a=>a.members.length===2),moved=source.members[1];p.assignments=moveCrewHelper(s,p.assignments,moved,target.team_id);const a=args(s,p,'qlp-db');a[1]=m;a[5]=0;const bad=[...a],invalid=structuredClone(p.assignments);invalid[0].members=invalid[0].members.slice(0,1);bad[4]=JSON.stringify(invalid);await assert.rejects(()=>persist(bad),/ESCALA_COMPOSITION_TEAMS|ESCALA_COMPOSITION_ROLE/);
   const fixed=s.memberships.filter(x=>x.origin==='MANUAL');const result=await persist(a);assert.equal(result.people,21);assert.deepEqual(await persist(a),result);
   const after=await rpc('escala_state',[C,m],['','::date']);for(const old of fixed)assert.deepEqual(after.memberships.find(x=>x.id===old.id),old);
-  assert.equal(after.memberships.filter(x=>x.draw_month===m).length,21);
+  assert.equal(after.memberships.filter(x=>x.draw_month===m).length,21);assert.equal(after.memberships.find(x=>x.draw_month===m&&x.staff_id===moved).team_id,target.team_id);
  });
 
 });

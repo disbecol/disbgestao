@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import {escalaFixture} from './escala-fixture';
-import {drawCrew,crewRole,manualCrew,refreshPlanMembers} from '../src/escala/composition';
+import {crewAdjustmentErrors,drawCrew,crewRole,manualCrew,moveCrewHelper,refreshPlanMembers} from '../src/escala/composition';
 import {generateMonth} from '../src/escala/engine';
 function fixture(){const s=escalaFixture();s.staff.forEach(p=>{p.area='Entrega';});s.memberships=s.memberships.filter(m=>s.teams.slice(0,2).some(t=>m.team_id===t.id));return s;}
 describe('Sorteio dos colaboradores das equipes',()=>{
@@ -40,5 +40,17 @@ describe('Sorteio dos colaboradores das equipes',()=>{
   const s=fixture(),free=s.staff.filter(p=>p.job==='Ajudante'&&!s.memberships.some(m=>m.staff_id===p.id));for(const p of free.slice(0,8))p.status='INACTIVE';expect(drawCrew(s,'2027-02-01','minimum').assignments.every(a=>a.members.length===2)).toBe(true);
   free[8].status='INACTIVE';expect(drawCrew(s,'2027-02-01','missing').errors).toContain('Faltam 1 ajudante(s) disponível(is) para o mês.');
   for(const p of free)p.status='ACTIVE';s.staff.push({...free[0],id:'extra-helper'});const p=drawCrew(s,'2027-02-01','extra');expect(p.usedHelpers).toBe(16);expect(p.remaining.map(p=>p.id)).toHaveLength(1);
+ });
+ it('move ajudantes entre equipes sem duplicar pessoas nem alterar os motoristas',()=>{
+  const s=fixture();for(const n of [7,8,10])s.staff[n].status='INACTIVE';const p=drawCrew(s,'2027-02-01','drag'),before=structuredClone(p.assignments),source=p.assignments.find(a=>a.members.length===3)!,target=p.assignments.find(a=>a.members.length===2)!,id=source.members[1];
+  const next=moveCrewHelper(s,p.assignments,id,target.team_id);expect(crewAdjustmentErrors(s,next,0)).toEqual([]);expect(next.find(a=>a.team_id===source.team_id)!.members).not.toContain(id);expect(next.find(a=>a.team_id===target.team_id)!.members).toContain(id);expect(new Set(next.flatMap(a=>a.members)).size).toBe(21);expect(next.map(a=>a.members[0])).toEqual(before.map(a=>a.members[0]));expect(p.assignments).toEqual(before);
+ });
+ it('troca dois ajudantes diretamente e impede mover motorista ou atingir uma equipe preservada',()=>{
+  const s=fixture(),p=drawCrew(s,'2027-02-01','swap'),[a,b]=p.assignments,x=a.members[1],y=b.members[1];const next=moveCrewHelper(s,p.assignments,x,b.team_id,y);expect(next[0].members).toContain(y);expect(next[1].members).toContain(x);expect(crewAdjustmentErrors(s,next,2)).toEqual([]);
+  expect(()=>moveCrewHelper(s,p.assignments,a.members[0],b.team_id)).toThrow(/ajudante/);expect(()=>moveCrewHelper(s,p.assignments,x,p.fixed[0].id)).toThrow(/disponível/);expect(()=>moveCrewHelper(s,p.assignments,x,b.team_id,b.members[0])).toThrow(/dois ajudantes/);
+ });
+ it('identifica os ajustes incompletos até que o usuário termine de reorganizar as equipes',()=>{
+  const s=fixture();for(const n of [7,8,10])s.staff[n].status='INACTIVE';const p=drawCrew(s,'2027-02-01','incomplete'),source=p.assignments.find(a=>a.members.length===2)!,target=p.assignments.find(a=>a.members.length===3)!,id=source.members[1];const next=moveCrewHelper(s,p.assignments,id,target.team_id);expect(crewAdjustmentErrors(s,next,0)).toHaveLength(2);
+  const restored=moveCrewHelper(s,next,id,source.team_id);expect(crewAdjustmentErrors(s,restored,0)).toEqual([]);expect(restored).toEqual(p.assignments);
  });
 });
