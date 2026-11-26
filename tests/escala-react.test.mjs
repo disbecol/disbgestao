@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {formsThemeHarness} from './helpers/forms-theme-harness.mjs';
 import {escalaFixture} from '../modules/gestao/tests/escala-fixture.ts';
-import {generateMonth} from '../modules/gestao/src/escala/engine.ts';
+import {ALGORITHM,generateMonth} from '../modules/gestao/src/escala/engine.ts';
 function harness(options={}){
  const state=structuredClone(options.state||escalaFixture());let api;
  const h=formsThemeHarness({...options,factory:'createEscala',openView:view=>{void api?.enter(view);},async rpc(name,args,context){
   if(options.rpc){const result=await options.rpc(name,args,context,state);if(result!==undefined)return result;}
-  if(name==='escala_state')return {data:structuredClone(state),error:null};
+  if(name==='escala_state')return {data:{...structuredClone(state),plan:state.plan?.month===args.p_month?structuredClone(state.plan):null},error:null};
   if(name==='escala_audit_page')return {data:[],error:null};
   if(name==='escala_command'){
    if(args.p_action==='MONTH_SAVE'){state.plan={...structuredClone(args.p_payload),id:state.plan?.id||'saved-month',revision:args.p_revision+1};return {data:structuredClone(state.plan),error:null};}
@@ -19,7 +19,7 @@ function harness(options={}){
 const clickText=async(h,text)=>{const button=[...h.document.querySelectorAll('.escala-app button')].find(b=>b.textContent.trim()===text);assert.ok(button,'Button '+text);button.click();await h.settle();};
 test('Escala uses the shared React entry and displays a real monthly calendar without writing on load',async()=>{
  const h=harness();assert.equal(typeof h.globalApi.createEscala,'function');await h.enter('escala-calendar');
- assert.equal(h.document.querySelectorAll('[data-escala-day]').length,30);assert.equal(h.document.querySelectorAll('.escala-side-team').length,10);assert.equal(h.writes.length,0);assert.ok(h.reads.some(r=>r.name==='escala_state'));h.destroy();
+ assert.ok(h.document.querySelector('.escala-calendar-actions'));assert.equal(h.document.querySelectorAll('[data-view="escala-trucks"]').length,0);assert.match(h.get('.escala-empty').textContent,/Este mês ainda não tem escala/);assert.equal(h.writes.length,0);assert.ok(h.reads.some(r=>r.name==='escala_state'));h.destroy();
 });
 test('generation is a reviewable local draft and Save sends a revisioned idempotent RPC, then survives reopening',async()=>{
  const h=harness();await h.enter('escala-calendar');await clickText(h,'Sortear folgas');assert.equal(h.writes.length,0);assert.ok(h.memory.size);await clickText(h,'Salvar escala •');
@@ -27,7 +27,7 @@ test('generation is a reviewable local draft and Save sends a revisioned idempot
  h.api.stop();await h.enter('escala-calendar');assert.match(h.get('.escala-statusbar').textContent,/Revisão 1/);h.destroy();
 });
 test('opening teams, staff, vehicles, holidays, reports and history remains read only',async()=>{
- const h=harness();for(const view of ['escala-teams','escala-staff','escala-trucks','escala-holidays','escala-reports','escala-history','escala-settings']){await h.enter(view);assert.ok(h.get('#view-'+view).textContent.includes('Escala'));}assert.equal(h.writes.length,0);h.destroy();
+ const h=harness();for(const view of ['escala-teams','escala-staff','escala-holidays','escala-reports','escala-history','escala-settings']){await h.enter(view);assert.ok(h.get('#view-'+view).textContent.includes('Escala'));}assert.equal(h.writes.length,0);h.destroy();
 });
 test('rascunho recuperado da versão anterior permite sortear novas folgas sem gravar automaticamente',async()=>{
  const state=escalaFixture();state.memberships.slice(0,6).forEach(m=>{m.origin='MANUAL';m.draw_month=null;});state.plan={...generateMonth(state,'2026-11-01','previous').plan,id:'saved-month',revision:3,algorithm_version:'escala-balanced-1'};
@@ -35,13 +35,13 @@ test('rascunho recuperado da versão anterior permite sortear novas folgas sem g
  const h=harness({state,memory:new Map([['disb_escala_draft_v1_admin|Matriz Caicó_2026-11-01',JSON.stringify(local)]])});await h.enter('escala-calendar');
  assert.match(h.get('.escala-statusbar').textContent,/alterações neste aparelho/);
  const redraw=[...h.document.querySelectorAll('button')].find(b=>b.textContent==='Sortear novas folgas');assert.equal(redraw.disabled,false);await clickText(h,'Sortear novas folgas');
- assert.equal(h.document.querySelector('.escala-error')?.textContent||'','');const next=JSON.parse([...h.memory.values()][0]);assert.equal(next.algorithm_version,'escala-balanced-2-fixed-weekdays');assert.equal(next.days[4].notes,'Ajuste manual a preservar');
+ assert.equal(h.document.querySelector('.escala-error')?.textContent||'','');const next=JSON.parse([...h.memory.values()][0]);assert.equal(next.algorithm_version,ALGORITHM);assert.equal(next.days[4].notes,'Ajuste manual a preservar');
  for(const day of next.days)for(const team of state.teams.slice(0,2)){const weekend=[0,6].includes(new Date(day.date+'T12:00:00Z').getUTCDay());assert.equal(day.duties.find(d=>d.team_id===team.id).mode,weekend?'REST':'ROUTE');}
  assert.equal(h.writes.length,0);assert.equal(h.state.plan.algorithm_version,'escala-balanced-1');h.destroy();
 });
 test('o motivo do bloqueio de sorteio fica visível para consulta e escala protegida',async()=>{
  const state=escalaFixture();state.plan={...generateMonth(state,'2026-11-01','protected').plan,status:'APPROVED'};
- for(const permissions of [['ESCALA_VIEW'],['ESCALA_VIEW','ESCALA_MANAGE']]){const h=harness({state,permissions});await h.enter('escala-calendar');const step=h.document.querySelectorAll('.escala-planning-steps article')[1],redraw=step.querySelector('button');assert.equal(redraw.disabled,true);assert.match(step.textContent,permissions.includes('ESCALA_MANAGE')?/administrador precisa desbloqueá-la/:/perfil não tem permissão/);assert.equal(h.writes.length,0);h.destroy();}
+ for(const permissions of [['ESCALA_VIEW'],['ESCALA_VIEW','ESCALA_MANAGE']]){const h=harness({state,permissions});await h.enter('escala-calendar');const step=h.document.querySelector('.escala-calendar-actions'),redraw=step.querySelector('button');assert.equal(redraw.disabled,true);assert.match(step.textContent,permissions.includes('ESCALA_MANAGE')?/administrador precisa desbloqueá-la/:/perfil não tem permissão/);assert.equal(h.writes.length,0);h.destroy();}
 });
 test('approved calendars prevent a redraw and read-only users cannot edit operational records',async()=>{
  const state=escalaFixture();state.plan=generateMonth(state,'2026-11-01','approved').plan;state.plan.status='APPROVED';
@@ -73,9 +73,11 @@ test('funcionários inativos ficam disponíveis no filtro próprio sem se mistur
  await h.change('#view-escala-staff .escala-form-grid label:last-child select','INACTIVE');assert.equal(h.document.querySelectorAll('#view-escala-staff tbody tr').length,1);assert.match(h.get('#view-escala-staff tbody').textContent,/Inativo/);assert.equal(h.writes.length,0);h.destroy();
 });
 
-test('a desktop drag opens a movement dialog with the complete team and keeps the source date',async()=>{
- const state=escalaFixture();state.plan=generateMonth(state,'2026-11-01','drag').plan;
- const h=harness({state});await h.enter('escala-calendar');
- const source=h.get('[data-escala-day="2026-11-03"] .escala-team-chip'),target=h.get('[data-escala-day="2026-11-04"]');const start=new h.window.Event('dragstart',{bubbles:true});start.dataTransfer={setData(){},effectAllowed:''};source.dispatchEvent(start);const drop=new h.window.Event('drop',{bubbles:true,cancelable:true});drop.dataTransfer={};target.dispatchEvent(drop);await h.settle();
- assert.match(h.get('.escala-dialog').textContent,/Movimentar folga da equipe completa/);assert.equal(h.get('.escala-dialog input[type="date"]').value,'2026-11-04');assert.ok(h.get('.escala-dialog [aria-label="Folga atual"]').value==='2026-11-03');assert.equal(h.writes.length,0);h.destroy();
+test('a visão principal mostra cada pessoa e seus dias; o resumo diário tem cores e a navegação troca os meses sem gravar',async()=>{
+ const state=escalaFixture();state.trucks=[];state.plan=generateMonth(state,'2026-11-01','people').plan;
+ const h=harness({state});await h.enter('escala-calendar');assert.equal(h.document.querySelectorAll('.escala-people-table tbody tr').length,30);assert.ok(h.document.querySelector('.escala-people-table button.available'));assert.ok(h.document.querySelector('.escala-people-table button.rest'));assert.equal(h.document.querySelectorAll('.escala-side').length,0);
+ await h.input('.escala-availability-head input[type="search"]',state.staff[0].name);assert.equal(h.document.querySelectorAll('.escala-people-table tbody tr').length,1);
+ await clickText(h,'Resumo por dia');assert.equal(h.document.querySelectorAll('.escala-daily-card').length,30);assert.ok(h.document.querySelector('.escala-person-group.available'));assert.ok(h.document.querySelector('.escala-person-group.rest'));
+ await clickText(h,'Calendário mensal');assert.equal(h.document.querySelectorAll('[data-escala-day]').length,30);const workday=h.get('[data-escala-day="2026-11-03"]');assert.equal(workday.querySelectorAll('.escala-day-group button').length,10);assert.ok(!h.document.querySelector('.escala-app').textContent.includes('Lista de dias'));assert.ok(!h.document.querySelector('.escala-tabs').textContent.includes('Caminhões'));
+ await clickText(h,'Próximo mês ›');assert.equal(h.get('input[type="month"]').value,'2026-12');await clickText(h,'‹ Mês anterior');assert.equal(h.get('input[type="month"]').value,'2026-11');assert.equal(h.writes.length,0);h.destroy();
 });

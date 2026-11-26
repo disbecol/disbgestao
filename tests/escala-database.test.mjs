@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {PGlite} from '@electric-sql/pglite';
-import {generateMonth} from '../modules/gestao/src/escala/engine.ts';
+import {generateMonth as generatePeopleMonth} from '../modules/gestao/src/escala/engine.ts';
+// This historical schema fixture retains its original vehicle requirement.
+function generateMonth(state,month,seed){const result=generatePeopleMonth(state,month,seed);for(const day of result.plan.days){let n=0;for(const duty of day.duties)if(duty.mode==='ROUTE')duty.truck_id=state.trucks[n++]?.id||null;}return result;}
 const db=new PGlite(),A='Matriz Caicó',B='Filial Pau dos Ferros',admin=randomUUID(),manager=randomUUID(),viewer=randomUUID(),other=randomUUID();
 const q=async(sql,args=[])=>(await db.query(sql,args)).rows;
 async function as(id=admin){await db.exec('reset role');await q("select set_config('request.jwt.claim.sub',$1,false)",[id]);await db.exec('set role authenticated');}

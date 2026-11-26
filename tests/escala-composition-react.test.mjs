@@ -9,7 +9,7 @@ test('prévia mantém equipes definidas, mostra as demais e só grava ao salvar'
  await button(h,'Salvar equipes sorteadas');const save=h.writes.find(w=>w.name==='escala_save_composition');assert.equal(save.args.p_assignments.length,8);assert.equal(save.args.p_helpers,0);assert.equal(save.args.p_area,'Entrega');assert.ok(save.args.p_request_id);assert.equal(h.state.memberships.length,30);assert.ok(!h.document.querySelector('.escala-dialog'));h.destroy();
 });
 test('Gerar sorteio preenche equipes vazias antes de gerar as folgas e mantém o calendário em rascunho',async()=>{
- const h=harness();await h.enter('escala-calendar');await button(h,'Sortear folgas');assert.ok(h.document.querySelector('.escala-dialog'));assert.equal(h.writes.length,0);await button(h,'Salvar equipes e gerar folgas');assert.equal(h.writes.filter(w=>w.name==='escala_save_composition').length,1);assert.ok(h.get('.escala-statusbar').textContent.includes('Rascunho'));assert.ok(h.get('.escala-statusbar').textContent.includes('alterações neste aparelho'));assert.equal(h.document.querySelectorAll('[data-escala-day]').length,30);h.destroy();
+ const h=harness();await h.enter('escala-calendar');await button(h,'Sortear folgas');assert.ok(h.document.querySelector('.escala-dialog'));assert.equal(h.writes.length,0);await button(h,'Salvar equipes e gerar folgas');assert.equal(h.writes.filter(w=>w.name==='escala_save_composition').length,1);assert.ok(h.get('.escala-statusbar').textContent.includes('Rascunho'));assert.ok(h.get('.escala-statusbar').textContent.includes('alterações neste aparelho'));assert.ok(h.document.querySelector('.escala-people-table'));h.destroy();
 });
 test('falta de pessoal é informada sem gravar uma composição incompleta',async()=>{
  const state=fixture();state.staff[7].status='INACTIVE';const h=harness({state});await h.enter('escala-teams');await button(h,'Sortear colaboradores');await h.change('.escala-dialog [aria-label="Distribuição dos ajudantes"]','2');assert.match(h.get('.escala-dialog').textContent,/Faltam 1 ajudante/);const save=[...h.document.querySelectorAll('.escala-dialog button')].find(b=>b.textContent==='Salvar equipes sorteadas');assert.equal(save.disabled,true);assert.equal(h.writes.length,0);h.destroy();
@@ -43,12 +43,12 @@ test('QLP é o padrão e permite salvar 8 equipes com os 13 ajudantes disponíve
 });
 
 test('etapas separam equipes e folgas, e a visão por equipe permite buscar e abrir a troca sem gravar',async()=>{
- const state=fixture();state.memberships.push(...escalaFixture().memberships.filter(m=>!state.memberships.some(x=>x.id===m.id)));state.plan=generateMonth(state,'2026-11-01','planning').plan;const h=harness({state});await h.enter('escala-calendar');assert.equal(h.document.querySelectorAll('.escala-planning-steps article').length,3);await button(h,'Folgas por equipe');assert.equal(h.get('[aria-pressed="true"]').textContent,'Folgas por equipe');assert.equal(h.document.querySelectorAll('.escala-rest-team').length,10);
+ const state=fixture();state.memberships.push(...escalaFixture().memberships.filter(m=>!state.memberships.some(x=>x.id===m.id)));state.plan=generateMonth(state,'2026-11-01','planning').plan;const h=harness({state});await h.enter('escala-calendar');assert.ok(h.document.querySelector('.escala-calendar-actions'));await button(h,'Folgas por equipe');assert.equal(h.get('[aria-pressed="true"]').textContent,'Folgas por equipe');assert.equal(h.document.querySelectorAll('.escala-rest-team').length,10);
  await h.input('.escala-rest-filters input[type="search"]',state.staff[6].name);assert.equal(h.document.querySelectorAll('.escala-rest-team').length,1);const day=h.document.querySelector('.escala-rest-dates button');assert.ok(day);day.click();await h.settle();assert.ok(h.get('.escala-dialog [aria-label="Folga atual"]').value);assert.match(h.get('.escala-dialog').textContent,/Escolha a nova data/);assert.equal(h.writes.length,0);h.destroy();
 });
 
 test('visão por equipe orienta gerar a primeira escala quando o mês ainda está vazio',async()=>{
- const h=harness();await h.enter('escala-calendar');await button(h,'Folgas por equipe');assert.match(h.get('.escala-empty').textContent,/Use Sortear folgas, na etapa 2/);assert.equal(h.writes.length,0);h.destroy();
+ const h=harness();await h.enter('escala-calendar');await button(h,'Folgas por equipe');assert.match(h.get('.escala-empty').textContent,/Use Sortear folgas/);assert.equal(h.writes.length,0);h.destroy();
 });
 
 function dragHelper(h,source,target){const data={effectAllowed:'',dropEffect:'',setData(){}};const start=new h.window.Event('dragstart',{bubbles:true,cancelable:true});start.dataTransfer=data;source.dispatchEvent(start);const drop=new h.window.Event('drop',{bubbles:true,cancelable:true});drop.dataTransfer=data;target.dispatchEvent(drop);}
@@ -72,7 +72,7 @@ test('erro ao salvar mantém o ajudante na equipe ajustada para não perder a re
 });
 
 test('preservadas aparecem com folgas fixas e ficam fora das opções de troca e arraste',async()=>{
- const state=fixture();state.memberships.push(...escalaFixture().memberships.filter(m=>!state.memberships.some(x=>x.id===m.id)));state.plan=generateMonth(state,'2026-11-01','fixed-ui').plan;const h=harness({state});await h.enter('escala-calendar');const fixed=h.document.querySelector('.escala-side-team');assert.match(fixed.textContent,/Preservada · Seg–Sex · folga Sáb\/Dom/);assert.equal(fixed.getAttribute('draggable'),'false');assert.equal(fixed.querySelector('.escala-side-actions'),null);
+ const state=fixture();state.memberships.push(...escalaFixture().memberships.filter(m=>!state.memberships.some(x=>x.id===m.id)));state.plan=generateMonth(state,'2026-11-01','fixed-ui').plan;const h=harness({state});await h.enter('escala-calendar');assert.ok(h.document.querySelector('.escala-people-table'));assert.equal(h.document.querySelectorAll('.escala-side-team').length,0);
  await button(h,'Trocar folga');const teams=[...h.get('[aria-label="Equipe da troca de folga"]').querySelectorAll('option')];assert.equal(teams.length,8);assert.ok(!teams.some(o=>o.value==='team-1'||o.value==='team-2'));await button(h,'Cancelar');
  await button(h,'Folgas por equipe');const first=h.document.querySelector('.escala-rest-team');assert.match(first.textContent,/Preservada/);assert.ok([...first.querySelectorAll('.escala-rest-dates button')].every(b=>b.getAttribute('aria-label').startsWith('Ver folga')));assert.equal(h.writes.length,0);h.destroy();
 });

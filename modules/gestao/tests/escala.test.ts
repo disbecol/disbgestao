@@ -23,8 +23,8 @@ describe('Escala 5x2 operacional',()=>{
   expect(available(state,state.teams[0],'2027-02-09')).toBe(true);expect(available(state,state.teams[0],'2027-02-10')).toBe(false);expect(available(state,state.teams[0],'2027-02-13')).toBe(true);
   state.unavailable.push({id:'period',team_id:state.teams[1].id,staff_id:null,starts_on:'2027-02-03',ends_on:'2027-02-04',reason:'Licença',revision:1});const result=generateMonth(state,'2027-02-01','vacation');expect(result.plan.days.find(d=>d.date==='2027-02-03')?.duties.find(d=>d.team_id===state.teams[1].id)?.mode).toBe('UNAVAILABLE');
  });
- it('avisa quando a capacidade de caminhões ou a composição não permite atender a operação',()=>{
-  const state=escalaFixture();state.trucks[0].status='MAINTENANCE';state.memberships=state.memberships.filter(m=>m.staff_id!==state.staff[0].id);const result=generateMonth(state,'2027-02-01','shortage');expect(result.issues.some(i=>i.code==='TRUCK')).toBe(true);expect(result.issues.some(i=>i.code==='DRIVER')).toBe(true);
+ it('valida a composição sem exigir cadastro de caminhões',()=>{
+  const state=escalaFixture();state.trucks[0].status='MAINTENANCE';state.memberships=state.memberships.filter(m=>m.staff_id!==state.staff[0].id);const result=generateMonth(state,'2027-02-01','shortage');expect(result.issues.some(i=>i.code==='TRUCK')).toBe(false);expect(result.issues.some(i=>i.code==='DRIVER')).toBe(true);
  });
  it('reconhece feriados por lei, trata a sexta-feira santa como local e identifica o sábado anterior inclusive em outro mês',()=>{
   const holidays=officialHolidays(2027);expect(holidays.filter(h=>h.kind==='NATIONAL')).toHaveLength(9);expect(holidays.find(h=>h.name.startsWith('Sexta-feira'))?.date).toBe('2027-03-26');expect(holidays.find(h=>h.name.startsWith('Sexta-feira'))?.enabled).toBe(false);expect(holidays.some(h=>/carnaval|corpus/i.test(h.name))).toBe(false);
