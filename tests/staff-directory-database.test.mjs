@@ -29,7 +29,7 @@ before(async()=>{
  historical=await rpc('start_form_response_evaluated',[form.id,A,randomUUID(),[ids.employee],null],['::uuid','','::uuid','::uuid[]','::uuid']);
  historical=await rpc('save_form_response',[historical.id,historical.revision,JSON.stringify({__evaluations:{[ids.employee]:{q:{value:'YES'}}}}),true],['::uuid','','::jsonb','']);
  await db.exec('reset role');accountsBefore=(await q('select count(*)::int n from profiles'))[0].n;
- try{await db.exec(read('supabase/migrations/20261125180349_independent_staff_directory.sql'));await db.exec(read('supabase/migrations/20261125191110_escala_directory_auto_staff.sql'));await db.exec(read('supabase/migrations/20261125192341_staff_directory_archived_people.sql'));await db.exec(read('supabase/migrations/20261125194359_escala_random_team_members.sql'));await db.exec(read('supabase/migrations/20261125200715_escala_private_api_handlers.sql'));await db.exec(read('supabase/migrations/20261125201924_escala_composition_preserve_drafts.sql'));await db.exec(read('supabase/migrations/20261126111855_escala_qlp_helper_distribution.sql'));}catch(e){throw Error(`${e.message}; ${e.where||''}; posição ${e.position}`);}
+ try{await db.exec(read('supabase/migrations/20261125180349_independent_staff_directory.sql'));await db.exec(read('supabase/migrations/20261125191110_escala_directory_auto_staff.sql'));await db.exec(read('supabase/migrations/20261125192341_staff_directory_archived_people.sql'));await db.exec(read('supabase/migrations/20261125194359_escala_random_team_members.sql'));await db.exec(read('supabase/migrations/20261125200715_escala_private_api_handlers.sql'));await db.exec(read('supabase/migrations/20261125201924_escala_composition_preserve_drafts.sql'));await db.exec(read('supabase/migrations/20261126111855_escala_qlp_helper_distribution.sql'));await db.exec(read('supabase/migrations/20261126121627_escala_preserved_weekday_schedule.sql'));}catch(e){throw Error(`${e.message}; ${e.where||''}; posição ${e.position}`);}
  await as();
 });
 after(()=>db.close());
@@ -179,4 +179,22 @@ describe('composição mensal das equipes com integrantes sorteados',()=>{
   assert.equal(after.memberships.filter(x=>x.draw_month===m).length,21);assert.equal(after.memberships.find(x=>x.draw_month===m&&x.staff_id===moved).team_id,target.team_id);
  });
 
+});
+
+test('equipes preservadas têm jornada fixa validada no servidor sem permitir forjar flags de proteção',async()=>{
+ const U='Unidade fictícia de jornada fixa',month='2027-02-01';await db.exec('reset role');await q('insert into units values($1,true)',[U]);await q('insert into user_units values($1,$2)',[ids.admin,U]);await as();
+ const command=(action,payload={},id=null,revision=0,request=randomUUID())=>rpc('escala_command',[U,action,id,revision,JSON.stringify(payload),request],['','','::uuid','','::jsonb','::uuid']);const state=()=>rpc('escala_state',[U,month],['','::date']);
+ await command('SETUP',{teams:10,trucks:9});for(let n=0;n<30;n++)await save(personPayload({name:'Equipe fixa fictícia '+String(n).padStart(2,'0'),job:n%3?'Ajudante':'Motorista',units:[U]}),null,0,U);
+ let s=await state();for(const t of s.trucks)await command('TRUCK_SAVE',{status:'AVAILABLE',plate:'QWE1D'+String(s.trucks.indexOf(t)+1).padStart(2,'0')},t.id,t.revision);
+ await command('RULES_SAVE',{collective_reference:'Regime de teste',reviewed_on:'2026-11-26'},s.rules.id,s.rules.revision);
+ const drivers=s.staff.filter(p=>p.job==='Motorista'),helpers=s.staff.filter(p=>p.job==='Ajudante');for(let n=0;n<2;n++)for(const p of [drivers[n],helpers[n*2],helpers[n*2+1]])await command('MEMBERSHIP_SAVE',{team_id:s.teams[n].id,staff_id:p.id,starts_on:'2026-01-01'});
+ await command('TEAM_SAVE',{draw_enabled:false},s.teams[0].id,s.teams[0].revision);s=await state();const crew=drawCrew(s,month,'fixed-policy');await rpc('escala_save_composition',[U,month,s.composition_token,'fixed-policy',JSON.stringify(crew.assignments),0,'Entrega',randomUUID()],['','::date','','','::jsonb','','','::uuid']);s=await state();const generated=generateMonth(s,month,'fixed-policy-days');assert.deepEqual(generated.issues,[]);
+ const request=randomUUID(),saved=await command('MONTH_SAVE',generated.plan,null,0,request);assert.deepEqual(await command('MONTH_SAVE',generated.plan,null,0,request),saved);
+ for(const day of saved.days){const dow=new Date(day.date+'T12:00:00Z').getUTCDay();for(const team of s.teams.slice(0,2))assert.equal(day.duties.find(a=>a.team_id===team.id).mode,[0,6].includes(dow)?'REST':'ROUTE');assert.equal(day.duties.filter(a=>a.mode==='ROUTE').length,dow===0?0:dow===6?5:9);}
+ let forged=structuredClone(saved);forged.days[0].duties.find(a=>a.team_id===s.teams[0].id).mode='REST';await assert.rejects(()=>command('MONTH_SAVE',forged,saved.id,saved.revision),/ESCALA_FIXED_TEAM_SCHEDULE/);
+ forged=structuredClone(saved);const saturday=forged.days.find(d=>new Date(d.date+'T12:00:00Z').getUTCDay()===6);saturday.locked=true;Object.assign(saturday.duties.find(a=>a.team_id===s.teams[0].id),{mode:'ROUTE',completed:true});await assert.rejects(()=>command('MONTH_SAVE',forged,saved.id,saved.revision),/ESCALA_FIXED_TEAM_SCHEDULE/);
+ const sat=saved.days.find(d=>new Date(d.date+'T12:00:00Z').getUTCDay()===6),fixed= s.teams[0].id;
+ await db.exec('reset role');await q("update escala_duties a set mode='ROUTE' from escala_days d where a.day_id=d.id and a.unit=$1 and a.team_id=$2 and d.date=$3::date",[U,fixed,sat.date]);await as();await assert.rejects(()=>command('APPROVE',{month},saved.id,saved.revision),/ESCALA_APPROVAL_CONFLICT/);
+ await db.exec('reset role');await q("update escala_duties a set mode='REST',truck_id=null from escala_days d where a.day_id=d.id and a.unit=$1 and a.team_id=$2 and d.date=$3::date",[U,fixed,sat.date]);await as();assert.equal((await command('APPROVE',{month},saved.id,saved.revision)).status,'APPROVED');
+ await as(ids.branch);await assert.rejects(()=>command('MONTH_SAVE',generated.plan),/FORBIDDEN/);await as();assert.equal((await q("select has_function_privilege('authenticated','escala_private.preserved_schedule_issues(text,date,jsonb)','EXECUTE') allowed"))[0].allowed,false);
 });
