@@ -39,6 +39,8 @@ test('Forms uses its compiled React entry, shares the session and remains in the
   assert.ok(!/createClient|signInWithPassword|localStorage.*token/.test(main));
   const h = formsThemeHarness();
   assert.equal(h.engine, 'react-typescript');
+  assert.equal(h.globalApi.roleCatalog.length, 25, 'IIFE global exports must retain the shared role catalog in real browsers');
+  assert.ok(h.globalApi.roleCatalog.some(role=>role.code==='EMPILHADOR'));
   h.destroy();
 });
 
@@ -374,5 +376,65 @@ test('an answer-save conflict keeps the local response available for recovery', 
   assert.equal(h.get('[data-fm-answer="text"]').value, 'Resposta preservada');
   assert.match(h.messages.at(-1)[0], /alterado em outra tela/);
   assert.equal(JSON.parse(h.memory.get('disb_forms_response_v1_admin_draft')).answers.text.value, 'Resposta preservada');
+  h.destroy();
+});
+
+test('DTO builder preserves additional departments and updates the primary department before saving', async () => {
+  const model=copy(definition);model.schema.evaluation.areas=['Entrega','Armazém'];
+  const h=editable({db:{form_definitions:[model]},people:[person,{...person,id:'warehouse',name:'Equipe do armazém',area:'Armazém'},{...person,id:'operations',name:'Equipe de operações',area:'Operações'}]});
+  await h.enter('forms-manage');await clickAction(h,'edit','[data-id="theme-form"]');
+  assert.equal(h.get('[data-fm-evaluation-area][value="Armazém"]').checked,true);
+  await h.change('[data-fm-evaluation="area"]','Operações');
+  await clickAction(h,'publish');
+  const saved=h.writes.find(call=>call.name==='save_form_definition');
+  assert.equal(saved.args.p_payload.schema.evaluation.area,'Operações');
+  assert.deepEqual([...saved.args.p_payload.schema.evaluation.areas].sort(),['Armazém','Operações']);
+  h.destroy();
+});
+
+test('imported DTO detail shows the corrected profile name, original provenance and estimated date without inventing a time or duration', async () => {
+  const row=copy(responses.find(item=>item.id==='good'));
+  row.source_kind='DTO_XLSX';row.source_metadata={workbook:'DTO - exemplo.xlsx',sheet:'Tráfego',row:34,has_time:false,original_name:'Nome original',original_role:'Motorista',estimated_date:{intervalDays:61},warnings:['Resposta não classificada: MA']};
+  const h=formsThemeHarness({db:{form_responses:[row]},people:[{...person,name:'Nome corrigido'}]});
+  await h.enter('forms-report');await clickAction(h,'report-tab','[data-id="applications"]');await clickAction(h,'detail','[data-id="good"]');
+  const body=h.get('#modalBody').textContent;
+  for(const text of ['Nome corrigido','Nome original','DTO - exemplo.xlsx','Linha 34','Data estimada','61 dias','Não informado','Resposta não classificada: MA']) assert.ok(body.includes(text),text);
+  assert.doesNotMatch(body,/12:00:00|12:10:00/);
+  h.destroy();
+});
+
+test('DTO answer labels use OK and NOK while existing forms keep Sim and Não', async () => {
+  const row=draft();for(const field of row.schema_snapshot.sections[0].fields.filter(item=>item.type==='BOOLEAN')) Object.assign(field,{positive_label:'OK',negative_label:'NOK'});
+  const h=editable({db:{form_responses:[row]}});
+  await h.enter('forms-fill');await clickAction(h,'resume','[data-id="draft"]');
+  assert.equal(h.get('[data-fm-action="answer"][data-value="YES"][data-id="q0"]').textContent,'OK');
+  assert.equal(h.get('[data-fm-action="answer"][data-value="NO"][data-id="q0"]').textContent,'NOK');
+  await clickAction(h,'answer','[data-id="q0"][data-value="YES"]');
+  await clickAction(h,'save-response');
+  assert.equal(h.writes.find(call=>call.name==='save_form_response').args.p_answers.__evaluations.worker.q0.value,'YES');
+  h.destroy();
+});
+
+test('report period shortcuts expose older DTOs across paginated reads and preserve the selected form', async () => {
+  const row=copy(responses.find(item=>item.id==='good'));
+  const oldForm={...copy(definition),id:'old-form',name:'DTO de meses anteriores'};
+  const oldRows=Array.from({length:301},(_,index)=>({...copy(row),id:'old-'+index,code:'DTO-'+index,form_id:oldForm.id,form_name:oldForm.name,started_at:'2026-02-10T12:00:00Z'}));
+  oldRows[0].started_at='2024-01-16T12:00:00Z';
+  const h=formsThemeHarness({db:{form_definitions:[definition,oldForm],form_responses:[row,...oldRows]}});
+  await h.enter('forms-report');
+  assert.equal(h.document.querySelector('[data-fm-action="report-form"][data-id="old-form"]'),null);
+  await clickAction(h,'report-period','[data-id="year"]');
+  assert.equal(h.get('[data-fm-filter="from"]').value,'2026-01-01');
+  assert.match(h.get('#view-forms-report').textContent,/DTO de meses anteriores/);
+  await clickAction(h,'report-period','[data-id="all"]');
+  assert.equal(h.get('[data-fm-filter="from"]').value,'1900-01-01');
+  assert.match(h.get('#view-forms-report').textContent,/todo o histórico/);
+  await h.change('[data-fm-filter="form"]','old-form');await clickAction(h,'filter');
+  await clickAction(h,'export-csv');
+  const exported=await h.downloads.at(-1).blob.text();
+  assert.ok(exported.includes('DTO-0'));assert.ok(exported.includes('DTO-300'));assert.ok(!exported.includes('FORM-good'));
+  await clickAction(h,'report-period','[data-id="month"]');
+  assert.equal(h.get('[data-fm-filter="from"]').value,'2026-11-01');
+  assert.equal(h.get('[data-fm-filter="form"]').value,'old-form');
   h.destroy();
 });

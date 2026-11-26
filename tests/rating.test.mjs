@@ -78,8 +78,9 @@ test('registra a tela Rating no menu e carrega o módulo antes do app principal'
   const {document}=parseHTML(html);
   assert.ok(document.querySelector('.nav-item[data-view="rating-clients"]'));
   assert.ok(document.querySelector('#view-rating-clients[data-permission-any*="RATING_VIEW"]'));
-  const scripts=[...document.querySelectorAll('script[src]')].map(script=>script.getAttribute('src'));
-  assert.ok(scripts.indexOf('src/ratings/rating.js?v=1.7.114-rating-fix')<scripts.indexOf('app.js?v=1.7.114-rating'));
+  const scripts=[...document.querySelectorAll('script[src]')].map(script=>script.getAttribute('src').split('?')[0]);
+  assert.ok(scripts.indexOf('src/ratings/rating.js')>=0);
+  assert.ok(scripts.indexOf('src/ratings/rating.js')<scripts.indexOf('app.js'));
 });
 
 test('exibe orientação quando a função não pode ser alcançada',async()=>{

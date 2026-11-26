@@ -1,4 +1,5 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.117.3';
+import userRoles from '../_shared/user-roles.json' with { type: 'json' };
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -341,7 +342,7 @@ Deno.serve(async (req: Request) => {
     const active = body.active !== false;
     const password = String(body.password || '');
     const domain = Deno.env.get('USER_EMAIL_DOMAIN') || 'disbecol.app';
-    const allowedRoles = ['ADMIN', 'COLABORADOR_ARMAZEM', 'COLABORADOR_ENTREGA', 'CONFERENTE', 'MOTORISTA_PUXADOR', 'VENDEDOR', 'GERENTE_VENDAS'];
+    const allowedRoles = userRoles.map(entry => entry.code);
 
     if (!allowedRoles.includes(role)) return json({ ok: false, error: 'PERFIL_INVALIDO' });
     if (!username || !name) return json({ ok: false, error: 'DADOS_OBRIGATORIOS' });

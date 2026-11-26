@@ -13,6 +13,8 @@ const ROLE_LABELS = {
   VENDEDOR:'Vendedor',
   GERENTE_VENDAS:'Gerente de Vendas'
 };
+const userRoleCatalog = window.DISB_FORMS_UI?.roleCatalog || [];
+for (const role of userRoleCatalog) ROLE_LABELS[role.code] = role.label;
 
 const PERMISSION_CATALOG = [
   ['Pedidos','ORDERS_CREATE','Nova solicitação'],['Pedidos','ORDERS_OWN','Minhas solicitações'],['Pedidos','ORDERS_REVIEW','Analisar solicitações'],['Pedidos','ORDERS_VIEW_ALL','Consultar todas'],['Pedidos','ORDERS_MANAGE','Gerenciar análises'],['Pedidos','ORDERS_DASHBOARD','Dashboard gerencial'],['Pedidos','ORDERS_AUDIT','Auditoria'],['Pedidos','ORDERS_CONFIG','Configurar regras'],
@@ -29,8 +31,10 @@ const PERMISSION_CATALOG = [
   ['Validade do Estoque','SALES_STOCK_VALIDITY_VIEW','Consultar validades'],['Validade do Estoque','SALES_STOCK_VALIDITY_IMPORT','Importar arquivo'],
   ['Escalonada Digital','SALES_PRICING_VIEW','Consultar preços'],
   ['Rating de Clientes','RATING_VIEW','Consultar avaliações'],['Rating de Clientes','RATING_EDIT','Editar tratativas'],
+  ['Escala','ESCALA_VIEW','Consultar calendário e relatórios'],['Escala','ESCALA_MANAGE','Organizar equipes e escala'],['Escala','ESCALA_APPROVE','Aprovar escala'],['Escala','ESCALA_CONFIG','Configurar capacidade, feriados e regras'],
   ['Formulários','FORMS_SELF_VIEW','Consultar minhas avaliações'],['Formulários','FORMS_FILL','Preencher formulários'],['Formulários','FORMS_REPORT','Acompanhamento e planos de ação'],['Formulários','FORMS_MANAGE','Criar formulários e agendamentos'],
   ['Puxada','PULL_PLAN','Cadastrar viagens'],['Puxada','PULL_TRIP','Viagem'],['Puxada','PULL_FAROL','Farol de andamento'],['Puxada','PULL_HISTORY','Histórico'],['Puxada','PULL_DASHBOARD','Dashboards'],['Puxada','PULL_GOALS','Metas'],['Puxada','PULL_CONFIG','Configurações'],['Puxada','PULL_TMA_ADJUST','Ajustar TMA'],
+  ['Administração','STAFF_DIRECTORY_VIEW','Consultar Cadastro de Equipes'],['Administração','STAFF_DIRECTORY_MANAGE','Gerenciar Cadastro de Equipes'],
   ['Administração','ADMIN_USERS','Usuários e permissões'],['Administração','ADMIN_BASES','Bases / importação']
 ].map(([module,code,name],sort)=>({module,code,name,sort}));
 
@@ -48,6 +52,7 @@ const MODULE_CATALOG = [
   {name:'Avarias de Vendas',icon:'!',description:'Solicitações, acompanhamento e gestão das avarias de vendas.'},
   {name:'Validade do Estoque',icon:'◷',description:'Consulta e importação das validades por unidade.'},
   {name:'Escalonada Digital',icon:'R$',description:'Consulta dos preços TTC e TTV por segmento na planilha.'},
+  {name:'Escala',icon:'▦',description:'Planejamento 5x2, equipes, caminhões, feriados e histórico de folgas.'},
   {name:'Formulários',icon:'▤',description:'Formulários personalizados, agendamentos e acompanhamento por unidade.'},
   {name:'Puxada',icon:'↗',description:'Viagens, farol, histórico, dashboards e configuração.'}
 ];
@@ -63,6 +68,7 @@ const ROLE_PERMISSION_DEFAULTS = {
 };
 for(const role of ['VENDEDOR','GERENTE_VENDAS'])ROLE_PERMISSION_DEFAULTS[role].push('ORDERS_CREATE','ORDERS_OWN');
 ROLE_PERMISSION_DEFAULTS.GERENTE_VENDAS.push('ORDERS_VIEW_ALL','ORDERS_DASHBOARD');
+for (const role of userRoleCatalog) if (!ROLE_PERMISSION_DEFAULTS[role.code]) ROLE_PERMISSION_DEFAULTS[role.code] = [...(ROLE_PERMISSION_DEFAULTS[role.baseRole] || [])];
 Object.values(ROLE_PERMISSION_DEFAULTS).forEach(codes=>{for(const code of ['FORMS_FILL','FORMS_REPORT','FORMS_SELF_VIEW'])if(!codes.includes(code))codes.push(code);});
 const VALUE_TYPES = window.DISB_CONFERENCE?.types || [
   {key:'g300',label:'Garrafeiras de 300ml',unitsPerCrate:23,value:69.5,bottleValue:1.5},
@@ -204,6 +210,15 @@ const viewMeta = {
   'sales-stock-validity':['Consulta de validades','Vencimento dos produtos da unidade'],
   'sales-pricing':['Escalonada Digital','Preços TTC e TTV por segmento'],
   'rating-clients':['Rating de Clientes','Avaliações e tratativas dos clientes'],
+  'escala-calendar':['Escala · Calendário','Equipes e folgas por unidade'],
+  'escala-teams':['Escala · Equipes','Equipes e folgas por unidade'],
+  'escala-staff':['Escala · Funcionários','Equipes e folgas por unidade'],
+  'escala-trucks':['Escala · Caminhões','Equipes e folgas por unidade'],
+  'escala-holidays':['Escala · Feriados','Equipes e folgas por unidade'],
+  'escala-reports':['Escala · Relatórios','Equipes e folgas por unidade'],
+  'staff-directory':['Cadastro de Equipes','Pessoas, funções e áreas'],
+  'escala-history':['Escala · Histórico','Equipes e folgas por unidade'],
+  'escala-settings':['Escala · Configurações','Equipes e folgas por unidade'],
   'forms-manage':['Criar formulários','Modelos, seções, perguntas e permissões'],
   'forms-fill':['Formulários','Aplicar, continuar e consultar suas aplicações'],
   'forms-self':['Minhas avaliações','Meus resultados e evolução por pergunta'],
@@ -252,7 +267,7 @@ async function prepareRuntimeCache(){
     try{if('caches' in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}}catch(e){console.warn('Cache clear',e);}
     return;
   }
-  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.7.114-modules',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
+  try{const reg=await navigator.serviceWorker.register('sw.js?v=1.8.1-modules',{updateViaCache:'none'});await reg.update();}catch(e){console.warn('SW register',e);}
 }
 
 
@@ -794,7 +809,7 @@ function bindBaseEvents(){
   $('btnCloseUserEditor')?.addEventListener('click',()=>{$('userEditor').open=false;$('btnUserEditorOpen').focus();});
   $('btnLimparUsuario').addEventListener('click',clearUserForm);
   $('tbodyUsuarios').addEventListener('click',onUserTableClick);
-  $('usuarioPerfil')?.addEventListener('change',()=>renderUserPermissionEditor(null,true));
+  $('usuarioPerfil')?.addEventListener('change',()=>{if($('usuarioArea')&&!$('usuarioArea').value)$('usuarioArea').value=userRoleCatalog.find(role=>role.code===$('usuarioPerfil').value)?.area||'';renderUserPermissionEditor(null,true);});
   $('btnRestaurarPermissoes')?.addEventListener('click',()=>renderUserPermissionEditor(null,true));
   $('btnImportarBase').addEventListener('click',importBaseCsv);
   $('importFile').addEventListener('change',previewCustomerImport);
@@ -1027,6 +1042,7 @@ function moduleNameForPermission(code){
   if(code.startsWith('SALES_STOCK_VALIDITY_'))return 'Validade do Estoque';
   if(code.startsWith('SALES_PRICING_'))return 'Escalonada Digital';
   if(code.startsWith('RATING_'))return 'Rating de Clientes';
+  if(code.startsWith('ESCALA_'))return 'Escala';
   if(code.startsWith('FORMS_'))return 'Formulários';
   if(code.startsWith('PULL_'))return 'Puxada';
   return '';
@@ -1092,6 +1108,8 @@ async function logout(){
   if(submitAvaria._pending)return toast('Aguarde o registro da avaria ser salvo no aparelho.','');
   window.DISB_PULL_INTEGRATION?.suspend();
   clearAvariaRequest();
+  escalaModule?.stop();
+  staffDirectoryModule?.stop();
   formsModule?.stop();
   returnsModule?.stop();
   ordersModule?.stop();
@@ -1368,6 +1386,7 @@ function openView(name,force=false){
   if(name==='home'&&isPullDriver())name='puxada-viagem';
   name=window.DISB_PULL_INTEGRATION?.redirect(name)||name;
   const v=$(`view-${name}`); if(!v||v.classList.contains('hidden'))return;
+  if(activeView==='staff-directory'&&activeView!==name&&!staffDirectoryModule?.canChangeUnit())return;
   if(activeView.startsWith('returns-')&&activeView!==name&&!returnsModule.canLeave())return;
   if(activeView.startsWith('orders-')&&activeView!==name&&!ordersModule.canLeave())return;
   if(activeView==='avaria-dashboard'&&activeView!==name)deliveryDamageDashboard?.leave();
@@ -1395,6 +1414,8 @@ function openView(name,force=false){
   if(name==='sales-stock-validity')loadStockValidity(true);
   if(name==='sales-pricing')loadSalesPricing(true);
   if(name==='rating-clients')ratingModule?.enter();
+  if(name==='staff-directory')void staffDirectoryModule?.enter();else staffDirectoryModule?.stop();
+  if(name.startsWith('escala-'))void escalaModule?.enter(name);else escalaModule?.stop();
   if(name.startsWith('forms-'))void formsModule?.enter(name);
   if(name.startsWith('returns-'))void returnsModule?.enter(name);
   if(name.startsWith('orders-'))void ordersModule?.enter(name);
@@ -2888,7 +2909,7 @@ async function loadUsers(){
   if(!hasPerm('ADMIN_USERS'))return;
   try{
     const [u,pms,rp,up]=await Promise.all([
-      sb.from('profiles').select('*').order('name'),
+      sb.from('profiles').select('*').is('access_archived_at',null).order('name'),
       sb.from('permissions').select('*').eq('active',true).order('module').order('sort_order'),
       sb.from('role_permissions').select('*'),
       sb.from('user_permissions').select('*')
@@ -2902,7 +2923,7 @@ async function loadUsers(){
 function permissionLabel(code){const x=(permissionRows.length?permissionRows:PERMISSION_CATALOG).find(p=>p.code===code);return x?.name||code;}
 function renderUsers(){
   const body=$('tbodyUsuarios');if(!body)return;
-  body.innerHTML=users.length?users.map(u=>{const enabled=effectiveUserPermissions(u),custom=userPermissionOverrides(u.id).length;return `<tr><td>${esc(u.username)}</td><td>${esc(u.name)}${u.evaluation_area?`<small>Área: ${esc(u.evaluation_area)}</small>`:''}</td><td>${esc(ROLE_LABELS[u.role]||u.role)}</td><td><strong>${enabled.size} habilitada${enabled.size===1?'':'s'}</strong><small>${u.role==='ADMIN'?'Acesso total':custom?`${custom} exceção(ões) individual(is)`:'Padrão do cargo'}</small></td><td>${u.active?'<span class="status ok">Ativo</span>':'<span class="status bad">Inativo</span>'}</td><td><button class="mini-btn" data-user="${esc(u.username)}">Editar</button></td></tr>`;}).join(''):'<tr><td colspan="6">Nenhum usuário cadastrado.</td></tr>';
+  body.innerHTML=users.length?users.map(u=>{const enabled=effectiveUserPermissions(u),custom=userPermissionOverrides(u.id).length;return `<tr><td>${esc(u.username)}</td><td>${esc(u.name)}</td><td>${esc(ROLE_LABELS[u.role]||u.role)}</td><td><strong>${enabled.size} habilitada${enabled.size===1?'':'s'}</strong><small>${u.role==='ADMIN'?'Acesso total':custom?`${custom} exceção(ões) individual(is)`:'Padrão do cargo'}</small></td><td>${u.active?'<span class="status ok">Ativo</span>':'<span class="status bad">Inativo</span>'}</td><td><button class="mini-btn" data-user="${esc(u.username)}">Editar</button></td></tr>`;}).join(''):'<tr><td colspan="6">Nenhum usuário cadastrado.</td></tr>';
 }
 function renderUserPermissionEditor(user=null,restoreRole=false){
 
@@ -8421,6 +8442,8 @@ function resetUnitScopedState(){
 async function changeActiveUnit(next){
   next=String(next||'').trim();if(!myUnits.includes(next)||next===activeUnit)return;
   if(submitAvaria._pending){renderActiveUnitSelector();return toast('Aguarde o registro da avaria ser salvo no aparelho.','');}
+  if(staffDirectoryModule&&!staffDirectoryModule.canChangeUnit()){renderActiveUnitSelector();return;}
+  if(escalaModule&&!escalaModule.canChangeUnit()){renderActiveUnitSelector();return;}
   if(formsModule&&!formsModule.canChangeUnit()){renderActiveUnitSelector();return;}
   if(returnsModule&&!returnsModule.canChangeUnit()){renderActiveUnitSelector();return;}
   if(ordersModule&&!ordersModule.canChangeUnit()){renderActiveUnitSelector();return;}
@@ -8429,6 +8452,8 @@ async function changeActiveUnit(next){
   ordersModule?.stop();
   deliveryDamageDashboard?.stop();
   fdrModule?.stop();
+  escalaModule?.stop();
+  staffDirectoryModule?.stop();
   formsModule?.stop();
   window.DISB_PULL_INTEGRATION?.suspend();
   activeUnit=next;try{localStorage.setItem(unitAccessKey(),activeUnit);}catch(_e){}
@@ -8467,7 +8492,7 @@ loadUsers=async function(){
   if(!hasPerm('ADMIN_USERS'))return;
   try{
     const [u,pms,rp,up,uu,audit]=await Promise.all([
-      sb.from('profiles').select('*').order('name'),
+      sb.from('profiles').select('*').is('access_archived_at',null).order('name'),
       sb.from('permissions').select('*').eq('active',true).order('module').order('sort_order'),
       sb.from('role_permissions').select('*'),
       sb.from('user_permissions').select('*'),
@@ -8528,10 +8553,7 @@ saveUser=async function(e){
       throw new Error(detail||adminUserErrorText(error)||'Falha ao chamar a função admin-users.');
     }
     if(data?.ok===false)throw new Error(adminUserErrorText(data?.error??data)||'Falha ao salvar usuário.');
-    const savedUserId=data?.id;
-    if(!savedUserId)throw Error('O usuário foi salvo, mas não retornou identificação para atualizar a área. Atualize a lista e edite novamente.');
-    const areaResult=await sb.rpc('admin_set_form_staff_area',{p_user_id:savedUserId,p_area:$('usuarioArea')?.value||''});
-    if(areaResult.error)throw Error('Usuário salvo. Não foi possível salvar a área: '+areaResult.error.message);
+
     toast(data?.repaired?'Usuário recuperado e salvo com sucesso.':'Usuário, permissões e unidades salvos.','success');
     clearUserForm();
     await loadUsers();
@@ -12870,6 +12892,19 @@ const returnsModule=window.DISB_RETURNS_UI?.create({
 const fdrModule=window.DISB_FDR_UI?.create({
   context:()=>({client:sb,user:authUser,profile,unit:activeUnit,units:[...myUnits]}),
   hasPermission:hasPerm,toast
+});
+const staffDirectoryModule=window.DISB_FORMS_UI?.createStaffDirectory?.({context:()=>({client:sb,user:authUser,profile,unit:activeUnit,units:[...myUnits]}),hasPermission:hasPerm,openView,toast,download:()=>{}});
+const escalaModule=window.DISB_FORMS_UI?.createEscala?.({
+ context:()=>({client:sb,user:authUser,profile,unit:activeUnit,units:[...myUnits]}),hasPermission:hasPerm,openView,toast,
+ download:async(name,blob)=>{
+  if(isNativeCapacitor()){
+   const cap=window.Capacitor,files=cap.Plugins?.Filesystem||cap.registerPlugin?.('Filesystem'),share=cap.Plugins?.Share||cap.registerPlugin?.('Share');
+   if(!files||!share)throw new Error('Atualize o APK para compartilhar os relatórios.');
+   const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||'').split(',')[1]||'');reader.onerror=()=>reject(new Error('Não foi possível preparar o relatório.'));reader.readAsDataURL(blob);});
+   const saved=await files.writeFile({path:name,data,directory:'CACHE'});await share.share({title:'Relatório de escala',url:saved.uri,dialogTitle:'Salvar ou compartilhar relatório'});return;
+  }
+  const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+ }
 });
 const formsModule=window.DISB_FORMS_UI?.create({
   context:()=>({client:sb,user:authUser,profile,unit:activeUnit,units:[...myUnits],roles:ROLE_LABELS}),

@@ -41,6 +41,8 @@
     }
     if(count>300)throw Error('O formulário pode ter até 300 perguntas.');
     if(schema.evaluation?.enabled&&(!clean(schema.evaluation.area)||clean(schema.evaluation.area).length>100))throw Error('Selecione a área que será avaliada.');
+    const areas=schema.evaluation?.areas;
+    if(areas!==undefined&&(!Array.isArray(areas)||areas.length<1||areas.length>20||areas.some(area=>typeof area!=='string'||!clean(area)||clean(area).length>100)||new Set(areas.map(key)).size!==areas.length))throw Error('Selecione entre 1 e 20 áreas diferentes para a avaliação.');
     return schema;
   }
   function outcome(field,answer){
@@ -88,7 +90,7 @@
     const value=answer?.value;
     if(empty(value))return '—';
     if(field.type==='PHOTO')return `${(answer?.photos||value||[]).length} foto(s)`;
-    if(field.type==='BOOLEAN')return {YES:'Sim',NO:'Não',NA:'Não se aplica'}[value]||'—';
+    if(field.type==='BOOLEAN')return {YES:clean(field.positive_label)||'Sim',NO:clean(field.negative_label)||'Não',NA:'Não se aplica'}[value]||'—';
     if(field.type==='DATE')return value.split('-').reverse().join('/');
     if(Array.isArray(value))return value.join(', ');
     return String(value);
@@ -122,6 +124,11 @@
     const planMap=new Map(plans.map(p=>[p.response_id+':'+p.field_id,p]));
     const rows=[['Registro','Formulário','Versão','Unidade','Aplicador','Início','Finalização','Status','Conformidade (%)','Seção','Pergunta','Resposta','Resultado','Observação','Plano inicial','Observações da seção','Plano de ação atual','Responsável pelo plano','Prazo do plano','Situação do plano','Conclusão do plano','Pessoa avaliada','Área avaliada','Alcance da resposta','Fotos privadas']];
     for(const r of assessmentRows(responses)){const s=score(r.schema_snapshot,r.answers);for(const f of fields(r.schema_snapshot)){const plan=planMap.get(r.id+':'+planField(f,r.evaluated_user_id));rows.push([r.code,r.form_name,r.form_version,r.unit,r.respondent_name,r.started_at,r.completed_at,r.status,s.percent,f.section_title,f.label,answerText(f,r.answers?.[f.id]),outcome(f,r.answers?.[f.id])||'',r.answers?.[f.id]?.observation||'',r.answers?.[f.id]?.plan||'',r.answers?.__sections?.[f.section_id]||'',plan?.description||'',plan?.responsible_name||'',plan?.due_date||'',plan?.status||'',plan?.completion_note||'',r.evaluated_name||'',r.evaluated_area||'',f.scope==='INDIVIDUAL'?'Individual':'Grupo',(r.answers?.[f.id]?.photos||[]).join(' | ')]);}}
+    if(responses.some(r=>r.source_kind==='DTO_XLSX')){
+      rows[0].push('Origem','Aba de origem','Linha de origem','Data estimada','Nome original na planilha');
+      const byCode=new Map(responses.map(r=>[r.code,r]));
+      for(const row of rows.slice(1)){const r=byCode.get(row[0]),source=r?.source_metadata;row.push(r?.source_kind==='DTO_XLSX'?'Histórico DTO':'Sistema',source?.sheet||'',source?.row||'',source?.estimated_date?'Sim':'Não',source?.original_name||'');}
+    }
     return rows;
   }
   // XLSX sem dependências externas. Células são texto, nunca fórmulas executáveis.

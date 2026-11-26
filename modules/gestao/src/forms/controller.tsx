@@ -36,6 +36,7 @@ import {
 } from "./dom";
 import { jsonClone, readBuilderDraft, readResponseDraft } from "./drafts";
 import { oneOf, updateBuilder, updateQuestion } from "./edits";
+import { areaKey, evaluationAreas } from "./roles";
 import { renderContent } from "../shared/react-host";
 import {
   rowKey,
@@ -78,6 +79,8 @@ const fmt = (v: string | null | undefined) =>
     : "—";
 const day = (v: string | null | undefined) =>
   v ? String(v).slice(0, 10).split("-").reverse().join("/") : "—";
+const responseDate = (row: FormReadRow, value: string | null | undefined) =>
+  row.source_kind === "DTO_XLSX" && row.source_metadata?.has_time === false ? day(value) : fmt(value);
 const pct = (v: number | null | undefined) =>
   v == null
     ? "Sem avaliação"
@@ -139,6 +142,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
     notify = (s: string, t = "success") => adapter.toast(s, t);
   let definitions: FormDefinition[] = [],
     people: FormPerson[] = [],
+    staffPeople: FormPerson[] = [],
     responses: FormResponse[] = [],
     assignments: FormAssignment[] = [],
     plans: ActionPlan[] = [],
@@ -237,6 +241,20 @@ function create(adapter: ReactFormsAdapter): FormsModule {
       localStorage.setItem(builderKey(), JSON.stringify(builder));
     } catch (_e) {}
   }
+  function historicalNames<Row extends FormReadRow>(row: Row): Row {
+    const nameFor = (id: string) => staffPeople.find(person => person.id === id)?.name;
+    return {...row, evaluated_people: row.evaluated_people?.map(person => ({...person,name:nameFor(person.id)||person.name})),
+      ...(row.evaluated_user_id ? {evaluated_name:nameFor(row.evaluated_user_id)||row.evaluated_name} : {})};
+  }
+  function historicalSource(row: FormReadRow) {
+    if (row.source_kind !== 'DTO_XLSX') return null;
+    const source=row.source_metadata;
+    return <div className="notice"><strong>Histórico importado</strong><p>{source?.workbook}{' · Aba '}{source?.sheet}{' · Linha '}{source?.row}</p>
+      {source?.original_name ? <p>{'Nome na planilha: '}{source.original_name}{source.original_role ? ' · Função na planilha: '+source.original_role : ''}</p> : null}
+      {source?.estimated_date ? <p>{badge('Data estimada','warn')}{' Intervalo médio de '}{source.estimated_date.intervalDays}{' dias entre as aplicações anteriores.'}</p> : null}
+      {source?.warnings?.length ? <p>{source.warnings.join(' ')}</p> : null}
+    </div>;
+  }
   function paintNav() {
     const nav = $("formsDynamicNav");
     if (nav) renderContent(nav, "");
@@ -256,8 +274,8 @@ function create(adapter: ReactFormsAdapter): FormsModule {
   }
   async function loadPeople() {
     const key = currentKey(),
-      data = await rpc("forms_people_with_areas", {});
-    if (key === currentKey()) people = data || [];
+      [accounts, staff] = await Promise.all([rpc("forms_people_with_areas", {}),rpc("forms_staff_people", {})]);
+    if (key === currentKey()) {people = accounts || [];staffPeople = staff || [];}
   }
   async function start() {
     if (identity !== currentKey()) {
@@ -287,6 +305,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
     clearInterval(clock);
     definitions = [];
     people = [];
+    staffPeople = [];
     responses = [];
     assignments = [];
     plans = [];
@@ -813,7 +832,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
     const model = requireBuilder();
 
     const config = model.schema.evaluation || { enabled: false, area: "" },
-      members = people.filter((p) =>
+      members = staffPeople.filter((p) =>
         p.units.some((u) => model.units.includes(u)),
       ),
       areas = [
@@ -822,7 +841,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
             ...members
               .map((p) => p.area)
               .filter((value): value is string => !!value),
-            config.area,
+            ...evaluationAreas(config),
           ].filter(Boolean),
         ),
       ].sort((a, b) => a.localeCompare(b, "pt-BR"));
@@ -834,7 +853,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
             <h2>{"Avaliação de colaboradores"}</h2>
             <p>
               {
-                "Escolha a área. As pessoas serão selecionadas a cada aplicação."
+                "Escolha as áreas. As pessoas serão selecionadas a cada aplicação."
               }
             </p>
           </div>
@@ -845,24 +864,23 @@ function create(adapter: ReactFormsAdapter): FormsModule {
             data-fm-evaluation={"enabled"}
             {...attributeProps(config.enabled ? "checked" : "")}
           ></Input>
-          {"Avaliar colaboradores de uma área"}
+          {"Avaliar colaboradores por área"}
         </label>
         {config.enabled ? (
           <>
             <div className={"fm-grid"}>
               {field(
-                "Área avaliada *",
+                "Área principal avaliada *",
                 <Select data-fm-evaluation={"area"}>
                   {options(areas, config.area, "Selecione a área")}
                 </Select>,
                 true,
               )}
             </div>
-            <p className={"fm-help"}>
-              {
-                "Ao iniciar o DTO, o sistema mostrará os colaboradores ativos dessa área na unidade escolhida. O aplicador selecionará quem participa daquela avaliação."
-              }
-            </p>
+            <fieldset className="fm-choice-list"><legend>Outras áreas que participam desta avaliação</legend>
+              {areas.filter(area=>areaKey(area)!==areaKey(config.area)).map(area=><label key={area}><Input type="checkbox" value={area} data-fm-evaluation-area="" checked={evaluationAreas(config).some(value=>areaKey(value)===areaKey(area))}/><span>{area}</span></label>)}
+            </fieldset>
+            <p className="fm-help">Ao iniciar o DTO, o sistema mostrará os colaboradores ativos das áreas selecionadas, somente na unidade escolhida.</p>
             <p className={"fm-help"}>
               {
                 "A área de cada pessoa pode ser ajustada em Usuários e perfis. Nas perguntas, escolha se a resposta vale para o grupo ou se cada pessoa terá sua própria resposta."
@@ -1173,8 +1191,8 @@ function create(adapter: ReactFormsAdapter): FormsModule {
                 {f.help ? <p>{f.help}</p> : ""}
                 {f.type === "BOOLEAN" ? (
                   <div className={"fm-answer-buttons"}>
-                    <span className={"yes"}>{"Sim"}</span>
-                    <span className={"no"}>{"Não"}</span>
+                    <span className={"yes"}>{F.clean(f.positive_label) || "Sim"}</span>
+                    <span className={"no"}>{F.clean(f.negative_label) || "Não"}</span>
                     <span className={"na"}>{"N/A"}</span>
                   </div>
                 ) : (
@@ -1245,7 +1263,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
   async function loadOwn() {
     const key = currentKey(),
       rows = await service.ownResponses();
-    if (key === currentKey()) responses = rows;
+    if (key === currentKey()) responses = rows.map(historicalNames);
   }
   function responseRows(rows: FormReadRow[]) {
     return (
@@ -1266,6 +1284,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
               <tr key={rowKey(r, rowIndex)}>
                 <td>
                   <strong>{r.form_name}</strong>
+                  {r.source_kind === "DTO_XLSX" ? badge(r.source_metadata?.estimated_date ? "Histórico · data estimada" : "Histórico importado",r.source_metadata?.estimated_date ? "warn" : "neutral") : null}
                   <small>
                     {r.code}
                     {" · v"}
@@ -1281,9 +1300,9 @@ function create(adapter: ReactFormsAdapter): FormsModule {
                   </small>
                 </td>
                 <td>
-                  {fmt(r.started_at)}
+                  {responseDate(r, r.started_at)}
                   <small>
-                    {r.completed_at ? fmt(r.completed_at) : STATUS[r.status]}
+                    {r.completed_at ? responseDate(r, r.completed_at) : STATUS[r.status]}
                   </small>
                 </td>
                 <td>{duration(r)}</td>
@@ -1468,7 +1487,8 @@ function create(adapter: ReactFormsAdapter): FormsModule {
         ),
       );
   }
-  function duration(r: Pick<FormResponse, "started_at" | "completed_at">) {
+  function duration(r: Pick<FormReadRow, "started_at" | "completed_at" | "source_kind" | "source_metadata">) {
+    if (r.source_kind === "DTO_XLSX" && r.source_metadata?.duration_minutes == null) return "Não informado";
     const seconds = Math.max(
       0,
       Math.floor(
@@ -1499,7 +1519,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
       pendingStart = { formId, assignmentId };
       adapter.modal({
         title: "Quem será avaliado?",
-        subtitle: requireForm(formId).schema.evaluation?.area || "",
+        subtitle: evaluationAreas(requireForm(formId).schema.evaluation).join(" / "),
         html: targets.length ? (
           <>
             <p>
@@ -1520,7 +1540,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
         ) : (
           empty(
             "Nenhum colaborador disponível",
-            "Confira a área dos colaboradores em Usuários e perfis e as unidades de acesso.",
+            "Confira a área, a situação e as unidades das pessoas em Configurações → Cadastro de Equipes.",
           )
         ),
         actions: targets.length
@@ -1815,8 +1835,8 @@ function create(adapter: ReactFormsAdapter): FormsModule {
           aria-label={f.label}
         >
           {[
-            ["YES", "Sim", f.scored && f.expected === "NO" ? "no" : "yes"],
-            ["NO", "Não", f.scored && f.expected === "NO" ? "yes" : "no"],
+            ["YES", F.clean(f.positive_label) || "Sim", f.scored && f.expected === "NO" ? "no" : "yes"],
+            ["NO", F.clean(f.negative_label) || "Não", f.scored && f.expected === "NO" ? "yes" : "no"],
             ...(f.allow_na ? [["NA", "N/A", "na"]] : []),
           ].map(([value, label, kind], rowIndex) => (
             <button
@@ -2036,7 +2056,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
           <div className={"card fm-evaluated-bar"}>
             <strong>
               {"Área avaliada: "}
-              {schema.evaluation?.area}
+              {evaluationAreas(schema.evaluation).join(" / ")}
             </strong>
             <p>
               {
@@ -2340,7 +2360,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
             "Há mais de 10.000 avaliações neste ano. Solicite ao administrador uma consulta por período.",
           );
       }
-      myEvaluations = rows;
+      myEvaluations = rows.map(historicalNames);
     } finally {
       if (key === currentKey() && token === generation) {
         loading = false;
@@ -2529,10 +2549,11 @@ function create(adapter: ReactFormsAdapter): FormsModule {
         }),
       ]);
       if (key !== currentKey() || token !== generation) return;
-      responses = rows;
+      if (!people.length || rows.some(row=>row.source_kind === "DTO_XLSX")) await loadPeople();
+      if (key !== currentKey() || token !== generation) return;
+      responses = rows.map(historicalNames);
       plans = p;
       assignments = a;
-      if (!people.length) await loadPeople();
     } finally {
       if (key === currentKey() && token === generation) {
         loading = false;
@@ -2546,7 +2567,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
         (!reportFilter.area ||
           r.form_area === reportFilter.area ||
           (reportTab === "execution" &&
-            r.schema_snapshot.evaluation?.area === reportFilter.area)) &&
+            evaluationAreas(r.schema_snapshot.evaluation).some(area=>areaKey(area)===areaKey(reportFilter.area || "")))) &&
         (!reportFilter.type ||
           findForm(r.form_id)?.form_type === reportFilter.type) &&
         (!reportFilter.search ||
@@ -2612,7 +2633,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
         ),
         name =
           rowsForPerson[0]?.evaluated_name ||
-          people.find((p) => p.id === executionPerson)?.name ||
+          staffPeople.find((p) => p.id === executionPerson)?.name ||
           "Colaborador";
       renderContent(
         box,
@@ -2644,6 +2665,11 @@ function create(adapter: ReactFormsAdapter): FormsModule {
         )}
 
         <div className={"card fm-filter-card"}>
+          {!annual ? <div className="fm-tabs" aria-label="Atalhos de período">
+            {btn("report-period", "Este mês", {"data-id":"month"})}
+            {btn("report-period", "Este ano", {"data-id":"year"})}
+            {btn("report-period", "Todo o histórico", {"data-id":"all"})}
+          </div> : null}
           <div className={"fm-report-filters"}>
             {field(
               "Unidade",
@@ -2665,7 +2691,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
               reportTab === "execution" ? "Pessoa avaliada" : "Aplicador",
               <Select data-fm-filter={"person"}>
                 {options(
-                  people
+                  (reportTab === "execution" ? staffPeople : people)
                     .filter((p) => p.units.includes(ctx().unit))
                     .map((p) => ({ value: p.id, label: p.name })),
                   reportFilter.person,
@@ -2679,7 +2705,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
                   [
                     ...new Set(
                       definitions.flatMap((f) =>
-                        [f.area, f.schema.evaluation?.area].filter(
+                        [f.area, ...evaluationAreas(f.schema.evaluation)].filter(
                           (value): value is string => !!value,
                         ),
                       ),
@@ -2736,6 +2762,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
             {btn("filter", "Filtrar", {}, "primary")}
           </div>
           <p className={"fm-help"}>
+            <strong>{dates.from === '1900-01-01' ? 'Período consultado: todo o histórico até '+day(dates.to)+'. ' : 'Período consultado: '+day(dates.from)+' a '+day(dates.to)+'. '}</strong>
             {
               "Os resultados respeitam os acessos de cada formulário. As próprias aplicações também ficam disponíveis aqui."
             }
@@ -2933,16 +2960,16 @@ function create(adapter: ReactFormsAdapter): FormsModule {
     for (const f of definitions.filter(
       (f) =>
         (!reportFilter.form || f.id === reportFilter.form) &&
-        (!reportFilter.area || f.area === reportFilter.area) &&
+        (!reportFilter.area || f.area === reportFilter.area || evaluationAreas(f.schema.evaluation).some(area=>areaKey(area)===areaKey(reportFilter.area || ""))) &&
         (!reportFilter.type || f.form_type === reportFilter.type),
     )) {
       if (!f.schema.evaluation?.enabled) continue;
-      for (const p of people.filter(
+      for (const p of staffPeople.filter(
         (p) =>
           p.units.includes(ctx().unit) &&
-          F.key(p.area) === F.key(f.schema.evaluation?.area),
+          evaluationAreas(f.schema.evaluation).some(area=>areaKey(area)===areaKey(p.area || "")),
       ))
-        persons.set(p.id, { ...p, area: f.schema.evaluation?.area });
+        persons.set(p.id, p);
     }
     for (const r of assessed) {
       if (!r.evaluated_user_id || !r.evaluated_name) continue;
@@ -3057,7 +3084,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
       ),
       name =
         person?.evaluated_name ||
-        people.find((p) => p.id === id)?.name ||
+        staffPeople.find((p) => p.id === id)?.name ||
         "Colaborador",
       questions = F.questionMonths(rows, id, year);
     return (
@@ -3566,6 +3593,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
   }
   let detailResponse: FormReadRow | null = null;
   function showDetail(row: FormReadRow) {
+    row = historicalNames(row);
     detailResponse = row;
     const s = F.score(row.schema_snapshot, row.answers);
     adapter.modal({
@@ -3573,6 +3601,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
       subtitle: `${row.code} · ${row.unit} · versão ${row.form_version}`,
       html: (
         <>
+          {historicalSource(row)}
           <div className={"fm-detail-header"}>
             <div>
               <small>{"APLICADOR"}</small>
@@ -3580,11 +3609,11 @@ function create(adapter: ReactFormsAdapter): FormsModule {
             </div>
             <div>
               <small>{"INÍCIO"}</small>
-              <strong>{fmt(row.started_at)}</strong>
+              <strong>{responseDate(row, row.started_at)}</strong>
             </div>
             <div>
               <small>{"FIM"}</small>
-              <strong>{fmt(row.completed_at)}</strong>
+              <strong>{responseDate(row, row.completed_at)}</strong>
             </div>
             <div>
               <small>{"DURAÇÃO"}</small>
@@ -3859,6 +3888,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
   }
   let pdfLibPromise: Promise<unknown> | null = null;
   async function pdfReport(row: FormReadRow) {
+    row = historicalNames(row);
     if (!window.PDFLib) {
       if (!pdfLibPromise)
         pdfLibPromise = new Promise((resolve, reject) => {
@@ -3934,7 +3964,13 @@ function create(adapter: ReactFormsAdapter): FormsModule {
     line(row.form_name, { size: 18, strong: true });
     line(`${row.code} | ${row.unit} | Versão ${row.form_version}`);
     line(`Aplicador: ${row.respondent_name}`);
-    line(`Início: ${fmt(row.started_at)} | Fim: ${fmt(row.completed_at)}`);
+    line(`Início: ${responseDate(row, row.started_at)} | Fim: ${responseDate(row, row.completed_at)}`);
+    if (row.source_kind === 'DTO_XLSX') {
+      const source = row.source_metadata;
+      line(`Histórico importado | Aba: ${source?.sheet || '—'} | Linha: ${source?.row || '—'}`);
+      if (source?.estimated_date) line(`Data estimada pelo intervalo médio de ${source.estimated_date.intervalDays} dias.`);
+      for (const warning of source?.warnings || []) line(warning);
+    }
     line(`Duração: ${duration(row)} | Conformidade: ${pct(row.score)}`, {
       strong: true,
     });
@@ -4533,6 +4569,12 @@ function create(adapter: ReactFormsAdapter): FormsModule {
         scheduleFilter.status = target.value;
       return;
     }
+    if (builder && target.hasAttribute('data-fm-evaluation-area')) {
+      const config = builder.schema.evaluation;
+      if (config) config.areas = evaluationAreas({area:config.area,areas:[...document.querySelectorAll<HTMLInputElement>('[data-fm-evaluation-area]:checked')].map(input=>input.value)});
+      rememberBuilder();
+      return;
+    }
     if (builder && target.dataset.fmEvaluation) {
       builder.schema.evaluation ??= {
         enabled: false,
@@ -4541,8 +4583,11 @@ function create(adapter: ReactFormsAdapter): FormsModule {
       };
       if (target.dataset.fmEvaluation === "enabled")
         builder.schema.evaluation.enabled = checked;
-      else if (target.dataset.fmEvaluation === "area")
-        builder.schema.evaluation.area = target.value;
+      else if (target.dataset.fmEvaluation === "area") {
+        const config=builder.schema.evaluation, previous=config.area;
+        config.area=target.value;
+        config.areas=evaluationAreas({...config,areas:config.areas?.filter(area=>areaKey(area)!==areaKey(previous))});
+      }
       rememberBuilder();
       return;
     }
@@ -4639,7 +4684,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
   function onChange(event: Event) {
     const target = event.target;
     if (!isControl(target)) return;
-    if (builder && target.dataset.fmEvaluation === "enabled") {
+    if (builder && ["enabled","area"].includes(target.dataset.fmEvaluation || "")) {
       if (!builder.schema.evaluation?.enabled)
         for (const f of F.fields(builder.schema)) {
           const question = getQuestion(f.id);
@@ -4758,7 +4803,7 @@ function create(adapter: ReactFormsAdapter): FormsModule {
         throw Error("Esta aplicação pertence a outra unidade.");
       return row;
     }
-    return service.response(id);
+    return historicalNames(await service.response(id));
   }
   async function handleAction(action: string, target: HTMLElement) {
     const id = target.dataset.id || "",
@@ -5142,6 +5187,14 @@ function create(adapter: ReactFormsAdapter): FormsModule {
       case "filter":
         reportPage = 0;
         return loadReport();
+      case "report-period": {
+        if (!oneOf(id, ["month", "year", "all"] as const)) return;
+        const today=F.localDay(new Date());
+        reportFilter.from=id==='all' ? '1900-01-01' : id==='year' ? today.slice(0,4)+'-01-01' : today.slice(0,7)+'-01';
+        reportFilter.to=today;
+        reportPage=0;
+        return loadReport();
+      }
       case "report-form":
         reportFilter.form = id;
         reportTab = "applications";

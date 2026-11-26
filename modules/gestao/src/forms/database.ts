@@ -36,6 +36,7 @@ type PlanArgs = {
   };
 };
 export type FormsFunctions = {
+  forms_staff_people: { Args: Record<string, never>; Returns: FormPerson[]; };
   forms_people_with_areas: {
     Args: Record<string, never>;
     Returns: FormPerson[];

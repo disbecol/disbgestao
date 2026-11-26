@@ -14,9 +14,9 @@ export function formsThemeHarness(options={}){
   const run=()=>{let data=[...(db[table]||[])];for(const [op,key,val]of filters)data=data.filter(row=>op==='eq'?row[key]===val:op==='neq'?row[key]!==val:op==='gte'?row[key]>=val:op==='lte'?row[key]<=val:op==='lt'?row[key]<val:op==='in'?val.includes(row[key]):op==='contains'?val.every(v=>row[key]?.includes(v)):true);data=data.slice(from,to+1);return{data:single?data[0]:data,error:null};};
   q=new Proxy({}, {get(_t,key){if(key==='then')return(resolve,reject)=>Promise.resolve(run()).then(resolve,reject);return(...args)=>{if(['insert','update','upsert','delete'].includes(key))throw Error('Fixture must use the existing RPC contract.');if(['eq','neq','gte','lte','lt','in','contains'].includes(key))filters.push([key,...args]);if(key==='range')[from,to]=args;if(key==='single')single=true;return q;};}});return q;
  },async rpc(name,args){
-  const readOnly=['forms_people_with_areas','my_form_evaluations','forms_evaluation_people'].includes(name);(readOnly?reads:writes).push({name,args:structuredClone(args)});
+  const readOnly=['forms_people_with_areas','forms_staff_people','staff_directory_state','my_form_evaluations','forms_evaluation_people','escala_state','escala_audit_page','escala_audit_detail'].includes(name);(readOnly?reads:writes).push({name,args:structuredClone(args)});
   if(options.rpc){const result=await options.rpc(name,args,{db,context});if(result!==undefined)return result;}
-  if(name==='forms_people_with_areas'||name==='forms_evaluation_people')return{data:structuredClone(options.people||[person]),error:null};
+  if(name==='forms_people_with_areas'||name==='forms_staff_people'||name==='forms_evaluation_people')return{data:structuredClone(options.people||[person]),error:null};
   if(name==='my_form_evaluations')return{data:structuredClone(options.selfResults||[]),error:null};
   return{data:null,error:{message:'Read-only visual fixture.'}};
  },storage:options.storage};
@@ -30,7 +30,7 @@ export function formsThemeHarness(options={}){
   setTimeout:(fn,delay)=>{timerJobs.set(++timerId,{fn,delay});return timerId;},clearTimeout:id=>timerJobs.delete(id),setInterval:()=>1,clearInterval(){},
   localStorage:{getItem:key=>memory.get(key)||null,setItem:(key,v)=>memory.set(key,v),removeItem:key=>memory.delete(key)}});
  vm.runInContext(read(options.sourceFile||'src/gestao-app/forms-react.js'),ctx);
- const api=fakeWindow.DISB_FORMS_UI.create({context:()=>context,hasPermission:code=>options.permissions?options.permissions.includes(code):true,toast:(...args)=>messages.push(args),openView(){},
+ const api=fakeWindow.DISB_FORMS_UI[options.factory||'create']({context:()=>context,hasPermission:code=>options.permissions?options.permissions.includes(code):true,toast:(...args)=>messages.push(args),openView(view){options.openView?.(view);},
   modal({html,actions}){document.getElementById('modal').classList.add('open','forms-modal');document.getElementById('modalBody').innerHTML=html;document.getElementById('modalActions').innerHTML=actions||'';},
   closeModal(){document.getElementById('modal').classList.remove('open','forms-modal');document.getElementById('modalBody').innerHTML='';document.getElementById('modalActions').innerHTML='';},
   download:(name,blob)=>downloads.push({name,blob})});
@@ -38,6 +38,7 @@ export function formsThemeHarness(options={}){
  const settle=async()=>{for(let i=0;i<5;i++)await flush();};
  const set=(el,value)=>{if(el.tagName==='SELECT'){const options=[...el.querySelectorAll('option')];for(const option of options)option.selected=false;const selected=options.find(option=>option.value===value);if(selected)selected.selected=true;}else if(el.type==='checkbox'){el.checked=!!value;el.toggleAttribute('checked',!!value);}else el.value=value;};
  return{document,window,context,online,events,writes,reads,messages,memory,db,downloads,api,engine:fakeWindow.DISB_FORMS_UI.engine,settle,get,html:()=>document.toString(),
+  globalApi:ctx.DISB_FORMS_UI,
   release:element=>fakeWindow.DISB_FORMS_UI.release?.(element),
   appModals(){const ui=fakeWindow.DISB_FORMS_UI;fakeWindow.DISB_FORMS_UI=undefined;try{vm.runInContext(read('app.js').replace(/\}\)\(\);\s*$/,`window.__formsAppModals={open:openModal,close:closeModal};})();`),ctx);}finally{fakeWindow.DISB_FORMS_UI=ui;}return fakeWindow.__formsAppModals;},
   async enter(view){await api.enter(view);await settle();},
@@ -46,7 +47,7 @@ export function formsThemeHarness(options={}){
   async click(selector){get(selector).dispatchEvent(new window.Event('click',{bubbles:true}));await settle();},
   async emit(type){for(const fn of events.get(type)||[])fn(new window.Event(type));await settle();},
   async autosave(){const jobs=[...timerJobs.values()].filter(x=>x.delay===1000);timerJobs.clear();for(const job of jobs)await job.fn();await settle();},
-  destroy(){api.destroy?.();}
+  destroy(){if(api.destroy)api.destroy();else api.stop?.();}
  };
 }
 

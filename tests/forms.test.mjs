@@ -13,6 +13,21 @@ const schema={sections:[{id:'data',title:'Dados',fields:[{id:'name',label:'Nome'
 ]}]};
 const answers={name:{value:'Roberto'},ok:{value:'YES'},leak:{value:'NA'},state:{value:'Ruim',observation:'Trocar peça',plan:'Revisar'},km:{value:100},__sections:{checks:'Inspeção presencial'}};
 
+test('DTO mantém os rótulos OK e NOK sem alterar a nota ou a exclusão de N/A',()=>{
+ const field={id:'dto',label:'Procedimento',type:'BOOLEAN',scored:true,expected:'YES',positive_label:'OK',negative_label:'NOK'};
+ assert.equal(F.answerText(field,{value:'YES'}),'OK');assert.equal(F.answerText(field,{value:'NO'}),'NOK');
+ assert.equal(F.outcome(field,{value:'YES'}),'OK');assert.equal(F.outcome(field,{value:'NA'}),'NA');
+ assert.equal(F.answerText({...field,positive_label:undefined},{value:'YES'}),'Sim');
+});
+
+test('exportação do DTO identifica fonte e data estimada sem alterar as colunas dos registros nativos',()=>{
+ const row={id:'dto-importado',code:'DTO-1',form_name:'DTO de exemplo',schema_snapshot:schema,answers,source_kind:'DTO_XLSX',source_metadata:{sheet:'Tráfego',row:34,original_name:'Nome original',estimated_date:{intervalDays:61}}};
+ const matrix=F.exportRows([row]);
+ assert.deepEqual(matrix[0].slice(-5),['Origem','Aba de origem','Linha de origem','Data estimada','Nome original na planilha']);
+ assert.deepEqual(matrix[1].slice(-5),['Histórico DTO','Tráfego',34,'Sim','Nome original']);
+ assert.equal(F.exportRows([{...row,source_kind:'NATIVE',source_metadata:{}}])[0].length,25);
+});
+
 test('N/A fica fora da conformidade e textos/números não recebem nota',()=>{
  assert.deepEqual(F.score(schema,answers),{ok:1,nok:1,na:1,answered:5,total:7,percent:50});
  assert.equal(F.outcome(schema.sections[1].fields[1],{value:'NO'}),'OK');
