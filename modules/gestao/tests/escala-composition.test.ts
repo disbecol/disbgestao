@@ -22,7 +22,7 @@ describe('Sorteio dos colaboradores das equipes',()=>{
   const p=drawCrew(s,'2027-02-01','availability');expect(p.assignments).toEqual([]);expect(p.errors.some(e=>e.includes('Faltam'))).toBe(true);expect(p.drivers).toBe(6);expect(p.helpers).toBe(13);
  });
  it('permite ajustar ajudantes, informa falta de pessoal e respeita escalas protegidas',()=>{
-  const s=fixture();s.staff[7].status='INACTIVE';expect(drawCrew(s,'2027-02-01','short').errors).toContain('Faltam 1 ajudante(s) disponível(is) para o mês.');expect(drawCrew(s,'2027-02-01','short',1).assignments).toHaveLength(8);expect(drawCrew(s,'2027-02-01','invalid',0).assignments).toEqual([]);
+  const s=fixture();s.staff[7].status='INACTIVE';expect(drawCrew(s,'2027-02-01','short',2).errors).toContain('Faltam 1 ajudante(s) disponível(is) para o mês.');expect(drawCrew(s,'2027-02-01','short',1).assignments).toHaveLength(8);expect(drawCrew(s,'2027-02-01','invalid',-1).assignments).toEqual([]);
   s.plan={id:'p',month:'2027-02-01',status:'APPROVED',days:[],revision:1,seed:'',algorithm_version:'',notes:'',approved_at:null,approved_by:null};expect(drawCrew(s,'2027-02-01','locked').errors.some(e=>e.includes('protegida'))).toBe(true);
  });
  it('atualiza somente integrantes das escalas abertas e mantém os snapshots concluídos ou bloqueados',()=>{
@@ -30,5 +30,15 @@ describe('Sorteio dos colaboradores das equipes',()=>{
   const before=structuredClone(s.plan),p=drawCrew(s,'2027-02-01','history-crew');expect(p.errors).toEqual([]);
   for(const a of p.assignments)for(const id of a.members)s.memberships.push({id:'auto-'+id,team_id:a.team_id,staff_id:id,starts_on:'2027-02-01',ends_on:'2027-02-28',origin:'AUTO',draw_month:'2027-02-01',override_reason:'',revision:1});
   const next=refreshPlanMembers(s,s.plan);expect(next.days[1].duties[0]).toEqual(before.days[1].duties[0]);expect(next.days[2]).toEqual(before.days[2]);expect(next.days[3].duties.find(d=>d.team_id===s.teams[4].id)!.members).toHaveLength(3);expect(s.plan).toEqual(before);
+ });
+ it('QLP de 8 motoristas e 13 ajudantes forma 5 equipes com 2 e 3 com 1 ajudante',()=>{
+  const s=fixture();for(const n of [7,8,10])s.staff[n].status='INACTIVE';const p=drawCrew(s,'2027-02-01','qlp');
+  expect(p.errors).toEqual([]);expect(p.fixed).toHaveLength(2);expect(p.drivers).toBe(8);expect(p.helpers).toBe(13);expect(p.usedHelpers).toBe(13);expect(p.assignments.filter(a=>a.members.length===3)).toHaveLength(5);expect(p.assignments.filter(a=>a.members.length===2)).toHaveLength(3);expect(new Set(p.assignments.flatMap(a=>a.members)).size).toBe(21);
+  expect(drawCrew(s,'2027-02-01','qlp').assignments).toEqual(p.assignments);expect(drawCrew(s,'2027-02-01','other').assignments.map(a=>a.members.length)).not.toEqual(p.assignments.map(a=>a.members.length));
+ });
+ it('modo QLP exige pelo menos um ajudante por equipe e mantém excedentes disponíveis',()=>{
+  const s=fixture(),free=s.staff.filter(p=>p.job==='Ajudante'&&!s.memberships.some(m=>m.staff_id===p.id));for(const p of free.slice(0,8))p.status='INACTIVE';expect(drawCrew(s,'2027-02-01','minimum').assignments.every(a=>a.members.length===2)).toBe(true);
+  free[8].status='INACTIVE';expect(drawCrew(s,'2027-02-01','missing').errors).toContain('Faltam 1 ajudante(s) disponível(is) para o mês.');
+  for(const p of free)p.status='ACTIVE';s.staff.push({...free[0],id:'extra-helper'});const p=drawCrew(s,'2027-02-01','extra');expect(p.usedHelpers).toBe(16);expect(p.remaining.map(p=>p.id)).toHaveLength(1);
  });
 });

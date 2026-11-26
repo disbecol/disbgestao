@@ -6,13 +6,13 @@ function harness(options={}){const state=structuredClone(options.state||fixture(
 async function button(h,text){const b=[...h.document.querySelectorAll('.escala-app button')].find(b=>b.textContent.trim()===text);assert.ok(b,text);if(b.getAttribute('type')==='submit')b.closest('form').dispatchEvent(new h.window.Event('submit',{bubbles:true,cancelable:true}));else b.click();await h.settle();}
 test('prévia mantém equipes definidas, mostra as demais e só grava ao salvar',async()=>{
  const h=harness();await h.enter('escala-teams');await button(h,'Sortear colaboradores');assert.equal(h.writes.length,0);assert.match(h.get('.escala-dialog').textContent,/2 equipe\(s\) preservada/);assert.equal(h.document.querySelectorAll('.escala-dialog .escala-team-grid article').length,8);
- await button(h,'Salvar equipes sorteadas');const save=h.writes.find(w=>w.name==='escala_save_composition');assert.equal(save.args.p_assignments.length,8);assert.equal(save.args.p_helpers,2);assert.equal(save.args.p_area,'Entrega');assert.ok(save.args.p_request_id);assert.equal(h.state.memberships.length,30);assert.ok(!h.document.querySelector('.escala-dialog'));h.destroy();
+ await button(h,'Salvar equipes sorteadas');const save=h.writes.find(w=>w.name==='escala_save_composition');assert.equal(save.args.p_assignments.length,8);assert.equal(save.args.p_helpers,0);assert.equal(save.args.p_area,'Entrega');assert.ok(save.args.p_request_id);assert.equal(h.state.memberships.length,30);assert.ok(!h.document.querySelector('.escala-dialog'));h.destroy();
 });
 test('Gerar sorteio preenche equipes vazias antes de gerar as folgas e mantém o calendário em rascunho',async()=>{
- const h=harness();await h.enter('escala-calendar');await button(h,'✦ Gerar sorteio');assert.ok(h.document.querySelector('.escala-dialog'));assert.equal(h.writes.length,0);await button(h,'Salvar equipes e gerar folgas');assert.equal(h.writes.filter(w=>w.name==='escala_save_composition').length,1);assert.ok(h.get('.escala-statusbar').textContent.includes('Rascunho'));assert.ok(h.get('.escala-statusbar').textContent.includes('alterações neste aparelho'));assert.equal(h.document.querySelectorAll('[data-escala-day]').length,30);h.destroy();
+ const h=harness();await h.enter('escala-calendar');await button(h,'Sortear folgas');assert.ok(h.document.querySelector('.escala-dialog'));assert.equal(h.writes.length,0);await button(h,'Salvar equipes e gerar folgas');assert.equal(h.writes.filter(w=>w.name==='escala_save_composition').length,1);assert.ok(h.get('.escala-statusbar').textContent.includes('Rascunho'));assert.ok(h.get('.escala-statusbar').textContent.includes('alterações neste aparelho'));assert.equal(h.document.querySelectorAll('[data-escala-day]').length,30);h.destroy();
 });
 test('falta de pessoal é informada sem gravar uma composição incompleta',async()=>{
- const state=fixture();state.staff[7].status='INACTIVE';const h=harness({state});await h.enter('escala-teams');await button(h,'Sortear colaboradores');assert.match(h.get('.escala-dialog').textContent,/Faltam 1 ajudante/);const save=[...h.document.querySelectorAll('.escala-dialog button')].find(b=>b.textContent==='Salvar equipes sorteadas');assert.equal(save.disabled,true);assert.equal(h.writes.length,0);h.destroy();
+ const state=fixture();state.staff[7].status='INACTIVE';const h=harness({state});await h.enter('escala-teams');await button(h,'Sortear colaboradores');await h.change('.escala-dialog [aria-label="Distribuição dos ajudantes"]','2');assert.match(h.get('.escala-dialog').textContent,/Faltam 1 ajudante/);const save=[...h.document.querySelectorAll('.escala-dialog button')].find(b=>b.textContent==='Salvar equipes sorteadas');assert.equal(save.disabled,true);assert.equal(h.writes.length,0);h.destroy();
 });
 test('conflito de revisão deixa a prévia aberta e não afirma que o sorteio foi salvo',async()=>{
  const h=harness({rpc:name=>name==='escala_save_composition'?{data:null,error:{message:'ESCALA_VERSION_CONFLICT'}}:undefined});await h.enter('escala-teams');await button(h,'Sortear colaboradores');await button(h,'Salvar equipes sorteadas');assert.match(h.get('.escala-dialog [role="alert"]').textContent,/Outra pessoa alterou/);assert.equal(h.state.memberships.length,6);h.destroy();
@@ -36,4 +36,17 @@ test('rota realizada com equipe ainda vazia permite completar as equipes sem alt
 
 test('escala aprovada continua protegida com orientação visível',async()=>{
  const state=fixture();state.plan={...generateMonth(state,'2026-11-01','approved').plan,status:'APPROVED'};const h=harness({state});await h.enter('escala-teams');const sort=[...h.document.querySelectorAll('.escala-app button')].find(b=>b.textContent==='Sortear colaboradores');assert.equal(sort.disabled,true);assert.match(h.get('#view-escala-teams').textContent,/Abra o Calendário para desbloqueá-la/);assert.equal(h.writes.length,0);h.destroy();
+});
+
+test('QLP é o padrão e permite salvar 8 equipes com os 13 ajudantes disponíveis',async()=>{
+ const state=fixture();for(const n of [7,8,10])state.staff[n].status='INACTIVE';const h=harness({state});await h.enter('escala-teams');await button(h,'Sortear colaboradores');assert.equal(h.get('.escala-dialog [aria-label="Distribuição dos ajudantes"]').value,'0');assert.match(h.get('.escala-crew-distribution').textContent,/5 equipes com 2 ajudantes · 3 equipes com 1 ajudante/);await button(h,'Salvar equipes sorteadas');const saved=h.writes[0];assert.equal(saved.args.p_helpers,0);assert.equal(saved.args.p_assignments.flatMap(a=>a.members).length,21);h.destroy();
+});
+
+test('etapas separam equipes e folgas, e a visão por equipe permite buscar e abrir a troca sem gravar',async()=>{
+ const state=fixture();state.plan=generateMonth(state,'2026-11-01','planning').plan;const h=harness({state});await h.enter('escala-calendar');assert.equal(h.document.querySelectorAll('.escala-planning-steps article').length,3);await button(h,'Folgas por equipe');assert.equal(h.get('[aria-pressed="true"]').textContent,'Folgas por equipe');assert.equal(h.document.querySelectorAll('.escala-rest-team').length,10);
+ await h.input('.escala-rest-filters input[type="search"]',state.staff[0].name);assert.equal(h.document.querySelectorAll('.escala-rest-team').length,1);const day=h.document.querySelector('.escala-rest-dates button');assert.ok(day);day.click();await h.settle();assert.ok(h.get('.escala-dialog [aria-label="Folga atual"]').value);assert.match(h.get('.escala-dialog').textContent,/Escolha a nova data/);assert.equal(h.writes.length,0);h.destroy();
+});
+
+test('visão por equipe orienta gerar a primeira escala quando o mês ainda está vazio',async()=>{
+ const h=harness();await h.enter('escala-calendar');await button(h,'Folgas por equipe');assert.match(h.get('.escala-empty').textContent,/Use Sortear folgas, na etapa 2/);assert.equal(h.writes.length,0);h.destroy();
 });

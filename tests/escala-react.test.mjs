@@ -22,7 +22,7 @@ test('Escala uses the shared React entry and displays a real monthly calendar wi
  assert.equal(h.document.querySelectorAll('[data-escala-day]').length,30);assert.equal(h.document.querySelectorAll('.escala-side-team').length,10);assert.equal(h.writes.length,0);assert.ok(h.reads.some(r=>r.name==='escala_state'));h.destroy();
 });
 test('generation is a reviewable local draft and Save sends a revisioned idempotent RPC, then survives reopening',async()=>{
- const h=harness();await h.enter('escala-calendar');await clickText(h,'✦ Gerar sorteio');assert.equal(h.writes.length,0);assert.ok(h.memory.size);await clickText(h,'Salvar escala •');
+ const h=harness();await h.enter('escala-calendar');await clickText(h,'Sortear folgas');assert.equal(h.writes.length,0);assert.ok(h.memory.size);await clickText(h,'Salvar escala •');
  const save=h.writes.find(w=>w.args.p_action==='MONTH_SAVE');assert.equal(save.args.p_revision,0);assert.ok(save.args.p_request_id);assert.equal(save.args.p_payload.days.length,30);assert.equal(h.state.plan.revision,1);assert.equal(h.memory.size,0);
  h.api.stop();await h.enter('escala-calendar');assert.match(h.get('.escala-statusbar').textContent,/Revisão 1/);h.destroy();
 });
@@ -31,10 +31,10 @@ test('opening teams, staff, vehicles, holidays, reports and history remains read
 });
 test('approved calendars prevent a redraw and read-only users cannot edit operational records',async()=>{
  const state=escalaFixture();state.plan=generateMonth(state,'2026-11-01','approved').plan;state.plan.status='APPROVED';
- const h=harness({state,permissions:['ESCALA_VIEW']});await h.enter('escala-calendar');const redraw=[...h.document.querySelectorAll('button')].find(b=>b.textContent.includes('Gerar novo sorteio'));assert.equal(redraw.disabled,true);await h.enter('escala-staff');const create=[...h.document.querySelectorAll('button')].find(b=>b.textContent==='Cadastrar pessoa');assert.equal(create.disabled,true);h.destroy();
+ const h=harness({state,permissions:['ESCALA_VIEW']});await h.enter('escala-calendar');const redraw=[...h.document.querySelectorAll('button')].find(b=>b.textContent.includes('Sortear novas folgas'));assert.equal(redraw.disabled,true);await h.enter('escala-staff');const create=[...h.document.querySelectorAll('button')].find(b=>b.textContent==='Cadastrar pessoa');assert.equal(create.disabled,true);h.destroy();
 });
 test('a save conflict preserves the local calendar for retry and does not pretend it was saved',async()=>{
- const h=harness({rpc:(name,args)=>name==='escala_command'&&args.p_action==='MONTH_SAVE'?{data:null,error:{message:'ESCALA_VERSION_CONFLICT'}}:undefined});await h.enter('escala-calendar');await clickText(h,'✦ Gerar sorteio');await clickText(h,'Salvar escala •');assert.ok(h.memory.size);assert.match(h.get('.escala-error').textContent,/Outra pessoa alterou/);assert.equal(h.state.plan,null);h.destroy();
+ const h=harness({rpc:(name,args)=>name==='escala_command'&&args.p_action==='MONTH_SAVE'?{data:null,error:{message:'ESCALA_VERSION_CONFLICT'}}:undefined});await h.enter('escala-calendar');await clickText(h,'Sortear folgas');await clickText(h,'Salvar escala •');assert.ok(h.memory.size);assert.match(h.get('.escala-error').textContent,/Outra pessoa alterou/);assert.equal(h.state.plan,null);h.destroy();
 });
 
 test('editing a staff record sends the typed values through the existing unit-scoped RPC',async()=>{
@@ -63,5 +63,5 @@ test('a desktop drag opens a movement dialog with the complete team and keeps th
  const state=escalaFixture();state.plan=generateMonth(state,'2026-11-01','drag').plan;
  const h=harness({state});await h.enter('escala-calendar');
  const source=h.get('[data-escala-day="2026-11-03"] .escala-team-chip'),target=h.get('[data-escala-day="2026-11-04"]');const start=new h.window.Event('dragstart',{bubbles:true});start.dataTransfer={setData(){},effectAllowed:''};source.dispatchEvent(start);const drop=new h.window.Event('drop',{bubbles:true,cancelable:true});drop.dataTransfer={};target.dispatchEvent(drop);await h.settle();
- assert.match(h.get('.escala-dialog').textContent,/Movimentar folga da equipe completa/);assert.equal(h.get('.escala-dialog input[type="date"]').value,'2026-11-04');assert.ok(h.get('.escala-dialog select').value==='2026-11-03');assert.equal(h.writes.length,0);h.destroy();
+ assert.match(h.get('.escala-dialog').textContent,/Movimentar folga da equipe completa/);assert.equal(h.get('.escala-dialog input[type="date"]').value,'2026-11-04');assert.ok(h.get('.escala-dialog [aria-label="Folga atual"]').value==='2026-11-03');assert.equal(h.writes.length,0);h.destroy();
 });

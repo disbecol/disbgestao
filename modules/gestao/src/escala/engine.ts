@@ -104,10 +104,19 @@ export function moveRest(state:EscalaState,plan:MonthPlan,teamId:string,from:str
  if(!target||target.locked||origin?.locked)throw Error('O dia está bloqueado para alterações.');
  if(weekday(to)===0||from&&weekday(from)===0)throw Error('O descanso de domingo deve ser preservado.');
  const duty=target.duties.find(d=>d.team_id===teamId);if(!duty||duty.mode==='UNAVAILABLE')throw Error('A equipe está indisponível nessa data.');
+ if(duty.completed||origin?.duties.find(d=>d.team_id===teamId)?.completed||swapTeam&&origin?.duties.find(d=>d.team_id===swapTeam)?.completed)throw Error('Essa equipe já tem rota realizada em uma das datas. Escolha outra data para a folga.');
  const other=target.duties.find(d=>d.team_id===swapTeam&&d.mode==='REST');
  if(duty.mode!=='REST'){duty.mode='REST';if(other)other.mode='ROUTE';target.manual=true;}
  if(origin&&origin!==target){const old=origin.duties.find(d=>d.team_id===teamId);if(old)old.mode='ROUTE';const replace=origin.duties.find(d=>d.team_id===swapTeam);if(replace)replace.mode='REST';origin.manual=true;attachTrucks(state,origin);}
  attachTrucks(state,target);return next;
+}
+export function restMoveIssues(state:EscalaState,original:MonthPlan,candidate:MonthPlan):Issue[]{
+ const existing=new Set(validatePlan(state,original).map(i=>[i.code,i.date,i.team_id].join('|')));
+ const introduced=validatePlan(state,candidate).filter(i=>i.severity==='ERROR'&&!existing.has([i.code,i.date,i.team_id].join('|')));
+ for(const day of candidate.days){const before=original.days.find(d=>d.date===day.date);if(!before)continue;const previous=before.duties.filter(a=>a.mode==='ROUTE').length,next=day.duties.filter(a=>a.mode==='ROUTE').length;
+  if(next<Math.min(previous,day.required)&&!introduced.some(i=>i.code==='CAPACITY'&&i.date===day.date))introduced.push({severity:'ERROR',code:'CAPACITY',date:day.date,message:'A troca reduziria a cobertura de '+previous+' para '+next+' equipes em rota. A necessidade é de '+day.required+'.'});
+ }
+ return introduced;
 }
 export function statistics(state:EscalaState,days:PlanDay[]){return state.teams.filter(t=>!t.deleted_at).map(team=>{const rows=days.map(d=>({day:d,duty:d.duties.find(x=>x.team_id===team.id)}));return {team,total:rows.filter(r=>r.duty?.mode==='REST').length,worked:rows.filter(r=>work(r.duty)).length,routes:rows.filter(r=>r.duty?.mode==='ROUTE').length,unavailable:rows.filter(r=>r.duty?.mode==='UNAVAILABLE').length,weekdays:Array.from({length:7},(_,i)=>rows.filter(r=>weekday(r.day.date)===i&&r.duty?.mode==='REST').length),holidays:rows.filter(r=>r.day.kind==='HOLIDAY'&&r.duty?.mode==='REST').length};});}
 export function exportMatrix(state:EscalaState,plan:MonthPlan){return [['Data','Equipe','Situação','Caminhão','Integrantes','Observação','Alteração manual'],...plan.days.flatMap(day=>day.duties.map(d=>[day.date,state.teams.find(t=>t.id===d.team_id)?.name||d.team_id,modeNames[d.mode],state.trucks.find(t=>t.id===d.truck_id)?.plate||'',d.members.map(p=>p.name+' ('+p.job+')').join(' / '),day.notes,day.manual?'Sim':'Não']))];}

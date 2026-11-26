@@ -29,7 +29,7 @@ before(async()=>{
  historical=await rpc('start_form_response_evaluated',[form.id,A,randomUUID(),[ids.employee],null],['::uuid','','::uuid','::uuid[]','::uuid']);
  historical=await rpc('save_form_response',[historical.id,historical.revision,JSON.stringify({__evaluations:{[ids.employee]:{q:{value:'YES'}}}}),true],['::uuid','','::jsonb','']);
  await db.exec('reset role');accountsBefore=(await q('select count(*)::int n from profiles'))[0].n;
- try{await db.exec(read('supabase/migrations/20261125180349_independent_staff_directory.sql'));await db.exec(read('supabase/migrations/20261125191110_escala_directory_auto_staff.sql'));await db.exec(read('supabase/migrations/20261125192341_staff_directory_archived_people.sql'));await db.exec(read('supabase/migrations/20261125194359_escala_random_team_members.sql'));await db.exec(read('supabase/migrations/20261125200715_escala_private_api_handlers.sql'));await db.exec(read('supabase/migrations/20261125201924_escala_composition_preserve_drafts.sql'));}catch(e){throw Error(`${e.message}; ${e.where||''}; posição ${e.position}`);}
+ try{await db.exec(read('supabase/migrations/20261125180349_independent_staff_directory.sql'));await db.exec(read('supabase/migrations/20261125191110_escala_directory_auto_staff.sql'));await db.exec(read('supabase/migrations/20261125192341_staff_directory_archived_people.sql'));await db.exec(read('supabase/migrations/20261125194359_escala_random_team_members.sql'));await db.exec(read('supabase/migrations/20261125200715_escala_private_api_handlers.sql'));await db.exec(read('supabase/migrations/20261125201924_escala_composition_preserve_drafts.sql'));await db.exec(read('supabase/migrations/20261126111855_escala_qlp_helper_distribution.sql'));}catch(e){throw Error(`${e.message}; ${e.where||''}; posição ${e.position}`);}
  await as();
 });
 after(()=>db.close());
@@ -169,4 +169,14 @@ describe('composição mensal das equipes com integrantes sorteados',()=>{
   await as('');await assert.rejects(()=>state(),/FORBIDDEN/);await assert.rejects(()=>persist(firstArgs),/FORBIDDEN/);await assert.rejects(()=>command('SETUP',{teams:1,trucks:1}),/FORBIDDEN/);
   await db.exec('reset role;set role anon');await assert.rejects(()=>q('select escala_private.escala_state($1,$2::date)',[C,month]),/permission denied/);await as();
  });
+ test('modo QLP aceita equipes mistas, preserva as fixas e recusa motorista sem ajudante',async()=>{
+  const m='2027-03-01';await as();let s=await rpc('escala_state',[C,m],['','::date']);const reserved=new Set(s.memberships.filter(x=>x.origin==='MANUAL'&&x.starts_on<=m&&(!x.ends_on||x.ends_on>=m)).map(x=>x.staff_id));
+  const helpers=s.staff.filter(p=>p.job==='Ajudante'&&!reserved.has(p.id));for(const p of helpers.slice(0,3))await command('STAFF_SAVE',{status:'LEAVE'},p.id,p.revision);
+  s=await rpc('escala_state',[C,m],['','::date']);const p=drawCrew(s,m,'qlp-db');assert.equal(p.helpers,13);assert.equal(p.errors.length,0);assert.equal(p.assignments.filter(a=>a.members.length===2).length,3);
+  const a=args(s,p,'qlp-db');a[1]=m;a[5]=0;const bad=[...a],invalid=structuredClone(p.assignments);invalid[0].members=invalid[0].members.slice(0,1);bad[4]=JSON.stringify(invalid);await assert.rejects(()=>persist(bad),/ESCALA_COMPOSITION_TEAMS|ESCALA_COMPOSITION_ROLE/);
+  const fixed=s.memberships.filter(x=>x.origin==='MANUAL');const result=await persist(a);assert.equal(result.people,21);assert.deepEqual(await persist(a),result);
+  const after=await rpc('escala_state',[C,m],['','::date']);for(const old of fixed)assert.deepEqual(after.memberships.find(x=>x.id===old.id),old);
+  assert.equal(after.memberships.filter(x=>x.draw_month===m).length,21);
+ });
+
 });
