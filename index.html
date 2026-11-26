@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="src/shared/signature-pad.css?v=1.8.1">
   <link rel="stylesheet" href="src/estoque/stock-validity.css?v=1.7.41">
   <link rel="stylesheet" href="src/vendas/sales-pricing.css?v=1.7.52">
-  <link rel="stylesheet" href="src/ratings/rating.css?v=1.8.1-rating">
+  <link rel="stylesheet" href="src/ratings/rating.css?v=1.8.1-rating-filters">
   <link rel="stylesheet" href="src/forms/forms.css?v=1.8.1">
   <link rel="stylesheet" href="src/escala/escala.css?v=1.8.1">
   <link rel="stylesheet" href="src/estoque/refugo.css?v=1.7.16">
@@ -586,6 +586,15 @@
         <div class="card rating-card">
           <div class="rating-context"><div><small>PLANILHA</small><strong>Google Sheets · Rating de Clientes</strong></div><div><small>UNIDADE</small><strong id="ratingUnitLabel">—</strong></div><a id="ratingSheetLink" class="btn secondary" target="_blank" rel="noopener" hidden>Abrir aba no Google ↗</a><button id="btnRatingRefresh" type="button" class="btn secondary">Atualizar</button></div>
           <div class="rating-controls"><div id="ratingUnitTabs" class="rating-unit-tabs" role="tablist" aria-label="Unidade do rating"></div><div class="field rating-search"><label for="ratingSearch">Pesquisar avaliações</label><input id="ratingSearch" type="search" autocomplete="off" placeholder="Cliente, código, cidade, motorista ou motivo"></div></div>
+          <div class="rating-filters">
+            <div class="field"><label for="ratingFrom">Avaliação de</label><input id="ratingFrom" type="date"></div>
+            <div class="field"><label for="ratingTo">Até</label><input id="ratingTo" type="date"></div>
+            <div class="field"><label for="ratingCity">Cidade</label><select id="ratingCity"><option value="">Todos</option></select></div>
+            <div class="field"><label for="ratingDriver">Motorista</label><select id="ratingDriver"><option value="">Todos</option></select></div>
+            <div class="field"><label for="ratingMotive">Motivo</label><select id="ratingMotive"><option value="">Todos</option></select></div>
+            <button id="ratingClearFilters" type="button" class="btn secondary">Limpar filtros</button>
+          </div>
+          <div id="ratingFilterError" class="rating-filter-error" role="alert"></div>
           <div id="ratingAlert" class="notice rating-alert hidden" role="alert"></div>
           <div id="ratingStatus" class="sales-pricing-status" role="status" aria-live="polite"></div>
           <div class="rating-table-wrap"><table class="rating-table"><thead><tr><th>Data</th><th>Cód. Cliente</th><th>Nome</th><th>Cidade</th><th>Motorista</th><th>Motivo</th><th>Comentário da avaliação</th><th>Tratativa no sistema</th></tr></thead><tbody id="ratingRows"><tr><td colspan="8">Selecione uma unidade para consultar.</td></tr></tbody></table></div>
@@ -1070,7 +1079,7 @@
   <script src="src/puxada/pull-camera.js?v=1.7.32-pull-camera"></script>
   <script src="src/estoque/stock-validity.js?v=1.7.41"></script>
   <script src="src/vendas/sales-pricing.js?v=1.7.52"></script>
-  <script src="src/ratings/rating.js?v=1.8.1-rating-db"></script>
+  <script src="src/ratings/rating.js?v=1.8.1-rating-filters"></script>
   <script src="src/shared/asset-conversion.js?v=1.7.49"></script>
   <script src="src/conferencia/conference.js?v=1.7.60"></script>
   <script src="src/forms/forms.js?v=1.8.1"></script>

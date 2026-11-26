@@ -35,6 +35,9 @@ function harness({rows=sourceRows,comments=[],saveError=null,fetchError=null}={}
   const {document,window}=parseHTML(`<html><body>
     <div id="ratingUnitTabs"></div><strong id="ratingUnitLabel"></strong><a id="ratingSheetLink"></a>
     <div id="ratingAlert"></div><button id="btnRatingRefresh"></button><input id="ratingSearch">
+    <input id="ratingFrom" type="date"><input id="ratingTo" type="date">
+    <select id="ratingCity"></select><select id="ratingDriver"></select><select id="ratingMotive"></select>
+    <button id="ratingClearFilters"></button><div id="ratingFilterError"></div>
     <span id="ratingStatus"></span><table><tbody id="ratingRows"></tbody></table>
   </body></html>`);
   const calls=[],toasts=[];
@@ -60,6 +63,51 @@ function harness({rows=sourceRows,comments=[],saveError=null,fetchError=null}={}
   api.bind();
   return {api,document,window,calls,toasts};
 }
+
+test('filtros combinam período, cidade, motorista, motivo e pesquisa; limpar restaura resultados',async()=>{
+  const rows=[
+    ['Date(2026,10,20)',101,'Mercado São João','Caicó','Ana','Atraso','Relato original'],
+    ['Date(2026,10,21)',202,'Loja Central','Natal','Bia','Produto',''],
+    ['Date(2026,10,22)',303,'Mercado outro','Caicó','Bia','Atraso','']
+  ];
+  const h=harness({rows});await h.api.load('Matriz Caicó');
+  const change=(id,value)=>{const el=h.document.getElementById(id);if(el.tagName==='SELECT'){for(const option of el.querySelectorAll('option'))option.selected=option.value===value;}else el.value=value;el.dispatchEvent(new h.window.Event('change',{bubbles:true}));};
+  change('ratingFrom','2026-11-20');change('ratingTo','2026-11-20');
+  change('ratingCity','caico');change('ratingDriver','ana');change('ratingMotive','atraso');
+  assert.match(h.document.getElementById('ratingStatus').textContent,/1 de 3/);
+  assert.match(h.document.getElementById('ratingRows').textContent,/Mercado São João/);
+  h.document.getElementById('ratingSearch').value='inexistente';
+  h.document.getElementById('ratingSearch').dispatchEvent(new h.window.Event('input',{bubbles:true}));
+  assert.match(h.document.getElementById('ratingStatus').textContent,/0 de 3/);
+  change('ratingFrom','2026-11-23');
+  assert.match(h.document.getElementById('ratingFilterError').textContent,/data inicial/);
+  h.document.getElementById('ratingClearFilters').dispatchEvent(new h.window.Event('click',{bubbles:true}));
+  assert.match(h.document.getElementById('ratingStatus').textContent,/3 de 3/);
+  assert.equal(h.document.getElementById('ratingFilterError').textContent,'');
+  assert.equal(h.document.getElementById('ratingSearch').value,'');
+});
+
+test('filtros preservam rascunho durante edição e reiniciam seleções ao trocar unidade',async()=>{
+  const h=harness();await h.api.load('Matriz Caicó');
+  const city=h.document.getElementById('ratingCity');
+  for(const option of city.querySelectorAll('option'))option.selected=option.value==='caico';
+  city.dispatchEvent(new h.window.Event('change',{bubbles:true}));
+  h.document.querySelector('[data-rating-edit]').dispatchEvent(new h.window.Event('click',{bubbles:true}));
+  assert.equal(city.disabled,true);
+  assert.equal(h.document.getElementById('ratingSearch').disabled,true);
+  h.document.querySelector('textarea').value='Rascunho';
+  h.document.querySelector('textarea').dispatchEvent(new h.window.Event('input',{bubbles:true}));
+  h.document.querySelector('[data-rating-cancel]').dispatchEvent(new h.window.Event('click',{bubbles:true}));
+  await h.api.load('Filial Pau dos Ferros');
+  assert.equal(h.document.getElementById('ratingCity').value,'');
+  assert.match(h.document.getElementById('ratingStatus').textContent,/1 de 1/);
+});
+
+test('período inclui limites e exclui datas inválidas somente quando filtrado',()=>{
+  const rows=[{date:'20/11/2026'},{date:'2026-11-21'},{date:'22/11/2026'},{date:'31/02/2026'},{date:''}];
+  assert.deepEqual(rating.filterRows(rows,'',{from:'2026-11-20',to:'2026-11-21'}),rows.slice(0,2));
+  assert.equal(rating.filterRows(rows,'').length,5);
+});
 
 test('consulta a planilha, preserva comentário original e salva tratativa no Supabase',async()=>{
   const h=harness();await h.api.load('Matriz Caicó');

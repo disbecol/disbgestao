@@ -59,13 +59,30 @@
     return result;
   }
 
-  function filterRows(rows, query) {
+  function filterDate(value) {
+    const text = clean(value);
+    const br = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\D.*)?$/.exec(text);
+    const iso = /^(\d{4})-(\d{2})-(\d{2})(?:\D.*)?$/.exec(text);
+    const parts = br ? [br[3], br[2].padStart(2, '0'), br[1].padStart(2, '0')] : iso?.slice(1);
+    if (!parts) return '';
+    const result = parts.join('-');
+    const parsed = new Date(`${result}T00:00:00Z`);
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === result ? result : '';
+  }
+
+  function filterRows(rows, query, filters = {}) {
     const term = searchKey(query);
-    if (!term) return rows;
-    const words = term.split(' ');
-    return rows.filter(row => words.every(word => searchKey([
-      row.date, row.code, row.name, row.city, row.driver, row.motive, row.sourceComment, row.comment
-    ].join(' ')).includes(word)));
+    const words = term ? term.split(' ') : [];
+    return rows.filter(row => {
+      const date = filterDate(row.date);
+      return (!(filters.from || filters.to) || !!date)
+        && (!filters.from || date >= filters.from)
+        && (!filters.to || date <= filters.to)
+        && ['city', 'driver', 'motive'].every(field => !filters[field] || searchKey(row[field]) === filters[field])
+        && words.every(word => searchKey([
+          row.date, row.code, row.name, row.city, row.driver, row.motive, row.sourceComment, row.comment
+        ].join(' ')).includes(word));
+    });
   }
 
   function create(adapter) {
@@ -79,6 +96,33 @@
     const drafts = new Map();
     let error = '';
     let loadId = 0;
+    const filters = { from: '', to: '', city: '', driver: '', motive: '' };
+    const filterControls = { from: 'ratingFrom', to: 'ratingTo', city: 'ratingCity', driver: 'ratingDriver', motive: 'ratingMotive' };
+
+    function renderFilters() {
+      for (const [field, id] of Object.entries(filterControls)) {
+        const control = $(id);
+        if (!control) continue;
+        control.disabled = editingRow !== null;
+        if (['city', 'driver', 'motive'].includes(field)) {
+          const options = new Map();
+          for (const row of rows) {
+            const label = clean(row[field]), key = searchKey(label);
+            if (key && !options.has(key)) options.set(key, label);
+          }
+          if (filters[field] && !options.has(filters[field])) filters[field] = '';
+          control.innerHTML = `<option value="" ${filters[field] ? '' : 'selected'}>Todos</option>` + [...options]
+            .sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'))
+            .map(([value, label]) => `<option value="${adapter.escapeHtml(value)}" ${value === filters[field] ? 'selected' : ''}>${adapter.escapeHtml(label)}</option>`).join('');
+        } else {
+          control.value = filters[field];
+        }
+      }
+      if ($('ratingSearch')) $('ratingSearch').disabled = editingRow !== null;
+      if ($('ratingClearFilters')) $('ratingClearFilters').disabled = editingRow !== null;
+      if ($('ratingFilterError')) $('ratingFilterError').textContent =
+        filters.from && filters.to && filters.from > filters.to ? 'A data inicial deve ser anterior ou igual à data final.' : '';
+    }
 
     function availableUnits() {
       return UNITS.filter(name => context().units?.includes(name));
@@ -91,6 +135,7 @@
       const search = $('ratingSearch')?.value || '';
       if (!tabs || !body || !status) return;
 
+      renderFilters();
       const units = availableUnits();
       tabs.innerHTML = units.map(name => `<button type="button" class="rating-unit-tab ${name === unit ? 'active' : ''}" data-rating-unit="${adapter.escapeHtml(name)}" aria-pressed="${name === unit}" ${editingRow !== null ? 'disabled' : ''}>${adapter.escapeHtml(name)}</button>`).join('');
       $('ratingUnitLabel').textContent = unit || '—';
@@ -115,14 +160,14 @@
         body.innerHTML = '<tr><td colspan="8">Consultando a planilha…</td></tr>';
         return;
       }
-      const filtered = filterRows(rows, search);
+      const filtered = filters.from && filters.to && filters.from > filters.to ? [] : filterRows(rows, search, filters);
       status.textContent = `${filtered.length} de ${rows.length} ${rows.length === 1 ? 'avaliação' : 'avaliações'}`;
       if (error && !rows.length) {
         body.innerHTML = '<tr><td colspan="8">Não foi possível carregar as avaliações.</td></tr>';
         return;
       }
       if (!filtered.length) {
-        body.innerHTML = `<tr><td colspan="8">${rows.length ? 'Nenhum resultado para a busca.' : 'Nenhuma avaliação encontrada nesta planilha.'}</td></tr>`;
+        body.innerHTML = `<tr><td colspan="8">${rows.length ? 'Nenhum resultado para os filtros.' : 'Nenhuma avaliação encontrada nesta planilha.'}</td></tr>`;
         return;
       }
       const canEdit = context().hasPermission('RATING_EDIT');
@@ -204,6 +249,7 @@
       const requestId = ++loadId;
       if (unit !== selectedUnit) {
         rows = [];
+        filters.city = filters.driver = filters.motive = '';
         editingRow = null;
         savingRow = null;
         drafts.clear();
@@ -273,6 +319,17 @@
         if (button && availableUnits().includes(button.dataset.ratingUnit)) void load(button.dataset.ratingUnit);
       });
       $('ratingSearch')?.addEventListener('input', render);
+      for (const [field, id] of Object.entries(filterControls)) {
+        $(id)?.addEventListener('change', event => {
+          filters[field] = event.target.value;
+          render();
+        });
+      }
+      $('ratingClearFilters')?.addEventListener('click', () => {
+        for (const field of Object.keys(filters)) filters[field] = '';
+        if ($('ratingSearch')) $('ratingSearch').value = '';
+        render();
+      });
       $('btnRatingRefresh')?.addEventListener('click', () => void load(unit));
       $('ratingRows')?.addEventListener('input', event => {
         const editor = event.target.closest('[data-rating-editor]');
@@ -317,6 +374,8 @@
       savingRow = null;
       drafts.clear();
       error = '';
+      for (const field of Object.keys(filters)) filters[field] = '';
+      if ($('ratingSearch')) $('ratingSearch').value = '';
       render();
     }
 

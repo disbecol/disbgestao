@@ -9,6 +9,8 @@
 .rating-unit-tab.active{border-color:var(--screen-accent);background:var(--screen-accent);color:var(--screen-on-accent)}
 .rating-search{flex:1;min-width:220px}
 .rating-search input{width:100%}
+.rating-filters{display:grid;grid-template-columns:repeat(5,minmax(130px,1fr)) auto;gap:12px;align-items:end}
+.rating-filter-error:not(:empty){color:var(--screen-text);font-weight:700}
 .rating-alert{margin:12px 0}
 .rating-table-wrap{overflow:auto}
 .rating-table{width:100%;min-width:980px;border-collapse:collapse}
@@ -22,4 +24,5 @@
 .rating-editor[hidden]{display:none}
 .rating-editor textarea{width:100%;min-height:84px;resize:vertical}
 .rating-editor-actions{display:flex;gap:7px;margin-top:6px}
-@media(max-width:640px){.rating-controls{align-items:stretch}.rating-search{min-width:100%}.rating-context>.btn{width:100%}}
+@media(max-width:1000px){.rating-filters{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:640px){.rating-controls{align-items:stretch}.rating-search{min-width:100%}.rating-context>.btn{width:100%}.rating-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
