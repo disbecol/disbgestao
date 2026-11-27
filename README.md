@@ -58,9 +58,10 @@ Aplicativo unificado com **NRI + Avarias + Conferência de Vasilhames**, usando 
 ### Queixas
 - Todos os usuários ativos autenticados podem consultar e registrar queixas de todas as unidades, importar histórico e atualizar tratativas.
 - Aplique `supabase/migrations/20261127130000_complaints.sql` no Supabase antes de usar a aba.
-- Para importar o histórico, copie as 13 colunas da planilha, com os cabeçalhos, e cole em **Queixas > Importar histórico**. Confira a amostra e a indicação de duplicatas antes de confirmar. A importação salva cópias e não modifica a planilha.
+- Para importar o histórico, copie as 13 colunas da planilha, com os cabeçalhos, e cole em **Entrega > Devoluções > Queixas > Importar histórico**. Confira a amostra e a indicação de duplicatas antes de confirmar. A importação salva cópias e não modifica a planilha.
 - Os dados originais ficam preservados no banco; atualizações de tratativa, data e status são mantidas separadamente. Registros sem data válida ou sem queixa são guardados, mas não entram nos indicadores.
 - O tempo utiliza os dias originais informados e válidos; se não houver dias originais, ou se a data da tratativa for atualizada, usa a diferença entre datas válidas. Valores inválidos ou ausentes não são estimados. Status desconhecidos ficam em categoria separada, no denominador dos percentuais.
+- Nas análises, os status históricos `RESOLVIDO` e `TRATANDO` são contabilizados como resolvida e em tratamento. Valores `-` e `#N/D` não entram nos rankings; os valores originais permanecem intactos.
 
 ---
 

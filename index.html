@@ -80,7 +80,6 @@
       <div class="brand-row brand-disbecol"><img class="brand-logo brand-logo-light" src="assets/disbecol-logo-blue.png" alt="Disbecol"><img class="brand-logo brand-logo-dark" src="assets/disbecol-logo-white.png" alt="Disbecol"></div><div class="app-version-badge">v1.8.1</div>
       <label class="appearance-control"><span>Aparência</span><select data-theme-preference aria-label="Aparência do sistema"><option value="light">Claro</option><option value="dark">Escuro</option><option value="system" selected>Automático</option></select></label>
       <button class="nav-item home-nav-item" data-view="home"><span aria-hidden="true">⌂</span>Início</button>
-      <button class="nav-item home-nav-item" data-view="queixas"><span aria-hidden="true">▥</span>Queixas</button>
       <div class="nav-area open" data-area="armazem" data-permission-any="NRI_PENDING_VIEW,MARKETPLACE_RECEIVE,NRI_CREATE,NRI_PRINT,NRI_HISTORY,NRI_DAMAGE_HISTORY,CONF_CREATE,CONF_OWN_HISTORY,CONF_HISTORY,CONF_DASHBOARD,FEFO_CREATE,FEFO_ACTIVE,FEFO_REPORT,ROTATING_ASSET_CREATE,ROTATING_ASSET_HISTORY,MATERIAL_INVENTORY,MATERIAL_STOCK_VIEW,MATERIAL_CATALOG,MATERIAL_MOVEMENT,REFUGO_AFERIR,REFUGO_HISTORICO,REFUGO_CONFIG">
         <button type="button" class="nav-area-toggle" aria-expanded="true"><span class="area-icon">▦</span><span class="area-name">Armazém</span><span class="area-chevron">⌄</span></button>
         <div class="nav-area-items">
@@ -140,7 +139,7 @@
           </div>
       </div>
 
-      <div class="nav-area" data-area="entrega" data-permission-any="DELIVERY_DAMAGE_CREATE,DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST,RETURNS_VIEW,RETURNS_EDIT,RETURNS_IMPORT,RATING_VIEW,RATING_EDIT,FDR_VIEW,FDR_EDIT">
+      <div class="nav-area" data-area="entrega">
         <button type="button" class="nav-area-toggle" aria-expanded="false"><span class="area-icon">⇢</span><span class="area-name">Entrega</span><span class="area-chevron">⌄</span></button>
         <div class="nav-area-items">
           <div class="nav-module role-avaria" data-module="avarias" data-permission-any="DELIVERY_DAMAGE_CREATE,DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST">
@@ -152,7 +151,7 @@
               <button class="nav-item" data-view="avaria-dashboard" data-permission-any="DELIVERY_DAMAGE_VIEW_ALL,DELIVERY_DAMAGE_REVIEW,DELIVERY_DAMAGE_POST"><span>▥</span>Dashboard</button>
             </div>
           </div>
-          <div class="nav-module" data-module="devolucoes" data-permission-any="RETURNS_VIEW,RATING_VIEW,RATING_EDIT">
+          <div class="nav-module" data-module="devolucoes">
             <button type="button" class="nav-module-toggle" aria-expanded="false"><span class="module-icon">↩</span><span class="module-name">Devoluções</span><span class="module-chevron">⌄</span></button>
             <div class="nav-module-items">
               <button class="nav-item" data-view="returns-followup" data-permission="RETURNS_VIEW"><span>◫</span>Acompanhamentos</button>
@@ -163,6 +162,7 @@
               <button class="nav-item" data-view="returns-goals" data-permission="RETURNS_VIEW"><span>◎</span>Metas</button>
               <button class="nav-item" data-view="returns-import" data-permission="RETURNS_IMPORT"><span>↻</span>Bases do Google</button>
               <button class="nav-item" data-view="rating-clients" data-permission-any="RATING_VIEW,RATING_EDIT"><span>★</span>Rating de clientes</button>
+              <button class="nav-item" data-view="queixas"><span>▥</span>Queixas</button>
             </div>
           </div>
           <div class="nav-module" data-module="apontamento-fdr" data-permission="FDR_VIEW">
@@ -603,7 +603,7 @@
       </section>
 
       <section id="view-queixas" class="view">
-        <div class="page-head"><div><div class="breadcrumb">Atendimento / Queixas</div><h1>Queixas</h1><p>Cadastre, acompanhe e analise as reclamações.</p></div><span class="page-chip sales">QUEIXAS</span></div>
+        <div class="page-head"><div><div class="breadcrumb">Entrega / Devoluções / Queixas</div><h1>Queixas</h1><p>Cadastre, acompanhe e analise as reclamações.</p></div><span class="page-chip sales">QUEIXAS</span></div>
         <div class="card">
           <h2>Cadastrar queixa</h2>
           <form id="complaintForm">
@@ -1119,7 +1119,7 @@
   <script src="src/estoque/stock-validity.js?v=1.7.41"></script>
   <script src="src/vendas/sales-pricing.js?v=1.7.52"></script>
   <script src="src/ratings/rating.js?v=1.8.1-rating-filters"></script>
-  <script src="src/queixas/queixas.js?v=1"></script>
+  <script src="src/queixas/queixas.js?v=2"></script>
   <script src="src/shared/asset-conversion.js?v=1.7.49"></script>
   <script src="src/conferencia/conference.js?v=1.7.60"></script>
   <script src="src/forms/forms.js?v=1.8.1"></script>
@@ -1143,7 +1143,7 @@
   <script src="src/avarias/damage-workspace.js?v=1.8.1"></script>
   <script src="src/puxada/app-analytics.js?v=1.8.1"></script>
 <script src="src/puxada/app-bridge.js?v=1.8.1"></script>
-  <script src="src/shared/screen-design.js?v=1.8.1"></script>
+  <script src="src/shared/screen-design.js?v=1.8.1-queixas"></script>
 <script src="src/estoque/refugo.js?v=1.8.1-refugo-module"></script>
 <script src="src/estoque/fefo-completed-edits.js?v=1.7.110-fefo-edits"></script>
 <script src="src/estoque/fefo-reports.js?v=1.8.1-fefo-reports"></script>

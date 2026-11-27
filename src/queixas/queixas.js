@@ -67,7 +67,7 @@
     const map=new Map();
     for (const row of rows) {
       const label=clean(row.source?.[field]), normalized=key(label);
-      if (!normalized) continue;
+      if (!normalized || normalized === '-' || normalized === '#n/d') continue;
       const item=map.get(normalized) || {label,count:0};
       item.count++; map.set(normalized,item);
     }
@@ -84,7 +84,8 @@
     const monthly=[...months].sort(([a],[b])=>a.localeCompare(b)).map(([label,count])=>({label,count}));
     const statuses={resolvida:0,'em tratamento':0,'sem resposta':0,unknown:0};
     for (const row of valid) {
-      const status=key(row.status);
+      const original=key(row.status);
+      const status=original === 'resolvido' ? 'resolvida' : original === 'tratando' ? 'em tratamento' : original;
       if (Object.hasOwn(statuses,status) && status !== 'unknown') statuses[status]++;
       else statuses.unknown++;
     }

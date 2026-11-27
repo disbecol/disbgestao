@@ -51,6 +51,32 @@ test('recalcula tempo quando a data da tratativa muda e não usa datas inválida
   assert.equal(complaints.parseDate('29/02/2024'),'2024-02-29');
 });
 
+test('interpreta status históricos e ignora marcadores de dados ausentes nos rankings',()=>{
+  const rows=[
+    {source:{date:'01/02/2026',complaint:'Atraso',city:'-',seller:'#N/D'},status:'RESOLVIDO'},
+    {source:{date:'02/02/2026',complaint:'Atraso',city:'Caicó',seller:'Ana'},status:'TRATANDO'},
+    {source:{date:'03/02/2026',complaint:'Atraso',city:'#N/D',seller:'-'},status:''}
+  ];
+  const a=complaints.analyze(rows);
+  assert.deepEqual(a.statuses,{resolvida:1,'em tratamento':1,'sem resposta':0,unknown:1});
+  assert.deepEqual(a.cities,[{label:'Caicó',count:1}]);
+  assert.deepEqual(a.sellers,[{label:'Ana',count:1}]);
+  assert.equal(rows[0].status,'RESOLVIDO');
+});
+
+test('queixas fica em Devoluções acessível a todos os usuários autenticados',()=>{
+  const {document}=parseHTML(readFileSync(new URL('../index.html',import.meta.url),'utf8'));
+  const item=document.querySelector('[data-view="queixas"]');
+  const module=item.closest('[data-module="devolucoes"]');
+  const area=module.closest('[data-area="entrega"]');
+  assert.ok(module);assert.ok(area);
+  for(const element of [item,module,area]) {
+    assert.equal(element.hasAttribute('data-permission'),false);
+    assert.equal(element.hasAttribute('data-permission-any'),false);
+  }
+  assert.equal(document.querySelectorAll('[data-view="queixas"]').length,1);
+});
+
 test('importa pelo painel, confirma duplicatas e permite atualizar tratativa sem alterar original',async()=>{
   const {document,window}=parseHTML(readFileSync(new URL('../index.html',import.meta.url),'utf8'));
   const get=id=>document.getElementById(id);

@@ -19,7 +19,7 @@ test('every current route receives a named workspace and area, including the six
  const {document,api}=scene(),views=[...document.querySelectorAll('.view[id]')].filter(v=>!legacy.has(v.id.slice(5)));
  const bridge={};vm.runInNewContext(read('src/puxada/app-bridge.js'),{window:bridge});
  const embedded=Object.keys(bridge.DISB_PULL_INTEGRATION.routes).map(page=>'puxada-app-'+page);
- assert.equal(views.length+embedded.length,82);
+ assert.equal(views.length+embedded.length,83);
  assert.deepEqual(Object.keys(api.SCREENS).sort(),[...views.map(v=>v.id.slice(5)),...embedded].sort());
  for(const v of views){assert.ok(v.classList.contains('screen-workspace'),v.id);assert.ok(v.dataset.screenArea,v.id);assert.ok(v.dataset.screenLayout,v.id);}
  for(const id of embedded)assert.equal(api.SCREENS[id][0],'puxada');
