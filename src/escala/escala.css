@@ -63,3 +63,7 @@ html[data-theme=dark] .escala-app{--escala-holiday-bg:#173754;--escala-holiday-t
 @media print{.escala-filter-toolbar{display:none!important}.escala-layout{display:block}.escala-main-body .escala-daily-scroll .escala-daily-grid,.escala-main-body .escala-month-day-headings{min-width:0}}
 
 .escala-assignment-zone{min-height:64px;transition:outline-color .15s,box-shadow .15s}.escala-assignment-zone.assignment-drop-target{outline:2px solid var(--screen-accent);outline-offset:2px;box-shadow:0 0 0 4px var(--screen-selected)}.escala-app .escala-drop-empty{font-size:10px;line-height:1.4;padding:7px 0 3px;margin:0;color:inherit;opacity:.7}
+
+.escala-staffing-settings fieldset{border:0;padding:0;margin:16px 0 0;min-width:0}.escala-staffing-settings table{min-width:470px}.escala-staffing-settings input[type=number]{width:100%;min-width:100px;max-width:210px}.escala-staffing-settings h3{margin:20px 0 8px}.escala-staffing-settings footer{display:flex;justify-content:flex-end;margin-top:16px}.escala-staffing-add{display:flex;align-items:flex-end;flex-wrap:wrap;gap:12px;margin:12px 0}.escala-staffing-add label{max-width:250px}.escala-staffing-add button{min-height:38px}
+
+.escala-app .escala-redraw-choice{display:flex;align-items:center;justify-content:flex-start;gap:7px;margin:8px 0;font-size:11px}.escala-app .escala-redraw-choice input{width:13px;height:13px;min-height:0;margin:0;flex:none}
