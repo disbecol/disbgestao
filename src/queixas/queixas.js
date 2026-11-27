@@ -102,9 +102,9 @@
     const message=text=>{ $('complaintMessage').textContent=text; };
     const empty='Nenhum dado informado.';
 
-    function bars(title,items,total,description='') {
+    function bars(title,items,total) {
       const max=Math.max(1,...items.map(x=>x.count));
-      return `<section class="complaint-chart"><h3>${esc(title)}</h3>${description ? `<p class="complaint-chart-help">${esc(description)}</p>` : ''}${items.length ? `<div class="complaint-bar-list" tabindex="0" role="region" aria-label="${esc(title)}">${items.map(item=>`<div class="complaint-bar"><span>${esc(item.label)}</span><div class="complaint-track"><i style="width:${item.count/max*100}%"></i></div><strong>${item.count} <small>(${percent(item.count,total)})</small></strong></div>`).join('')}</div>` : `<p>${empty}</p>`}</section>`;
+      return `<section class="complaint-chart"><h3>${esc(title)}</h3>${items.length ? `<div class="complaint-bar-list" tabindex="0" role="region" aria-label="${esc(title)}">${items.map(item=>`<div class="complaint-bar"><span>${esc(item.label)}</span><div class="complaint-track"><i style="width:${item.count/max*100}%"></i></div><strong>${item.count} <small>(${percent(item.count,total)})</small></strong></div>`).join('')}</div>` : `<p>${empty}</p>`}</section>`;
     }
     function monthlyChart(items) {
       if (!items.length) return `<p>${empty}</p>`;
@@ -130,9 +130,9 @@
       const values=[a.statuses.resolvida,a.statuses['em tratamento'],a.statuses['sem resposta'],a.statuses.unknown];
       let start=0;
       const stops=values.map((n,i)=>{const end=start+(a.total?n/a.total*100:0);const s=`${colors[i]} ${start}% ${end}%`;start=end;return s;}).join(',');
-      const top=a.motives[0], last=a.monthly.at(-1), previous=a.monthly.at(-2);
+      const top=a.types[0], last=a.monthly.at(-1), previous=a.monthly.at(-2);
       const insights=[];
-      if (top) insights.push(`Motivo mais frequente: ${esc(top.label.length>120 ? `${top.label.slice(0,120)}…` : top.label)} (${top.count}).`);
+      if (top) insights.push(`Tipo mais frequente: ${esc(top.label.length>120 ? `${top.label.slice(0,120)}…` : top.label)} (${top.count}).`);
       if (a.statuses['sem resposta']) insights.push(`${a.statuses['sem resposta']} queixa(s) sem resposta (${percent(a.statuses['sem resposta'],a.total)}).`);
       if (last && previous) insights.push(`Último mês com registros (${last.label}): ${last.count}; mês anterior com registros (${previous.label}): ${previous.count}.`);
       if (a.statuses.unknown) insights.push(`${a.statuses.unknown} registro(s) com status não informado ou não reconhecido.`);
@@ -147,7 +147,7 @@
       $('complaintDashboard').innerHTML=`
         <div class="complaint-charts">
         <section class="complaint-chart"><h3>Evolução mensal de queixas</h3><p class="complaint-chart-help">Contagem pela data da queixa; meses sem registros aparecem zerados.</p>${monthlyChart(a.monthly)}</section>
-        ${bars('Queixas por tipo',a.types,a.total)}${bars('Queixas por motivo informado',a.motives,a.total,'Texto livre do campo “Queixa / motivo”, não uma lista padronizada; variações de escrita podem aparecer separadas.')}
+        ${bars('Queixas por tipo',a.types,a.total)}
         ${bars('Ranking de cidades',a.cities,a.total)}${bars('Ranking de vendedores',a.sellers,a.total)}
         ${bars('Distribuição do tempo de resposta',a.distribution,a.durations.length)}
         <section class="complaint-chart"><h3>Distribuição por status</h3><div class="complaint-pie-layout"><div class="complaint-pie" role="img" aria-label="Distribuição por status" style="background:${a.total ? `conic-gradient(${stops})` : '#e5e7eb'}"></div><ul>${labels.map((label,i)=>`<li><i style="background:${colors[i]}"></i>${label}: ${values[i]} (${percent(values[i],a.total)})</li>`).join('')}</ul></div></section></div>
