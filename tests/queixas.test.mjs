@@ -27,6 +27,27 @@ test('analisa apenas queixas válidas, mantém status desconhecido e calcula mé
   assert.equal(complaints.analyze([]).mean,null);
 });
 
+test('indicadores mostram meses sem registros e explicam que motivos são texto livre',async()=>{
+  const {document}=parseHTML(readFileSync(new URL('../index.html',import.meta.url),'utf8'));
+  const rows=[
+    {id:'a',source:{date:'01/01/2026',complaint:'Entrega atrasada'},status:'Resolvido'},
+    {id:'b',source:{date:'01/03/2026',complaint:'Produto errado'},status:'Tratando'}
+  ];
+  const client={from:()=>({select:()=>({order:()=>({range:async()=>({data:rows,error:null})})})})};
+  const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const api=complaints.create({getElement:id=>document.getElementById(id),context:()=>({client}),escapeHtml});
+  await api.enter();
+
+  assert.deepEqual(
+    [...document.querySelectorAll('.complaint-month-column')].map(column=>column.getAttribute('aria-label')),
+    ['jan/26: 1 queixa','fev/26: 0 queixas','mar/26: 1 queixa']
+  );
+  const reasonChart=[...document.querySelectorAll('.complaint-chart')].find(chart=>chart.querySelector('h3')?.textContent==='Queixas por motivo informado');
+  assert.match(reasonChart.textContent,/texto livre/i);
+  assert.match(reasonChart.textContent,/Entrega atrasada/);
+  assert.match(reasonChart.textContent,/Produto errado/);
+});
+
 test('recalcula tempo quando a data da tratativa muda e não usa datas inválidas ou negativas',()=>{
   const row={source:{date:'01/03/2026',treatment_date:'02/03/2026',days:'1'},treatment_date:'05/03/2026'};
   assert.equal(complaints.responseDays(row),4);
