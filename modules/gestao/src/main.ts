@@ -5,6 +5,8 @@ import {createStaffDirectory} from './staff/controller';
 export {createStaffDirectory};
 import { createEscala } from './escala/controller';
 export { createEscala };
+import {createWarehouseEscala} from './warehouse/controller';
+export {createWarehouseEscala};
 import type { FormsAdapter, FormsModule, ReactFormsModal } from "./forms/types";
 export const engine = "react-typescript";
 export const roleCatalog = USER_ROLES;
@@ -66,5 +68,5 @@ export function create(adapter: FormsAdapter): FormsModule {
 
 // Existing navigation and the Android bridge keep the same module contract.
 Object.assign(window, {
-  DISB_FORMS_UI: { create, createEscala, createStaffDirectory, engine, release: releaseContent, roleCatalog },
+  DISB_FORMS_UI: { create, createEscala, createWarehouseEscala, createStaffDirectory, engine, release: releaseContent, roleCatalog },
 });

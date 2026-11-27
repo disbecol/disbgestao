@@ -211,6 +211,11 @@ const viewMeta = {
   'sales-pricing':['Escalonada Digital','Preços TTC e TTV por segmento'],
   'rating-clients':['Rating de Clientes','Avaliações e tratativas dos clientes'],
   'queixas':['Queixas','Cadastro, acompanhamento e análise'],
+  'warehouse-calendar':['Escala · Armazém · Calendário','Turnos e folgas do armazém'],
+  'warehouse-staff':['Escala · Armazém · Funcionários','Turnos e folgas do armazém'],
+  'warehouse-settings':['Escala · Armazém · Configurações','Turnos e folgas do armazém'],
+  'warehouse-reports':['Escala · Armazém · Relatórios','Turnos e folgas do armazém'],
+  'warehouse-history':['Escala · Armazém · Histórico','Turnos e folgas do armazém'],
   'escala-calendar':['Escala · Calendário','Equipes e folgas por unidade'],
   'escala-teams':['Escala · Equipes','Equipes e folgas por unidade'],
   'escala-staff':['Escala · Funcionários','Equipes e folgas por unidade'],
@@ -1110,6 +1115,7 @@ async function logout(){
   window.DISB_PULL_INTEGRATION?.suspend();
   clearAvariaRequest();
   escalaModule?.stop();
+  warehouseModule?.stop();
   staffDirectoryModule?.stop();
   formsModule?.stop();
   returnsModule?.stop();
@@ -1419,6 +1425,7 @@ function openView(name,force=false){
   if(name==='queixas')void complaintsModule?.enter();
   if(name==='staff-directory')void staffDirectoryModule?.enter();else staffDirectoryModule?.stop();
   if(name.startsWith('escala-'))void escalaModule?.enter(name);else escalaModule?.stop();
+  if(name.startsWith('warehouse-'))void warehouseModule?.enter(name);else warehouseModule?.stop();
   if(name.startsWith('forms-'))void formsModule?.enter(name);
   if(name.startsWith('returns-'))void returnsModule?.enter(name);
   if(name.startsWith('orders-'))void ordersModule?.enter(name);
@@ -8447,6 +8454,7 @@ async function changeActiveUnit(next){
   if(submitAvaria._pending){renderActiveUnitSelector();return toast('Aguarde o registro da avaria ser salvo no aparelho.','');}
   if(staffDirectoryModule&&!staffDirectoryModule.canChangeUnit()){renderActiveUnitSelector();return;}
   if(escalaModule&&!escalaModule.canChangeUnit()){renderActiveUnitSelector();return;}
+  if(warehouseModule&&!warehouseModule.canChangeUnit()){renderActiveUnitSelector();return;}
   if(formsModule&&!formsModule.canChangeUnit()){renderActiveUnitSelector();return;}
   if(returnsModule&&!returnsModule.canChangeUnit()){renderActiveUnitSelector();return;}
   if(ordersModule&&!ordersModule.canChangeUnit()){renderActiveUnitSelector();return;}
@@ -8456,6 +8464,7 @@ async function changeActiveUnit(next){
   deliveryDamageDashboard?.stop();
   fdrModule?.stop();
   escalaModule?.stop();
+  warehouseModule?.stop();
   staffDirectoryModule?.stop();
   formsModule?.stop();
   window.DISB_PULL_INTEGRATION?.suspend();
@@ -12897,7 +12906,7 @@ const fdrModule=window.DISB_FDR_UI?.create({
   hasPermission:hasPerm,toast
 });
 const staffDirectoryModule=window.DISB_FORMS_UI?.createStaffDirectory?.({context:()=>({client:sb,user:authUser,profile,unit:activeUnit,units:[...myUnits]}),hasPermission:hasPerm,openView,toast,download:()=>{}});
-const escalaModule=window.DISB_FORMS_UI?.createEscala?.({
+const escalaAdapter={
  context:()=>({client:sb,user:authUser,profile,unit:activeUnit,units:[...myUnits]}),hasPermission:hasPerm,openView,toast,
  download:async(name,blob)=>{
   if(isNativeCapacitor()){
@@ -12908,7 +12917,9 @@ const escalaModule=window.DISB_FORMS_UI?.createEscala?.({
   }
   const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
  }
-});
+};
+const escalaModule=window.DISB_FORMS_UI?.createEscala?.(escalaAdapter);
+const warehouseModule=window.DISB_FORMS_UI?.createWarehouseEscala?.(escalaAdapter);
 const formsModule=window.DISB_FORMS_UI?.create({
   context:()=>({client:sb,user:authUser,profile,unit:activeUnit,units:[...myUnits],roles:ROLE_LABELS}),
   hasPermission:hasPerm,openView,toast,

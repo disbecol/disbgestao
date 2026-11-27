@@ -1,0 +1,17 @@
+import type {Holiday} from '../escala/model';
+export type WarehouseRole='CHECKER'|'FORKLIFT'|'HELPER';
+export const warehouseRoles:WarehouseRole[]=['CHECKER','FORKLIFT','HELPER'];
+export const roleLabels:Record<WarehouseRole,string>={CHECKER:'Conferentes',FORKLIFT:'Empilhadores',HELPER:'Ajudantes de armazém'};
+export type WarehousePerson={id:string;name:string;job:string;role:WarehouseRole;active:boolean;status:string;vacation_start:string|null;vacation_end:string|null};
+export type Shift={id:string;name:string;segments:{start:string;end:string}[];break_minutes:number};
+export type CycleCell={mode:'WORK'|'REST';shift_id:string|null;notes?:string};
+export type PersonCycle={base_shift:string;weeks:CycleCell[][]};
+export type WarehouseConfig={version:1;anchor_date:string|null;shifts:Shift[];people:Record<string,PersonCycle>;helper_shift:string;qlp:{weekdays:Record<string,Partial<Record<WarehouseRole,number>>>;dates:Record<string,Partial<Record<WarehouseRole,number>>>};rules:{weekly_minutes:number;daily_minutes:number;min_rest_minutes:number;break_minutes:number;compensation:boolean;reference:string};notes:string};
+export type WarehouseAssignment={person:{id:string;name:string;job:string;role:WarehouseRole};mode:'WORK'|'REST'|'UNAVAILABLE'|'UNASSIGNED';shift_id:string|null;notes:string;manual:boolean;completed:boolean};
+export type WarehouseDay={date:string;kind:'NORMAL'|'SUNDAY'|'HOLIDAY';locked:boolean;people:WarehouseAssignment[]};
+export type WarehousePlan={id:string;month:string;status:'DRAFT'|'APPROVED'|'LOCKED';revision:number;seed:string;days:WarehouseDay[];config_snapshot:WarehouseConfig;notes:string};
+export type WarehouseAudit={id:string;action:string;actor_name:string;reason:string;changed_at:string;before:unknown;after:unknown};
+export type WarehouseState={staff:WarehousePerson[];config:WarehouseConfig|null;config_revision:number;holidays:Holiday[];plan:WarehousePlan|null;history:WarehousePlan[];adjacent:WarehousePlan[];audit:WarehouseAudit[]};
+export type WarehouseIssue={code:string;message:string;date?:string;person?:string;severity:'ERROR'|'WARN'};
+export const normalized=(text:string)=>text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
+export const shortName=(name:string)=>name;
