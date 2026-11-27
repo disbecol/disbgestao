@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="src/estoque/stock-validity.css?v=1.7.41">
   <link rel="stylesheet" href="src/vendas/sales-pricing.css?v=1.7.52">
   <link rel="stylesheet" href="src/ratings/rating.css?v=1.8.1-rating-filters">
-  <link rel="stylesheet" href="src/queixas/queixas.css?v=5">
+  <link rel="stylesheet" href="src/queixas/queixas.css?v=6">
   <link rel="stylesheet" href="src/forms/forms.css?v=1.8.1">
   <link rel="stylesheet" href="src/escala/escala.css?v=1.8.1">
   <link rel="stylesheet" href="src/estoque/refugo.css?v=1.7.16">
@@ -644,8 +644,10 @@
         </div>
         <div id="complaintRecordsPanel" class="card complaint-panel" hidden>
           <div class="complaint-section-heading"><div><h2>Registros</h2><p>Tratativa e status mostram os valores atuais. Os dados originais ficam disponíveis em Atualizar tratativa.</p></div></div>
+          <div class="complaint-record-controls"><div class="field"><label for="complaintSearch">Pesquisar em todas as colunas</label><input id="complaintSearch" type="search" placeholder="Data, cliente, cidade, vendedor, queixa..."></div><button id="complaintClearSearch" type="button" class="btn secondary">Limpar pesquisa</button><span id="complaintRecordCount" role="status" aria-live="polite"></span></div>
+          <p class="complaint-note">Clique no título de uma coluna para ordenar; clique novamente para inverter. A pesquisa afeta apenas os registros exibidos.</p>
           <div id="complaintEditor"></div>
-          <div class="rating-table-wrap complaint-table-wrap"><table class="rating-table"><thead><tr><th>Data da queixa</th><th>Data da tratativa</th><th>Dias para responder</th><th>Cód.</th><th>Unidade</th><th>Cidade</th><th>Fantasia</th><th>Vendedor</th><th>Canal</th><th>Tipo</th><th>Queixa</th><th>Tratativa</th><th>Status</th><th>Ação</th></tr></thead><tbody id="complaintRows"></tbody></table></div>
+          <div class="rating-table-wrap complaint-table-wrap"><table class="rating-table"><thead><tr><th><button type="button" data-complaint-sort="date">Data da queixa</button></th><th><button type="button" data-complaint-sort="treatment_date">Data da tratativa</button></th><th><button type="button" data-complaint-sort="days">Dias para responder</button></th><th><button type="button" data-complaint-sort="code">Cód.</button></th><th><button type="button" data-complaint-sort="unit">Unidade</button></th><th><button type="button" data-complaint-sort="city">Cidade</button></th><th><button type="button" data-complaint-sort="name">Fantasia</button></th><th><button type="button" data-complaint-sort="seller">Vendedor</button></th><th><button type="button" data-complaint-sort="channel">Canal</button></th><th><button type="button" data-complaint-sort="type">Tipo</button></th><th><button type="button" data-complaint-sort="complaint">Queixa</button></th><th><button type="button" data-complaint-sort="treatment">Tratativa</button></th><th><button type="button" data-complaint-sort="status">Status</button></th><th>Ação</th></tr></thead><tbody id="complaintRows"></tbody></table></div>
         </div>
       </section>
 
@@ -1128,7 +1130,7 @@
   <script src="src/estoque/stock-validity.js?v=1.7.41"></script>
   <script src="src/vendas/sales-pricing.js?v=1.7.52"></script>
   <script src="src/ratings/rating.js?v=1.8.1-rating-filters"></script>
-  <script src="src/queixas/queixas.js?v=5"></script>
+  <script src="src/queixas/queixas.js?v=6"></script>
   <script src="src/shared/asset-conversion.js?v=1.7.49"></script>
   <script src="src/conferencia/conference.js?v=1.7.60"></script>
   <script src="src/forms/forms.js?v=1.8.1"></script>

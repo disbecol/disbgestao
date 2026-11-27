@@ -62,6 +62,7 @@ Aplicativo unificado com **NRI + Avarias + Conferência de Vasilhames**, usando 
 - Canal, tipo e status são escolhidos nas listas do cadastro; registros antigos com outros valores permanecem preservados.
 - Os dados originais ficam preservados no banco; atualizações de tratativa, data e status são mantidas separadamente. Registros sem data válida ou sem queixa são guardados, mas não entram nos indicadores.
 - A tabela de registros apresenta as 13 colunas da planilha, com a tratativa e o status atuais; os valores originais estão disponíveis em **Atualizar tratativa > Ver dados originais**. Os dias são mantidos da planilha enquanto a data da tratativa não mudar; caso contrário, são calculados quando ambas as datas forem válidas.
+- A pesquisa consulta todas as colunas dos registros; clique nos títulos para ordenar. Pesquisa e ordenação não alteram os indicadores nem os dados salvos.
 - O tempo utiliza os dias originais informados e válidos; se não houver dias originais, ou se a data da tratativa for atualizada, usa a diferença entre datas válidas. Valores inválidos ou ausentes não são estimados. Status desconhecidos ficam em categoria separada, no denominador dos percentuais.
 - Nas análises, os status históricos `RESOLVIDO` e `TRATANDO` são contabilizados como resolvida e em tratamento. Valores `-` e `#N/D` não entram nos rankings; os valores originais permanecem intactos.
 
