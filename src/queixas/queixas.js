@@ -8,6 +8,10 @@
   const fields = ['date','treatment_date','days','code','unit','city','name','seller','channel','type','complaint','treatment','status'];
   const clean = value => String(value ?? '').trim();
   const key = value => clean(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ');
+  const statusOptions=['Tratando','Resolvido','Sem resposta'];
+  const statusSelection=value=>({
+    tratando:'Tratando','em tratamento':'Tratando',resolvido:'Resolvido',resolvida:'Resolvido','sem resposta':'Sem resposta'
+  }[key(value)] || '');
 
   function parseDate(value) {
     const text = clean(value);
@@ -190,9 +194,10 @@
         if (!button) return;
         const row=rows.find(item=>item.id===button.dataset.complaintEdit);
         if (!row) return;
+        const selectedStatus=statusSelection(row.status);
         $('complaintEditor').innerHTML=`<form id="complaintEditForm" class="complaint-editor"><h3>Atualizar tratativa</h3><div class="grid grid-3">
           <div class="field"><label for="complaintEditDate">Data da tratativa</label><input id="complaintEditDate" value="${esc(row.treatment_date)}" placeholder="dd/mm/aaaa"></div>
-          <div class="field"><label for="complaintEditStatus">Status</label><input id="complaintEditStatus" value="${esc(row.status)}" list="complaintStatusOptions"><datalist id="complaintStatusOptions"><option value="Resolvida"><option value="Em tratamento"><option value="Sem resposta"></datalist></div>
+          <div class="field"><label for="complaintEditStatus">Status</label><select id="complaintEditStatus"><option value="" disabled ${selectedStatus ? '' : 'selected'}>${row.status ? `Valor atual: ${esc(row.status)}` : 'Não informado'}</option>${statusOptions.map(status=>`<option value="${status}" ${status===selectedStatus ? 'selected' : ''}>${status}</option>`).join('')}</select></div>
           <div class="field"><label for="complaintEditText">Tratativa</label><textarea id="complaintEditText">${esc(row.treatment)}</textarea></div></div>
           <div class="actions"><button type="submit" class="btn primary">Salvar atualização</button><button type="button" class="btn secondary" id="complaintEditCancel">Cancelar</button></div></form>`;
         $('complaintEditCancel').addEventListener('click',()=>{ $('complaintEditor').innerHTML=''; });
@@ -203,7 +208,9 @@
           if (date && (!parsed || (start && parsed<start))) { message('Informe uma data válida de tratativa, não anterior à queixa.');return; }
           busy=true;
           try {
-            const {error}=await adapter.context().client.rpc('complaints_update_treatment',{p_id:row.id,p_revision:row.revision,p_date:date,p_treatment:$('complaintEditText').value,p_status:$('complaintEditStatus').value});
+            const selection=$('complaintEditStatus').value;
+            const status=selection && selection!==selectedStatus ? selection : row.status;
+            const {error}=await adapter.context().client.rpc('complaints_update_treatment',{p_id:row.id,p_revision:row.revision,p_date:date,p_treatment:$('complaintEditText').value,p_status:status});
             if (error) throw error;
             $('complaintEditor').innerHTML='';if(await enter())message('Tratativa atualizada; dados originais preservados.');
           } catch(error) { message(`Não foi possível atualizar a tratativa: ${error.message || error}`); }

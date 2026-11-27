@@ -632,9 +632,9 @@
               <div class="field"><label for="complaintCity">Cidade</label><input id="complaintCity" name="city"></div>
               <div class="field"><label for="complaintName">Fantasia</label><input id="complaintName" name="name"></div>
               <div class="field"><label for="complaintSeller">Vendedor</label><input id="complaintSeller" name="seller"></div>
-              <div class="field"><label for="complaintChannel">Canal</label><input id="complaintChannel" name="channel"></div>
-              <div class="field"><label for="complaintType">Tipo</label><input id="complaintType" name="type"></div>
-              <div class="field"><label for="complaintStatus">Status</label><select id="complaintStatus" name="status"><option value="">Não informado</option><option>Resolvida</option><option>Em tratamento</option><option>Sem resposta</option></select></div>
+              <div class="field"><label for="complaintChannel">Canal</label><select id="complaintChannel" name="channel"><option value="">Selecione</option><option>Zendesk</option><option>WhatsApp</option><option>Pessoalmente</option><option>Email</option><option>Ligação</option></select></div>
+              <div class="field"><label for="complaintType">Tipo</label><select id="complaintType" name="type"><option value="">Selecione</option><option>Pedido</option><option>Produto</option><option>Motorista</option><option>Endereço</option><option>Financeiro</option><option>Comunicação</option><option>Vendedor</option></select></div>
+              <div class="field"><label for="complaintStatus">Status</label><select id="complaintStatus" name="status"><option value="">Selecione</option><option>Tratando</option><option>Resolvido</option><option>Sem resposta</option></select></div>
               <div class="field span-2"><label for="complaintDescription">Queixa / motivo *</label><textarea id="complaintDescription" name="complaint" required></textarea></div>
               <div class="field"><label for="complaintTreatmentDate">Data da tratativa</label><input id="complaintTreatmentDate" name="treatment_date" type="date"></div>
               <div class="field span-2"><label for="complaintTreatment">Tratativa</label><textarea id="complaintTreatment" name="treatment"></textarea></div>
@@ -1128,7 +1128,7 @@
   <script src="src/estoque/stock-validity.js?v=1.7.41"></script>
   <script src="src/vendas/sales-pricing.js?v=1.7.52"></script>
   <script src="src/ratings/rating.js?v=1.8.1-rating-filters"></script>
-  <script src="src/queixas/queixas.js?v=3"></script>
+  <script src="src/queixas/queixas.js?v=4"></script>
   <script src="src/shared/asset-conversion.js?v=1.7.49"></script>
   <script src="src/conferencia/conference.js?v=1.7.60"></script>
   <script src="src/forms/forms.js?v=1.8.1"></script>

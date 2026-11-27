@@ -62,6 +62,14 @@ test('queixas fica em Devoluções acessível a todos os usuários autenticados'
   assert.equal(document.querySelectorAll('[data-view="queixas"]').length,1);
 });
 
+test('cadastro oferece apenas os canais, tipos e status definidos',()=>{
+  const {document}=parseHTML(readFileSync(new URL('../index.html',import.meta.url),'utf8'));
+  const options=id=>[...document.getElementById(id).querySelectorAll('option')].filter(option=>option.getAttribute('value')!=='').map(option=>option.textContent);
+  assert.deepEqual(options('complaintChannel'),['Zendesk','WhatsApp','Pessoalmente','Email','Ligação']);
+  assert.deepEqual(options('complaintType'),['Pedido','Produto','Motorista','Endereço','Financeiro','Comunicação','Vendedor']);
+  assert.deepEqual(options('complaintStatus'),['Tratando','Resolvido','Sem resposta']);
+});
+
 test('seções preservam rascunhos e registros existentes, incluindo ao cadastrar e atualizar tratativa',async()=>{
   const {document,window}=parseHTML(readFileSync(new URL('../index.html',import.meta.url),'utf8'));
   const get=id=>document.getElementById(id);
@@ -108,10 +116,30 @@ test('seções preservam rascunhos e registros existentes, incluindo ao cadastra
   tab('records').click();
   const original=JSON.stringify(store[0].source);
   get('complaintRows').querySelector('[data-complaint-edit="id0"]').dispatchEvent(new window.Event('click',{bubbles:true}));
-  get('complaintEditDate').value='03/02/2026';get('complaintEditStatus').value='Resolvida';get('complaintEditText').value='Retorno';
+  get('complaintEditDate').value='03/02/2026';
+  const select=get('complaintEditStatus');
+  assert.deepEqual([...select.querySelectorAll('option')].map(option=>option.value),['','Tratando','Resolvido','Sem resposta']);
+  Object.defineProperty(select,'value',{value:'Resolvido',configurable:true});
+  get('complaintEditText').value='Retorno';
   get('complaintEditForm').dispatchEvent(new window.Event('submit',{cancelable:true}));
   await new Promise(resolve=>setTimeout(resolve,0));
   assert.equal(JSON.stringify(store[0].source),original);
-  assert.equal(store[0].status,'Resolvida');
+  assert.equal(store[0].status,'Resolvido');
   assert.match(get('complaintSummary').textContent,/2 dias/);
+  store[0].status='RESOLVIDO';
+  await api.enter();
+  get('complaintRows').querySelector('[data-complaint-edit="id0"]').dispatchEvent(new window.Event('click',{bubbles:true}));
+  assert.ok(get('complaintEditStatus').querySelector('option[value="Resolvido"]').hasAttribute('selected'));
+  Object.defineProperty(get('complaintEditStatus'),'value',{value:'Resolvido',configurable:true});
+  get('complaintEditForm').dispatchEvent(new window.Event('submit',{cancelable:true}));
+  await new Promise(resolve=>setTimeout(resolve,0));
+  assert.equal(store[0].status,'RESOLVIDO');
+  store[0].status='Status antigo';
+  await api.enter();
+  get('complaintRows').querySelector('[data-complaint-edit="id0"]').dispatchEvent(new window.Event('click',{bubbles:true}));
+  assert.match(get('complaintEditStatus').textContent,/Status antigo/);
+  Object.defineProperty(get('complaintEditStatus'),'value',{value:'',configurable:true});
+  get('complaintEditForm').dispatchEvent(new window.Event('submit',{cancelable:true}));
+  await new Promise(resolve=>setTimeout(resolve,0));
+  assert.equal(store[0].status,'Status antigo');
 });

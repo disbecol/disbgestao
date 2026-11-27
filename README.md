@@ -59,6 +59,7 @@ Aplicativo unificado com **NRI + Avarias + Conferência de Vasilhames**, usando 
 - Todos os usuários ativos autenticados podem consultar e registrar queixas de todas as unidades e atualizar tratativas.
 - Aplique `supabase/migrations/20261127130000_complaints.sql` no Supabase antes de usar a aba.
 - Acesse **Entrega > Devoluções > Queixas** para consultar a visão geral, os indicadores e os registros ou cadastrar uma nova queixa.
+- Canal, tipo e status são escolhidos nas listas do cadastro; registros antigos com outros valores permanecem preservados.
 - Os dados originais ficam preservados no banco; atualizações de tratativa, data e status são mantidas separadamente. Registros sem data válida ou sem queixa são guardados, mas não entram nos indicadores.
 - O tempo utiliza os dias originais informados e válidos; se não houver dias originais, ou se a data da tratativa for atualizada, usa a diferença entre datas válidas. Valores inválidos ou ausentes não são estimados. Status desconhecidos ficam em categoria separada, no denominador dos percentuais.
 - Nas análises, os status históricos `RESOLVIDO` e `TRATANDO` são contabilizados como resolvida e em tratamento. Valores `-` e `#N/D` não entram nos rankings; os valores originais permanecem intactos.
