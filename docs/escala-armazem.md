@@ -13,9 +13,15 @@ Disponível em **Escala → Armazém**, com calendário, funcionários, configur
 
 Escolha o início e revise os turnos em Configurações; salve e gere o mês no Calendário. Os sete dias da semana são exibidos juntos, inclusive na virada de mês, com opção mensal. Cada função abre e fecha separadamente e seu contador mostra as pessoas disponíveis. Disponíveis são verdes, folgas comuns vermelhas, domingos e feriados azuis.
 
-Arrastar ou editar um nome altera somente a situação daquela pessoa no dia de destino, sem trocar com um colega. Registros fora do mês, dias bloqueados, realizados, domingos e feriados sem operação são protegidos. Rascunhos com pendências podem ser salvos; a aprovação exige resolver os erros verificados no servidor. As configurações permitem QLP mínimo por função e dia da semana, com exceções por data.
+Arrastar ou editar um nome altera somente a situação daquela pessoa no dia de destino, sem trocar com um colega. Registros fora do mês, dias bloqueados, realizados, domingos e feriados sem operação são protegidos. Rascunhos com pendências podem ser salvos; a aprovação exige resolver os erros verificados no servidor. O Armazém não configura QLP: considera todos os colaboradores conforme seus turnos, folgas, férias e afastamentos. O QLP da Entrega permanece independente.
 
-Os horários são vinculados à data de entrada; saídas de madrugada recebem “+1 dia”. A validação usa os horários registrados, seus intervalos e os limites configurados para identificar jornadas longas, descanso curto entre turnos, menos de duas folgas semanais e falta de QLP. O modelo da imagem contém coberturas com intervalo curto e jornadas de nove horas; essas situações são sinalizadas para revisão. As horas mostradas são duração efetiva dos turnos, sem cálculo de folha, adicional ou conversão de hora noturna.
+Os horários são vinculados à data de entrada; saídas de madrugada recebem “+1 dia”. A validação usa os horários registrados, seus intervalos e os limites configurados para identificar jornadas longas, descanso curto entre turnos e menos de duas folgas semanais. O intervalo dos turnos diurnos de 06h–16h e 07h–17h foi confirmado como **12h–14h**, resultando em oito horas efetivas. Samuel inicia às 15h na sexta de cobertura após o noturno; na quarta semana, Severino folga sexta antes do sábado de manhã e Iago mantém o segundo turno na segunda. Quando a folga de ciclo coincide com feriado útil, a geração procura outro dia útil de folga, preservando a cobertura de sábado. As horas mostradas são duração efetiva dos turnos, sem cálculo de folha, adicional ou conversão de hora noturna.
+
+Configurações mostra início, horários e ciclos; os turnos e as regras avançadas ficam recolhidos. Rascunhos do primeiro modelo são recalculados ao carregar, mantendo remanejamentos manuais, bloqueios e realizações. A nova versão abre a semana inicial cadastrada e exige salvar o rascunho revisado. A migração corretiva registra sua identificação nas observações do modelo, sem alterar a autoria obrigatória do histórico ou os calendários já salvos.
+
+## PDFs para divulgação
+
+Os relatórios de Entrega e Armazém oferecem **PDF para compartilhar**, com mês completo ou semana selecionada. O PDF usa A4 horizontal, nomes completos agrupados por função, sete dias lado a lado, legenda, revisão, situação de aprovação e páginas numeradas. No Armazém inclui horários e intervalos; domingos e feriados de descanso são azuis. Usa a escala exibida, inclusive quando ainda está em rascunho, sem gravar dados ao exportar. Dias de outro mês não recebem disponibilidade inventada; turnos noturnos indicam a saída no dia seguinte. Quadros maiores continuam em páginas adicionais com os mesmos cabeçalhos.
 
 Alterações de configuração não reescrevem horários históricos: cada calendário guarda a configuração usada. Novas gravações usam revisão otimista e identificador idempotente; ajustes mantêm responsável, justificativa e conteúdo anterior no histórico.
 
@@ -26,4 +32,4 @@ Alterações de configuração não reescrevem horários históricos: cada calen
 - Banco local com PostgreSQL/PGlite: permissões, unidade, RLS, validação dos dados, aprovação, bloqueio, histórico e reenvio idempotente.
 - Revisão visual com navegador em tema claro/escuro e celular, usando dados fictícios.
 
-Migração: `20261127182813_escala_warehouse_schedules.sql`. Cria somente as tabelas e funções do Armazém; não cadastra jornadas nem escolhe uma data inicial.
+Migrações: `20261127182813_escala_warehouse_schedules.sql` cria as tabelas e funções do Armazém; `20261127194737_warehouse_rest_and_breaks_fix.sql` corrige valores reconhecidos do primeiro modelo e retira a validação de QLP do Armazém. Não escolhem uma data inicial nem alteram calendários existentes.

@@ -19,6 +19,7 @@ function harness(options={}){
 }
 const clickText=async(h,text)=>{const button=[...h.document.querySelectorAll('.escala-app button')].find(b=>b.textContent.trim()===text||b.getAttribute('aria-label')===text.replace(/[‹›]/g,'').trim());assert.ok(button,'Button '+text);button.click();await h.settle();};
 async function showRoles(h){for(const el of h.document.querySelectorAll('.escala-role-details'))if(!el.open){el.open=true;el.dispatchEvent(new h.window.Event('toggle'));}await h.settle();}
+test('Relatórios da Entrega oferece PDF mensal e semanal sem alterar a escala',async()=>{const state=individualState();state.plan=generateMonth(state,'2026-11-01','delivery-pdf').plan;const h=harness({state});await h.enter('escala-reports');assert.match(h.get('.escala-share-pdf').textContent,/PDF para compartilhar/);await h.change('[aria-label="Período do PDF"]','week');assert.equal(h.get('[aria-label="Semana do PDF"]').querySelectorAll('option').length,6);assert.equal(h.writes.length,0);h.destroy();});
 function individualState(){const s=escalaFixture();s.individual_enabled=true;s.teams=s.teams.slice(0,2).map(t=>({...t,fixed_group:true}));s.memberships=s.memberships.slice(0,6).map(m=>({...m,origin:'MANUAL',draw_month:null}));s.staff=s.staff.filter(p=>!['team-8-person-2','team-9-person-2','team-10-person-2'].includes(p.id));return s;}
 
 test('o resumo abre direto com nomes sem cargos, motoristas primeiro e ajudantes depois em ordem alfabética',async()=>{
