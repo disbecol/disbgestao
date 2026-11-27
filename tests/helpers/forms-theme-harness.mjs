@@ -26,7 +26,7 @@ export function formsThemeHarness(options={}){
   removeEventListener(type,handler){events.get(type)?.delete(handler);},
   get DISB_FORMS_UI(){return this._forms;},set DISB_FORMS_UI(v){this._forms=v;}};
  document.defaultView.HTMLElement.prototype.scrollIntoView=()=>{};
- const ctx=vm.createContext({window:fakeWindow,document,navigator:online,Date:FixedDate,Intl,crypto:globalThis.crypto,performance,queueMicrotask,setImmediate,console,confirm:options.confirm||(()=>true),Blob,URL,TextEncoder,Uint8Array,ArrayBuffer,DataView,
+ const ctx=vm.createContext({window:fakeWindow,document,navigator:online,Date:FixedDate,Intl,crypto:globalThis.crypto,performance,queueMicrotask,setImmediate,console,confirm:options.confirm||(()=>true),Blob,URL,TextEncoder,Uint8Array,ArrayBuffer,DataView,structuredClone,
   setTimeout:(fn,delay)=>{timerJobs.set(++timerId,{fn,delay});return timerId;},clearTimeout:id=>timerJobs.delete(id),setInterval:()=>1,clearInterval(){},
   localStorage:{getItem:key=>memory.get(key)||null,setItem:(key,v)=>memory.set(key,v),removeItem:key=>memory.delete(key)}});
  vm.runInContext(read(options.sourceFile||'src/gestao-app/forms-react.js'),ctx);

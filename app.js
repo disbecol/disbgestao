@@ -214,7 +214,6 @@ const viewMeta = {
   'escala-calendar':['Escala · Calendário','Equipes e folgas por unidade'],
   'escala-teams':['Escala · Equipes','Equipes e folgas por unidade'],
   'escala-staff':['Escala · Funcionários','Equipes e folgas por unidade'],
-  'escala-trucks':['Escala · Caminhões','Equipes e folgas por unidade'],
   'escala-holidays':['Escala · Feriados','Equipes e folgas por unidade'],
   'escala-reports':['Escala · Relatórios','Equipes e folgas por unidade'],
   'staff-directory':['Cadastro de Equipes','Pessoas, funções e áreas'],

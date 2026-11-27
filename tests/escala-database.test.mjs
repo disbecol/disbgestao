@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {PGlite} from '@electric-sql/pglite';
-import {generateMonth} from '../modules/gestao/src/escala/engine.ts';
+import {generateMonth as generatePeopleMonth} from '../modules/gestao/src/escala/engine.ts';
+// This historical schema fixture retains its original vehicle requirement.
+function generateMonth(state,month,seed){const result=generatePeopleMonth(state,month,seed);for(const day of result.plan.days){let n=0;for(const duty of day.duties)if(duty.mode==='ROUTE')duty.truck_id=state.trucks[n++]?.id||null;}return result;}
 const db=new PGlite(),A='Matriz Caicó',B='Filial Pau dos Ferros',admin=randomUUID(),manager=randomUUID(),viewer=randomUUID(),other=randomUUID();
 const q=async(sql,args=[])=>(await db.query(sql,args)).rows;
 async function as(id=admin){await db.exec('reset role');await q("select set_config('request.jwt.claim.sub',$1,false)",[id]);await db.exec('set role authenticated');}
@@ -20,7 +22,7 @@ before(async()=>{
  for(const t of baseline.trucks)await cmd('TRUCK_SAVE',{plate:'ABC1D'+String(baseline.trucks.indexOf(t)+1).padStart(2,'0'),status:'AVAILABLE'},t.id,t.revision);
  for(const team of baseline.teams){for(let i=0;i<3;i++){const person=await cmd('STAFF_SAVE',{name:`Pessoa fictícia ${team.code}-${i}`,job:i?'Ajudante':'Motorista',status:'ACTIVE'});await cmd('MEMBERSHIP_SAVE',{team_id:team.id,staff_id:person.id,starts_on:'2026-01-01'});}}
  await db.exec('reset role');await db.exec("update escala_memberships set origin='AUTO'");await as();
- const rules=(await state()).rules;await cmd('RULES_SAVE',{collective_reference:'Regime 5x2 para teste',reviewed_on:'2026-11-25'},rules.id,rules.revision);baseline=await state();
+ const rules=(await state()).rules;await cmd('RULES_SAVE',{work_minutes:480,daily_limit:480,weekly_minutes:2400,collective_reference:'Regime 5x2 para teste',reviewed_on:'2026-11-25'},rules.id,rules.revision);baseline=await state();
 });
 after(async()=>db.close());
 test('migração e configuração real são idempotentes e não concedem acesso anônimo',async()=>{
