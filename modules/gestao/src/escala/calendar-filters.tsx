@@ -3,7 +3,7 @@ import {useState,type ReactNode} from 'react';
 type Props={month:string;busy:boolean;onPrevious():void;onNext():void;onCurrent():void;onMonth(month:string):void;onRefresh():void;children:ReactNode};
 export function CalendarFilters({month,busy,onPrevious,onNext,onCurrent,onMonth,onRefresh,children}:Props){
  const [open,setOpen]=useState(()=>!window.matchMedia?.('(max-width: 900px)')?.matches);
- return <aside className="escala-filter-sidebar" aria-label="Filtros da Escala"><details className="escala-filter-panel" open={open} onToggle={e=>setOpen(e.currentTarget.open)}>
+ return <section className="escala-filter-toolbar" aria-label="Filtros da Escala"><details className="escala-filter-panel" open={open} onToggle={e=>setOpen(e.currentTarget.open)}>
   <summary><strong>Filtros</strong><span className="escala-filter-month-badge">{month.slice(5,7)}/{month.slice(0,4)}</span><span className="escala-filter-chevron" aria-hidden="true">›</span></summary>
   <div className="escala-filter-body">
    <div className="escala-month-nav" role="group" aria-label="Navegação do mês">
@@ -13,5 +13,5 @@ export function CalendarFilters({month,busy,onPrevious,onNext,onCurrent,onMonth,
    </div>
    {children}
   </div>
- </details></aside>;
+ </details></section>;
 }
