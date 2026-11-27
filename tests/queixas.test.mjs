@@ -4,21 +4,6 @@ import {readFileSync} from 'node:fs';
 import {parseHTML} from 'linkedom';
 import complaints from '../src/queixas/queixas.js';
 
-const header='DATA DA QUEIXA\tDATA DA TRATATIVA\tDIAS PARA RESPONDER\tCód\tUnidade\tCidade\tFANTASIA\tVENDEDOR\tCANAL\tTIPO\tQUEIXA\tTRATATIVA\tSTATUS';
-
-test('importa células copiadas sem alterar conteúdo, inclusive campos vazios e quebras de linha',()=>{
-  const text=`${header}\n01/02/2026\t03/02/2026\t2\t001\tMatriz\tCaicó\tLoja\tAna\t\tEntrega\t"Atraso\nna entrega"\t"Contato ""realizado"""\tResolvida\n\t\t\t\t\t\t\t\t\t\t\t\t\n`;
-  const [row]=complaints.parseClipboard(text);
-  assert.equal(row.code,'001');
-  assert.equal(row.complaint,'Atraso\nna entrega');
-  assert.equal(row.treatment,'Contato "realizado"');
-  assert.equal(row.channel,'');
-  assert.equal(complaints.parseClipboard(text).length,1);
-  assert.throws(()=>complaints.parseClipboard(header+'\n01/02/2026\tincompleta'),/13 colunas/);
-  assert.throws(()=>complaints.parseClipboard(header.replace('QUEIXA\tTRATATIVA','MOTIVO\tTRATATIVA')),/cabeçalhos/);
-  assert.throws(()=>complaints.parseClipboard(header+'\n"aberta'),/incompleta/);
-});
-
 test('analisa apenas queixas válidas, mantém status desconhecido e calcula média e mediana',()=>{
   const row=(date,complaint,status,days,treatment_date,city,seller,type)=>({
     source:{date,complaint,days,treatment_date,city,seller,type},treatment_date,status
@@ -77,14 +62,14 @@ test('queixas fica em Devoluções acessível a todos os usuários autenticados'
   assert.equal(document.querySelectorAll('[data-view="queixas"]').length,1);
 });
 
-test('importa pelo painel, confirma duplicatas e permite atualizar tratativa sem alterar original',async()=>{
+test('seções preservam rascunhos e registros existentes, incluindo ao cadastrar e atualizar tratativa',async()=>{
   const {document,window}=parseHTML(readFileSync(new URL('../index.html',import.meta.url),'utf8'));
   const get=id=>document.getElementById(id);
-  const store=[], calls=[];
+  const source={date:'01/02/2026',treatment_date:'',days:'',code:'1',unit:'Matriz',city:'Caicó',name:'Loja',seller:'Ana',channel:'',type:'Entrega',complaint:'Atraso',treatment:'',status:'Sem resposta'};
+  const store=[{id:'id0',source,revision:1,treatment_date:'',treatment:'',status:'Sem resposta'}];
   const client={
     from:()=>({select:()=>({order:()=>({range:async()=>({data:store.map(row=>({...row})),error:null})})})}),
     rpc:async(name,args)=>{
-      calls.push({name,args});
       if(name==='complaints_import') for(const source of args.p_rows)store.push({id:`id${store.length}`,source,revision:1,treatment_date:source.treatment_date,treatment:source.treatment,status:source.status});
       if(name==='complaints_update_treatment'){
         const row=store.find(item=>item.id===args.p_id);
@@ -96,35 +81,37 @@ test('importa pelo painel, confirma duplicatas e permite atualizar tratativa sem
   const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const api=complaints.create({getElement:get,context:()=>({client}),escapeHtml});
   api.bind();await api.enter();
+  assert.equal(get('complaintSummaryPanel').hidden,false);
+  assert.equal(get('complaintNewPanel').hidden,true);
+  assert.equal(get('complaintPaste'),null);
+  assert.match(get('complaintSummary').textContent,/Sem resposta/);
+  const tab=name=>document.querySelector(`[data-complaint-tab="${name}"]`);
+  tab('new').click();
+  assert.equal(get('complaintNewPanel').hidden,false);
+  assert.equal(get('complaintSummaryPanel').hidden,true);
+  assert.equal(tab('new').getAttribute('aria-pressed'),'true');
   const form=get('complaintForm');
   form.elements=Object.fromEntries([...form.querySelectorAll('[name]')].map(element=>[element.name,element]));
   form.reset=()=>{};
   get('complaintDate').value='2026-03-04';
   get('complaintDescription').value='Produto danificado';
+  tab('charts').click();
+  assert.equal(get('complaintChartsPanel').hidden,false);
+  assert.match(get('complaintDashboard').textContent,/Distribuição por status/);
+  tab('new').click();
+  assert.equal(get('complaintDescription').value,'Produto danificado');
   form.dispatchEvent(new window.Event('submit',{cancelable:true}));
   await new Promise(resolve=>setTimeout(resolve,0));
-  assert.equal(store[0].source.complaint,'Produto danificado');
-  assert.equal(store[0].source.date,'2026-03-04');
-  const paste=`${header}\n01/02/2026\t\t\t1\tMatriz\tCaicó\tLoja\tAna\t\tEntrega\tAtraso\t\tSem resposta`;
-  get('complaintPaste').value=paste;
-  get('complaintPreview').dispatchEvent(new window.Event('click'));
-  assert.match(get('complaintImportInfo').textContent,/1 linha/);
-  get('complaintImport').dispatchEvent(new window.Event('click'));
-  await new Promise(resolve=>setTimeout(resolve,0));
+  assert.equal(store[1].source.complaint,'Produto danificado');
+  assert.equal(store[1].source.date,'2026-03-04');
   assert.equal(store.length,2);
-  assert.match(get('complaintDashboard').textContent,/Sem resposta/);
-  const original=JSON.stringify(store[1].source);
-  get('complaintRows').querySelector('[data-complaint-edit="id1"]').dispatchEvent(new window.Event('click',{bubbles:true}));
+  tab('records').click();
+  const original=JSON.stringify(store[0].source);
+  get('complaintRows').querySelector('[data-complaint-edit="id0"]').dispatchEvent(new window.Event('click',{bubbles:true}));
   get('complaintEditDate').value='03/02/2026';get('complaintEditStatus').value='Resolvida';get('complaintEditText').value='Retorno';
   get('complaintEditForm').dispatchEvent(new window.Event('submit',{cancelable:true}));
   await new Promise(resolve=>setTimeout(resolve,0));
-  assert.equal(JSON.stringify(store[1].source),original);
-  assert.equal(store[1].status,'Resolvida');
-  assert.match(get('complaintDashboard').textContent,/2 dias/);
-  get('complaintPaste').value=paste;
-  get('complaintPreview').dispatchEvent(new window.Event('click'));
-  assert.match(get('complaintImportInfo').textContent,/1 linha\(s\) idênticas/);
-  get('complaintImport').dispatchEvent(new window.Event('click'));
-  await new Promise(resolve=>setTimeout(resolve,0));
-  assert.equal(calls.filter(call=>call.name==='complaints_import').length,2);
+  assert.equal(JSON.stringify(store[0].source),original);
+  assert.equal(store[0].status,'Resolvida');
+  assert.match(get('complaintSummary').textContent,/2 dias/);
 });

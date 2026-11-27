@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="src/estoque/stock-validity.css?v=1.7.41">
   <link rel="stylesheet" href="src/vendas/sales-pricing.css?v=1.7.52">
   <link rel="stylesheet" href="src/ratings/rating.css?v=1.8.1-rating-filters">
-  <link rel="stylesheet" href="src/queixas/queixas.css?v=1">
+  <link rel="stylesheet" href="src/queixas/queixas.css?v=3">
   <link rel="stylesheet" href="src/forms/forms.css?v=1.8.1">
   <link rel="stylesheet" href="src/escala/escala.css?v=1.8.1">
   <link rel="stylesheet" href="src/estoque/refugo.css?v=1.7.16">
@@ -604,8 +604,26 @@
 
       <section id="view-queixas" class="view">
         <div class="page-head"><div><div class="breadcrumb">Entrega / Devoluções / Queixas</div><h1>Queixas</h1><p>Cadastre, acompanhe e analise as reclamações.</p></div><span class="page-chip sales">QUEIXAS</span></div>
-        <div class="card">
-          <h2>Cadastrar queixa</h2>
+        <div class="complaint-toolbar">
+          <div class="complaint-tabs" role="group" aria-label="Seções de queixas">
+            <button type="button" class="active" data-complaint-tab="summary" aria-controls="complaintSummaryPanel" aria-pressed="true">Visão geral</button>
+            <button type="button" data-complaint-tab="charts" aria-controls="complaintChartsPanel" aria-pressed="false">Indicadores</button>
+            <button type="button" data-complaint-tab="records" aria-controls="complaintRecordsPanel" aria-pressed="false">Registros</button>
+            <button type="button" data-complaint-tab="new" aria-controls="complaintNewPanel" aria-pressed="false">＋ Nova queixa</button>
+          </div>
+          <button id="complaintRefresh" type="button" class="btn secondary">Atualizar</button>
+        </div>
+        <div id="complaintMessage" class="complaint-message" role="status" aria-live="polite"></div>
+        <div id="complaintSummaryPanel" class="complaint-panel">
+          <div class="complaint-section-heading"><div><h2>Visão geral</h2><p>Acompanhe os principais números e pontos de atenção.</p></div></div>
+          <div id="complaintSummary"></div>
+        </div>
+        <div id="complaintChartsPanel" class="complaint-panel" hidden>
+          <div class="complaint-section-heading"><div><h2>Indicadores</h2><p>Somente registros com data válida e queixa preenchida. Campos ausentes não são estimados.</p></div></div>
+          <div id="complaintDashboard"></div>
+        </div>
+        <div id="complaintNewPanel" class="card complaint-panel" hidden>
+          <div class="complaint-section-heading"><div><h2>Cadastrar queixa</h2><p>Preencha os dados disponíveis. Os campos com * são obrigatórios.</p></div></div>
           <form id="complaintForm">
             <div class="grid grid-3">
               <div class="field"><label for="complaintDate">Data da queixa *</label><input id="complaintDate" name="date" type="date" required></div>
@@ -624,20 +642,11 @@
             <div class="actions"><button type="submit" class="btn primary">Salvar queixa</button></div>
           </form>
         </div>
-        <div class="card">
-          <h2>Importar histórico da planilha</h2>
-          <p>Copie as 13 colunas, incluindo os cabeçalhos, da planilha e cole abaixo. A planilha original não será alterada.</p>
-          <p>Ordem: DATA DA QUEIXA, DATA DA TRATATIVA, DIAS PARA RESPONDER, Cód, Unidade, Cidade, FANTASIA, VENDEDOR, CANAL, TIPO, QUEIXA, TRATATIVA, STATUS.</p>
-          <div class="field"><label for="complaintPaste">Dados copiados da planilha</label><textarea id="complaintPaste" rows="6" placeholder="Cole aqui as células copiadas"></textarea></div>
-          <div class="actions"><button id="complaintPreview" type="button" class="btn secondary">Conferir dados</button><button id="complaintImport" type="button" class="btn primary" disabled>Importar cópias</button></div>
-          <div id="complaintImportInfo" role="status" aria-live="polite"></div>
-        </div>
-        <div class="card"><div class="actions"><button id="complaintRefresh" type="button" class="btn secondary">Atualizar registros</button></div><div id="complaintMessage" role="status" aria-live="polite"></div>
-          <h2>Registros</h2><p>Os dados originais são preservados; a tratativa e o status podem ser atualizados separadamente.</p>
-          <div class="rating-table-wrap"><table class="rating-table"><thead><tr><th>Data</th><th>Cód.</th><th>Unidade</th><th>Cidade</th><th>Fantasia</th><th>Vendedor</th><th>Canal</th><th>Tipo</th><th>Queixa</th><th>Data tratativa original</th><th>Dias originais</th><th>Tratativa original</th><th>Status original</th><th>Data tratativa atual</th><th>Tratativa atual</th><th>Status atual</th><th>Ação</th></tr></thead><tbody id="complaintRows"></tbody></table></div>
+        <div id="complaintRecordsPanel" class="card complaint-panel" hidden>
+          <div class="complaint-section-heading"><div><h2>Registros</h2><p>Os dados originais são preservados; a tratativa e o status podem ser atualizados separadamente.</p></div></div>
           <div id="complaintEditor"></div>
+          <div class="rating-table-wrap complaint-table-wrap"><table class="rating-table"><thead><tr><th>Data</th><th>Cód.</th><th>Unidade</th><th>Cidade</th><th>Fantasia</th><th>Vendedor</th><th>Canal</th><th>Tipo</th><th>Queixa</th><th>Data tratativa original</th><th>Dias originais</th><th>Tratativa original</th><th>Status original</th><th>Data tratativa atual</th><th>Tratativa atual</th><th>Status atual</th><th>Ação</th></tr></thead><tbody id="complaintRows"></tbody></table></div>
         </div>
-        <div class="card"><h2>Análises de queixas</h2><p>Somente registros com data válida e queixa preenchida. Campos ausentes não são estimados.</p><div id="complaintDashboard"></div></div>
       </section>
 
       <!-- HISTORICO DE PALETES AVARIADOS -->
@@ -1119,7 +1128,7 @@
   <script src="src/estoque/stock-validity.js?v=1.7.41"></script>
   <script src="src/vendas/sales-pricing.js?v=1.7.52"></script>
   <script src="src/ratings/rating.js?v=1.8.1-rating-filters"></script>
-  <script src="src/queixas/queixas.js?v=2"></script>
+  <script src="src/queixas/queixas.js?v=3"></script>
   <script src="src/shared/asset-conversion.js?v=1.7.49"></script>
   <script src="src/conferencia/conference.js?v=1.7.60"></script>
   <script src="src/forms/forms.js?v=1.8.1"></script>

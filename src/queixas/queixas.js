@@ -6,7 +6,6 @@
   'use strict';
 
   const fields = ['date','treatment_date','days','code','unit','city','name','seller','channel','type','complaint','treatment','status'];
-  const headers = ['data da queixa','data da tratativa','dias para responder','cod','unidade','cidade','fantasia','vendedor','canal','tipo','queixa','tratativa','status'];
   const clean = value => String(value ?? '').trim();
   const key = value => clean(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ');
 
@@ -18,37 +17,6 @@
     if (!parts) return '';
     const date = parts.join('-'), parsed = new Date(`${date}T00:00:00Z`);
     return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0,10) === date ? date : '';
-  }
-
-  function parseClipboard(text) {
-    const rows = [], row = [];
-    let cell = '', quoted = false, closed = false, start = true;
-    const finishCell = () => { row.push(cell); cell = ''; closed = false; start = true; };
-    const finishRow = () => { finishCell(); rows.push(row.splice(0)); };
-    for (let i=0; i<text.length; i++) {
-      const ch=text[i];
-      if (quoted) {
-        if (ch === '"' && text[i+1] === '"') { cell += '"'; i++; }
-        else if (ch === '"') { quoted=false; closed=true; }
-        else cell += ch;
-      } else if (ch === '"' && start) { quoted=true; start=false; }
-      else if (ch === '\t') finishCell();
-      else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i+1] === '\n') i++; finishRow(); }
-      else if (closed) throw new Error('Conteúdo inesperado após aspas. Copie novamente as células da planilha.');
-      else { cell += ch; start=false; }
-    }
-    if (quoted) throw new Error('Há uma célula entre aspas incompleta. Copie novamente as células.');
-    if (cell || row.length || closed) finishRow();
-    if (!rows.length) throw new Error('Cole os dados com os cabeçalhos.');
-    const actual=rows.shift().map(value=>key(value).replace(/\.$/,''));
-    if (actual.length !== headers.length || headers.some((name,i)=>actual[i] !== name)) {
-      throw new Error('Confira os 13 cabeçalhos e a ordem das colunas indicados na página.');
-    }
-    return rows.flatMap((cells,index)=>{
-      if (cells.every(value=>!clean(value))) return [];
-      if (cells.length !== fields.length) throw new Error(`Linha ${index+2}: são esperadas 13 colunas; copie todas as células da linha.`);
-      return [Object.fromEntries(fields.map((field,i)=>[field,cells[i]]))];
-    });
   }
 
   function responseDays(row) {
@@ -105,16 +73,15 @@
 
   function create(adapter) {
     const $=adapter.getElement, esc=adapter.escapeHtml;
-    let rows=[], preview=null, generation=0, busy=false, loaded=false;
+    let rows=[], generation=0, busy=false;
     const percent=(n,total)=>total ? `${(n*100/total).toLocaleString('pt-BR',{maximumFractionDigits:1})}%` : '—';
     const number=n=>n === null ? '—' : `${n.toLocaleString('pt-BR',{maximumFractionDigits:1})} dias`;
     const message=text=>{ $('complaintMessage').textContent=text; };
-    const fingerprint=source=>JSON.stringify(fields.map(field=>String(source?.[field] ?? '')));
     const empty='Nenhum dado informado.';
 
     function bars(title,items,total) {
       const max=Math.max(1,...items.map(x=>x.count));
-      return `<section class="complaint-chart"><h3>${esc(title)}</h3>${items.length ? items.map(item=>`<div class="complaint-bar"><span>${esc(item.label)}</span><div class="complaint-track"><i style="width:${item.count/max*100}%"></i></div><strong>${item.count} <small>(${percent(item.count,total)})</small></strong></div>`).join('') : `<p>${empty}</p>`}</section>`;
+      return `<section class="complaint-chart"><h3>${esc(title)}</h3>${items.length ? `<div class="complaint-bar-list" tabindex="0" role="region" aria-label="${esc(title)}">${items.map(item=>`<div class="complaint-bar"><span>${esc(item.label)}</span><div class="complaint-track"><i style="width:${item.count/max*100}%"></i></div><strong>${item.count} <small>(${percent(item.count,total)})</small></strong></div>`).join('')}</div>` : `<p>${empty}</p>`}</section>`;
     }
     function line(items) {
       if (!items.length) return `<p>${empty}</p>`;
@@ -133,18 +100,19 @@
       const stops=values.map((n,i)=>{const end=start+(a.total?n/a.total*100:0);const s=`${colors[i]} ${start}% ${end}%`;start=end;return s;}).join(',');
       const top=a.motives[0], last=a.monthly.at(-1), previous=a.monthly.at(-2);
       const insights=[];
-      if (top) insights.push(`Motivo mais frequente: ${esc(top.label)} (${top.count}).`);
+      if (top) insights.push(`Motivo mais frequente: ${esc(top.label.length>120 ? `${top.label.slice(0,120)}…` : top.label)} (${top.count}).`);
       if (a.statuses['sem resposta']) insights.push(`${a.statuses['sem resposta']} queixa(s) sem resposta (${percent(a.statuses['sem resposta'],a.total)}).`);
       if (last && previous) insights.push(`Último mês com registros (${last.label}): ${last.count}; mês anterior com registros (${previous.label}): ${previous.count}.`);
       if (a.statuses.unknown) insights.push(`${a.statuses.unknown} registro(s) com status não informado ou não reconhecido.`);
-      $('complaintDashboard').innerHTML=`
+      $('complaintSummary').innerHTML=`
         <div class="complaint-kpis"><div><span>Queixas válidas</span><strong>${a.total}</strong><small>${a.excluded} fora da análise</small></div>
         <div class="good"><span>Resolvidas</span><strong>${percent(values[0],a.total)}</strong><small>${values[0]} queixas</small></div>
         <div class="warning"><span>Em tratamento</span><strong>${percent(values[1],a.total)}</strong><small>${values[1]} queixas</small></div>
         <div class="danger"><span>Sem resposta</span><strong>${percent(values[2],a.total)}</strong><small>${values[2]} queixas</small></div>
         <div><span>Tempo médio</span><strong>${number(a.mean)}</strong><small>${a.durations.length} com tempo válido</small></div>
         <div><span>Tempo mediano</span><strong>${number(a.median)}</strong><small>${a.durations.length} com tempo válido</small></div></div>
-        <div class="complaint-insights"><strong>Problemas, tendências e atenção</strong><ul>${insights.length ? insights.map(item=>`<li>${item}</li>`).join('') : '<li>Ainda não há dados suficientes para destacar problemas.</li>'}</ul></div>
+        <div class="complaint-insights"><strong>Problemas, tendências e atenção</strong><ul>${insights.length ? insights.map(item=>`<li>${item}</li>`).join('') : '<li>Ainda não há dados suficientes para destacar problemas.</li>'}</ul></div>`;
+      $('complaintDashboard').innerHTML=`
         <div class="complaint-charts">${bars('Quantidade de queixas por mês',a.monthly,a.total)}
         <section class="complaint-chart"><h3>Evolução mensal</h3>${line(a.monthly)}</section>
         ${bars('Queixas por tipo',a.types,a.total)}${bars('Queixas por motivo',a.motives,a.total)}
@@ -163,7 +131,7 @@
     }
     async function enter() {
       const id=++generation;
-      loaded=false;preview=null;$('complaintImport').disabled=true;message('Carregando queixas…');
+      message('Carregando queixas…');
       try {
         const results=[];
         for (let offset=0;;offset+=1000) {
@@ -174,7 +142,7 @@
           if (data.length<1000) break;
         }
         if (id!==generation) return;
-        rows=results;loaded=true;render();message(`${rows.length} registro(s) salvos.`);
+        rows=results;render();message(`${rows.length} registro(s) salvos.`);
         return true;
       } catch (error) {
         if (id!==generation) return;
@@ -182,7 +150,16 @@
         return false;
       }
     }
-    function reset() { generation++;rows=[];preview=null;busy=false;loaded=false;$('complaintEditor').innerHTML='';$('complaintImport').disabled=true;$('complaintPaste').value='';$('complaintImportInfo').textContent='';$('complaintForm').reset();render(); }
+    const panels={summary:'complaintSummaryPanel',charts:'complaintChartsPanel',records:'complaintRecordsPanel',new:'complaintNewPanel'};
+    function selectPanel(name) {
+      for (const [key,id] of Object.entries(panels)) $(id).hidden=key!==name;
+      for (const button of $('view-queixas').querySelectorAll('[data-complaint-tab]')) {
+        const selected=button.dataset.complaintTab===name;
+        button.classList.toggle('active',selected);
+        button.setAttribute('aria-pressed',String(selected));
+      }
+    }
+    function reset() { generation++;rows=[];busy=false;$('complaintEditor').innerHTML='';$('complaintForm').reset();selectPanel('summary');render(); }
     async function saveSources(sources) {
       if (busy) return false;
       busy=true;
@@ -190,13 +167,16 @@
         const {error}=await adapter.context().client.rpc('complaints_import',{p_rows:sources});
         if (error) throw error;
         const refreshed=await enter();
-        if (!refreshed) message(`Salvo, mas não foi possível atualizar a lista. Recarregue antes de importar novamente. ${$('complaintMessage').textContent}`);
+        if (!refreshed) message(`Salvo, mas não foi possível atualizar a lista. ${$('complaintMessage').textContent}`);
         return {refreshed};
       } catch (error) { message(`Não foi possível salvar: ${error.message || error}`);return false; }
       finally { busy=false; }
     }
     function bind() {
       $('complaintRefresh').addEventListener('click',()=>void enter());
+      for (const button of $('view-queixas').querySelectorAll('[data-complaint-tab]')) {
+        button.addEventListener('click',()=>selectPanel(button.dataset.complaintTab));
+      }
       $('complaintForm').addEventListener('submit',async event=>{
         event.preventDefault();
         const form=event.currentTarget, source=Object.fromEntries(fields.map(field=>[field,form.elements[field]?.value || '']));
@@ -204,30 +184,6 @@
         if (source.treatment_date && (!parseDate(source.treatment_date) || source.treatment_date<source.date)) { message('A data da tratativa não pode ser anterior à queixa.');return; }
         const result=await saveSources([source]);
         if (result) { form.reset();if(result.refreshed)message('Queixa salva.'); }
-      });
-      $('complaintPaste').addEventListener('input',()=>{preview=null;$('complaintImport').disabled=true;$('complaintImportInfo').textContent='';});
-      $('complaintPreview').addEventListener('click',()=>{
-        preview=null;$('complaintImport').disabled=true;
-        try {
-          if (!loaded) throw new Error('Atualize os registros antes de conferir a importação.');
-          const sources=parseClipboard($('complaintPaste').value);
-          if (!sources.length) throw new Error('Nenhuma linha preenchida encontrada.');
-          const seen=new Set(rows.map(row=>fingerprint(row.source)));
-          let duplicates=0;
-          for (const source of sources) { const fp=fingerprint(source);if(seen.has(fp))duplicates++;seen.add(fp); }
-          preview=sources;
-          const invalid=sources.filter(source=>!parseDate(source.date)||!clean(source.complaint)).length;
-          $('complaintImportInfo').innerHTML=`<p>${sources.length} linha(s) para importar; ${invalid} sem data válida ou queixa e fora das análises. ${duplicates} linha(s) idênticas a outra cópia ou ao banco.</p><p>Confira a amostra: ${sources.slice(0,5).map(s=>esc(`${s.date || 'sem data'} — ${s.name || s.code || 'sem cliente'} — ${s.complaint || 'sem queixa'}`)).join('<br>')}</p>${duplicates ? '<label><input id="complaintAllowDuplicates" type="checkbox"> Entendo que as linhas idênticas também serão importadas.</label>' : ''}`;
-          $('complaintImport').disabled=false;
-        } catch (error) { $('complaintImportInfo').textContent=error.message; }
-      });
-      $('complaintImport').addEventListener('click',async()=>{
-        if (!preview) return;
-        const checkbox=$('complaintAllowDuplicates');
-        if (checkbox && !checkbox.checked) { message('Confirme a importação das linhas idênticas.');return; }
-        $('complaintImport').disabled=true;
-        if (await saveSources(preview)) { preview=null;$('complaintPaste').value='';$('complaintImportInfo').textContent='Importação concluída; a planilha original não foi modificada.'; }
-        else $('complaintImport').disabled=false;
       });
       $('complaintRows').addEventListener('click',event=>{
         const button=event.target.closest('[data-complaint-edit]');
@@ -257,5 +213,5 @@
     }
     return {bind,enter,reset};
   }
-  return {create,parseClipboard,parseDate,responseDays,analyze};
+  return {create,parseDate,responseDays,analyze};
 });
