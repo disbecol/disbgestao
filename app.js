@@ -210,6 +210,7 @@ const viewMeta = {
   'sales-stock-validity':['Consulta de validades','Vencimento dos produtos da unidade'],
   'sales-pricing':['Escalonada Digital','Preços TTC e TTV por segmento'],
   'rating-clients':['Rating de Clientes','Avaliações e tratativas dos clientes'],
+  'queixas':['Queixas','Cadastro, acompanhamento e análise'],
   'escala-calendar':['Escala · Calendário','Equipes e folgas por unidade'],
   'escala-teams':['Escala · Equipes','Equipes e folgas por unidade'],
   'escala-staff':['Escala · Funcionários','Equipes e folgas por unidade'],
@@ -748,6 +749,7 @@ function bindBaseEvents(){
   $('btnSalesPricingRefresh')?.addEventListener('click',()=>loadSalesPricing(true));
   $('btnSalesPricingRetry')?.addEventListener('click',()=>loadSalesPricing(true));
   ratingModule?.bind();
+  complaintsModule?.bind();
 
   // Conferencia
   renderConferenceQuantityCards();
@@ -1116,6 +1118,7 @@ async function logout(){
   deliveryDamageDashboard?.stop();
   fdrModule?.stop();
   ratingModule?.reset();
+  complaintsModule?.reset();
 
   offlineClearIdentityV171();
   salesPricingProducts=[];salesPricingLoaded=false;salesPricingError='';
@@ -1414,6 +1417,7 @@ function openView(name,force=false){
   if(name==='sales-stock-validity')loadStockValidity(true);
   if(name==='sales-pricing')loadSalesPricing(true);
   if(name==='rating-clients')ratingModule?.enter();
+  if(name==='queixas')void complaintsModule?.enter();
   if(name==='staff-directory')void staffDirectoryModule?.enter();else staffDirectoryModule?.stop();
   if(name.startsWith('escala-'))void escalaModule?.enter(name);else escalaModule?.stop();
   if(name.startsWith('forms-'))void formsModule?.enter(name);
@@ -12937,6 +12941,7 @@ const ratingModule=window.DISB_RATING?.create({
   escapeHtml:esc,
   toast
 });
+const complaintsModule=window.DISB_COMPLAINTS?.create({getElement:$,context:()=>({client:sb}),escapeHtml:esc});
 const closeModalBeforeForms=closeModal;
 closeModal=function(){closeModalBeforeForms();$('modal')?.classList.remove('forms-modal');};
 const openModalBeforeForms=openModal;

@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="src/estoque/stock-validity.css?v=1.7.41">
   <link rel="stylesheet" href="src/vendas/sales-pricing.css?v=1.7.52">
   <link rel="stylesheet" href="src/ratings/rating.css?v=1.8.1-rating-filters">
+  <link rel="stylesheet" href="src/queixas/queixas.css?v=1">
   <link rel="stylesheet" href="src/forms/forms.css?v=1.8.1">
   <link rel="stylesheet" href="src/escala/escala.css?v=1.8.1">
   <link rel="stylesheet" href="src/estoque/refugo.css?v=1.7.16">
@@ -79,6 +80,7 @@
       <div class="brand-row brand-disbecol"><img class="brand-logo brand-logo-light" src="assets/disbecol-logo-blue.png" alt="Disbecol"><img class="brand-logo brand-logo-dark" src="assets/disbecol-logo-white.png" alt="Disbecol"></div><div class="app-version-badge">v1.8.1</div>
       <label class="appearance-control"><span>Aparência</span><select data-theme-preference aria-label="Aparência do sistema"><option value="light">Claro</option><option value="dark">Escuro</option><option value="system" selected>Automático</option></select></label>
       <button class="nav-item home-nav-item" data-view="home"><span aria-hidden="true">⌂</span>Início</button>
+      <button class="nav-item home-nav-item" data-view="queixas"><span aria-hidden="true">▥</span>Queixas</button>
       <div class="nav-area open" data-area="armazem" data-permission-any="NRI_PENDING_VIEW,MARKETPLACE_RECEIVE,NRI_CREATE,NRI_PRINT,NRI_HISTORY,NRI_DAMAGE_HISTORY,CONF_CREATE,CONF_OWN_HISTORY,CONF_HISTORY,CONF_DASHBOARD,FEFO_CREATE,FEFO_ACTIVE,FEFO_REPORT,ROTATING_ASSET_CREATE,ROTATING_ASSET_HISTORY,MATERIAL_INVENTORY,MATERIAL_STOCK_VIEW,MATERIAL_CATALOG,MATERIAL_MOVEMENT,REFUGO_AFERIR,REFUGO_HISTORICO,REFUGO_CONFIG">
         <button type="button" class="nav-area-toggle" aria-expanded="true"><span class="area-icon">▦</span><span class="area-name">Armazém</span><span class="area-chevron">⌄</span></button>
         <div class="nav-area-items">
@@ -601,6 +603,44 @@
         </div>
       </section>
 
+      <section id="view-queixas" class="view">
+        <div class="page-head"><div><div class="breadcrumb">Atendimento / Queixas</div><h1>Queixas</h1><p>Cadastre, acompanhe e analise as reclamações.</p></div><span class="page-chip sales">QUEIXAS</span></div>
+        <div class="card">
+          <h2>Cadastrar queixa</h2>
+          <form id="complaintForm">
+            <div class="grid grid-3">
+              <div class="field"><label for="complaintDate">Data da queixa *</label><input id="complaintDate" name="date" type="date" required></div>
+              <div class="field"><label for="complaintCode">Código</label><input id="complaintCode" name="code"></div>
+              <div class="field"><label for="complaintUnit">Unidade</label><input id="complaintUnit" name="unit"></div>
+              <div class="field"><label for="complaintCity">Cidade</label><input id="complaintCity" name="city"></div>
+              <div class="field"><label for="complaintName">Fantasia</label><input id="complaintName" name="name"></div>
+              <div class="field"><label for="complaintSeller">Vendedor</label><input id="complaintSeller" name="seller"></div>
+              <div class="field"><label for="complaintChannel">Canal</label><input id="complaintChannel" name="channel"></div>
+              <div class="field"><label for="complaintType">Tipo</label><input id="complaintType" name="type"></div>
+              <div class="field"><label for="complaintStatus">Status</label><select id="complaintStatus" name="status"><option value="">Não informado</option><option>Resolvida</option><option>Em tratamento</option><option>Sem resposta</option></select></div>
+              <div class="field span-2"><label for="complaintDescription">Queixa / motivo *</label><textarea id="complaintDescription" name="complaint" required></textarea></div>
+              <div class="field"><label for="complaintTreatmentDate">Data da tratativa</label><input id="complaintTreatmentDate" name="treatment_date" type="date"></div>
+              <div class="field span-2"><label for="complaintTreatment">Tratativa</label><textarea id="complaintTreatment" name="treatment"></textarea></div>
+            </div>
+            <div class="actions"><button type="submit" class="btn primary">Salvar queixa</button></div>
+          </form>
+        </div>
+        <div class="card">
+          <h2>Importar histórico da planilha</h2>
+          <p>Copie as 13 colunas, incluindo os cabeçalhos, da planilha e cole abaixo. A planilha original não será alterada.</p>
+          <p>Ordem: DATA DA QUEIXA, DATA DA TRATATIVA, DIAS PARA RESPONDER, Cód, Unidade, Cidade, FANTASIA, VENDEDOR, CANAL, TIPO, QUEIXA, TRATATIVA, STATUS.</p>
+          <div class="field"><label for="complaintPaste">Dados copiados da planilha</label><textarea id="complaintPaste" rows="6" placeholder="Cole aqui as células copiadas"></textarea></div>
+          <div class="actions"><button id="complaintPreview" type="button" class="btn secondary">Conferir dados</button><button id="complaintImport" type="button" class="btn primary" disabled>Importar cópias</button></div>
+          <div id="complaintImportInfo" role="status" aria-live="polite"></div>
+        </div>
+        <div class="card"><div class="actions"><button id="complaintRefresh" type="button" class="btn secondary">Atualizar registros</button></div><div id="complaintMessage" role="status" aria-live="polite"></div>
+          <h2>Registros</h2><p>Os dados originais são preservados; a tratativa e o status podem ser atualizados separadamente.</p>
+          <div class="rating-table-wrap"><table class="rating-table"><thead><tr><th>Data</th><th>Cód.</th><th>Unidade</th><th>Cidade</th><th>Fantasia</th><th>Vendedor</th><th>Canal</th><th>Tipo</th><th>Queixa</th><th>Data tratativa original</th><th>Dias originais</th><th>Tratativa original</th><th>Status original</th><th>Data tratativa atual</th><th>Tratativa atual</th><th>Status atual</th><th>Ação</th></tr></thead><tbody id="complaintRows"></tbody></table></div>
+          <div id="complaintEditor"></div>
+        </div>
+        <div class="card"><h2>Análises de queixas</h2><p>Somente registros com data válida e queixa preenchida. Campos ausentes não são estimados.</p><div id="complaintDashboard"></div></div>
+      </section>
+
       <!-- HISTORICO DE PALETES AVARIADOS -->
       <section id="view-nri-avarias-historico" class="view admin-only role-nri" data-permission="NRI_DAMAGE_HISTORY">
         <div class="page-head dashboard-page-head"><div><div class="breadcrumb">Admin / NRI / Qualidade</div><h1>Histórico de paletes avariados</h1><p>Rastreabilidade separada das NRIs, com Nota Fiscal, produto, lote, origem, fotos e dados do recebimento.</p></div><span class="page-chip admin">AVARIAS DE RECEBIMENTO</span></div>
@@ -1080,6 +1120,7 @@
   <script src="src/estoque/stock-validity.js?v=1.7.41"></script>
   <script src="src/vendas/sales-pricing.js?v=1.7.52"></script>
   <script src="src/ratings/rating.js?v=1.8.1-rating-filters"></script>
+  <script src="src/queixas/queixas.js?v=1"></script>
   <script src="src/shared/asset-conversion.js?v=1.7.49"></script>
   <script src="src/conferencia/conference.js?v=1.7.60"></script>
   <script src="src/forms/forms.js?v=1.8.1"></script>
@@ -1107,6 +1148,6 @@
 <script src="src/estoque/fefo-completed-edits.js?v=1.7.110-fefo-edits"></script>
 <script src="src/estoque/fefo-reports.js?v=1.8.1-fefo-reports"></script>
 <script src="src/puxada/pull-cycle-delete.js?v=1.7.110-pull-cycle-delete"></script>
-<script src="app.js?v=1.8.1-rating"></script>
+<script src="app.js?v=1.8.1-queixas"></script>
 </body>
 </html>
