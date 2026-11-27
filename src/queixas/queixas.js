@@ -35,6 +35,25 @@
     return (Date.parse(`${end}T00:00:00Z`)-Date.parse(`${start}T00:00:00Z`))/86400000;
   }
 
+  function displayDate(value) {
+    const date=parseDate(value);
+    return date ? `${date.slice(8,10)}/${date.slice(5,7)}/${date.slice(0,4)}` : clean(value);
+  }
+
+  function displayDays(row) {
+    const source=row.source || {};
+    if (clean(row.treatment_date) === clean(source.treatment_date) && clean(source.days)) return clean(source.days);
+    const days=responseDays(row);
+    return days === null ? '' : String(days).replace('.',',');
+  }
+
+  function recordValues(row) {
+    const source=row.source || {};
+    return {date:displayDate(source.date),treatment_date:displayDate(row.treatment_date),days:displayDays(row),
+      code:source.code,unit:source.unit,city:source.city,name:source.name,seller:source.seller,
+      channel:source.channel,type:source.type,complaint:source.complaint,treatment:row.treatment,status:row.status};
+  }
+
   function counts(rows, field) {
     const map=new Map();
     for (const row of rows) {
@@ -77,7 +96,7 @@
 
   function create(adapter) {
     const $=adapter.getElement, esc=adapter.escapeHtml;
-    let rows=[], generation=0, busy=false;
+    let rows=[], generation=0, busy=false, sortField='', sortDirection=1;
     const percent=(n,total)=>total ? `${(n*100/total).toLocaleString('pt-BR',{maximumFractionDigits:1})}%` : '—';
     const number=n=>n === null ? '—' : `${n.toLocaleString('pt-BR',{maximumFractionDigits:1})} dias`;
     const message=text=>{ $('complaintMessage').textContent=text; };
@@ -125,12 +144,36 @@
         <section class="complaint-chart"><h3>Distribuição por status</h3><div class="complaint-pie-layout"><div class="complaint-pie" role="img" aria-label="Distribuição por status" style="background:${a.total ? `conic-gradient(${stops})` : '#e5e7eb'}"></div><ul>${labels.map((label,i)=>`<li><i style="background:${colors[i]}"></i>${label}: ${values[i]} (${percent(values[i],a.total)})</li>`).join('')}</ul></div></section></div>
         <p class="complaint-note">Percentuais de status usam todas as queixas válidas. Tempo: dias originais quando informados e válidos; quando ausentes ou após mudança da data de tratativa, usa-se a diferença entre datas válidas. Dias originais inválidos não são estimados.</p>`;
     }
+    function renderRecords() {
+      const terms=key($('complaintSearch').value).split(' ').filter(Boolean);
+      const visible=rows.filter(row=>{
+        const text=key(Object.values(recordValues(row)).join(' '));
+        return terms.every(term=>text.includes(term));
+      });
+      if (sortField) visible.sort((a,b)=>{
+        const left=recordValues(a)[sortField], right=recordValues(b)[sortField];
+        const value=v=>{
+          if (sortField==='date' || sortField==='treatment_date') return parseDate(v) || null;
+          if (sortField==='days') return /^\d+(?:[.,]\d+)?$/.test(clean(v)) ? Number(clean(v).replace(',','.')) : null;
+          return clean(v) || null;
+        };
+        const x=value(left),y=value(right);
+        if (x===null || y===null) return x===y ? 0 : x===null ? 1 : -1;
+        return (typeof x==='number' && typeof y==='number' ? x-y : String(x).localeCompare(String(y),'pt-BR',{numeric:true,sensitivity:'base'}))*sortDirection;
+      });
+      $('complaintRecordCount').textContent=`${visible.length} de ${rows.length} registro(s)`;
+      for (const button of $('complaintRecordsPanel').querySelectorAll('[data-complaint-sort]')) {
+        const th=button.closest('th');
+        if (button.dataset.complaintSort===sortField) th.setAttribute('aria-sort',sortDirection===1 ? 'ascending' : 'descending');
+        else th.removeAttribute('aria-sort');
+      }
+      $('complaintRows').innerHTML=visible.length ? visible.map(row=>{
+        const values=recordValues(row);
+        return `<tr>${fields.map(field=>`<td>${esc(clean(values[field]) ? String(values[field]) : '—')}</td>`).join('')}<td><button type="button" class="mini-btn" data-complaint-edit="${esc(row.id)}">Atualizar tratativa</button></td></tr>`;
+      }).join('') : `<tr><td colspan="14">${rows.length ? 'Nenhum registro encontrado para a pesquisa.' : 'Nenhum registro salvo.'}</td></tr>`;
+    }
     function render() {
-      $('complaintRows').innerHTML=rows.length ? rows.map(row=>{
-        const s=row.source || {};
-        const values=[s.date,s.code,s.unit,s.city,s.name,s.seller,s.channel,s.type,s.complaint,s.treatment_date,s.days,s.treatment,s.status,row.treatment_date,row.treatment,row.status];
-        return `<tr>${values.map(value=>`<td>${esc(clean(value)||'—')}</td>`).join('')}<td><button type="button" class="mini-btn" data-complaint-edit="${esc(row.id)}">Atualizar tratativa</button></td></tr>`;
-      }).join('') : '<tr><td colspan="17">Nenhum registro salvo.</td></tr>';
+      renderRecords();
       renderDashboard();
     }
     async function enter() {
@@ -163,7 +206,7 @@
         button.setAttribute('aria-pressed',String(selected));
       }
     }
-    function reset() { generation++;rows=[];busy=false;$('complaintEditor').innerHTML='';$('complaintForm').reset();selectPanel('summary');render(); }
+    function reset() { generation++;rows=[];busy=false;sortField='';sortDirection=1;$('complaintSearch').value='';$('complaintEditor').innerHTML='';$('complaintForm').reset();selectPanel('summary');render(); }
     async function saveSources(sources) {
       if (busy) return false;
       busy=true;
@@ -178,6 +221,15 @@
     }
     function bind() {
       $('complaintRefresh').addEventListener('click',()=>void enter());
+      $('complaintSearch').addEventListener('input',renderRecords);
+      $('complaintClearSearch').addEventListener('click',()=>{ $('complaintSearch').value='';renderRecords();$('complaintSearch').focus(); });
+      for (const button of $('complaintRecordsPanel').querySelectorAll('[data-complaint-sort]')) {
+        button.addEventListener('click',()=>{
+          const field=button.dataset.complaintSort;
+          sortDirection=sortField===field ? -sortDirection : 1;
+          sortField=field;renderRecords();
+        });
+      }
       for (const button of $('view-queixas').querySelectorAll('[data-complaint-tab]')) {
         button.addEventListener('click',()=>selectPanel(button.dataset.complaintTab));
       }
@@ -195,11 +247,13 @@
         const row=rows.find(item=>item.id===button.dataset.complaintEdit);
         if (!row) return;
         const selectedStatus=statusSelection(row.status);
+        const original=row.source || {};
         $('complaintEditor').innerHTML=`<form id="complaintEditForm" class="complaint-editor"><h3>Atualizar tratativa</h3><div class="grid grid-3">
           <div class="field"><label for="complaintEditDate">Data da tratativa</label><input id="complaintEditDate" value="${esc(row.treatment_date)}" placeholder="dd/mm/aaaa"></div>
           <div class="field"><label for="complaintEditStatus">Status</label><select id="complaintEditStatus"><option value="" disabled ${selectedStatus ? '' : 'selected'}>${row.status ? `Valor atual: ${esc(row.status)}` : 'Não informado'}</option>${statusOptions.map(status=>`<option value="${status}" ${status===selectedStatus ? 'selected' : ''}>${status}</option>`).join('')}</select></div>
           <div class="field"><label for="complaintEditText">Tratativa</label><textarea id="complaintEditText">${esc(row.treatment)}</textarea></div></div>
-          <div class="actions"><button type="submit" class="btn primary">Salvar atualização</button><button type="button" class="btn secondary" id="complaintEditCancel">Cancelar</button></div></form>`;
+          <div class="actions"><button type="submit" class="btn primary">Salvar atualização</button><button type="button" class="btn secondary" id="complaintEditCancel">Cancelar</button></div>
+          <details class="complaint-original"><summary>Ver dados originais</summary><dl><dt>Data da tratativa</dt><dd>${esc(displayDate(original.treatment_date)||'—')}</dd><dt>Dias para responder</dt><dd>${esc(clean(original.days)||'—')}</dd><dt>Tratativa</dt><dd>${esc(clean(original.treatment) ? original.treatment : '—')}</dd><dt>Status</dt><dd>${esc(clean(original.status)||'—')}</dd></dl></details></form>`;
         $('complaintEditCancel').addEventListener('click',()=>{ $('complaintEditor').innerHTML=''; });
         $('complaintEditForm').addEventListener('submit',async event=>{
           event.preventDefault();

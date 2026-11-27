@@ -70,11 +70,42 @@ test('cadastro oferece apenas os canais, tipos e status definidos',()=>{
   assert.deepEqual(options('complaintStatus'),['Tratando','Resolvido','Sem resposta']);
 });
 
+test('pesquisa e ordena todas as colunas sem alterar os indicadores ou os dados',async()=>{
+  const {document,window}=parseHTML(readFileSync(new URL('../index.html',import.meta.url),'utf8'));
+  const get=id=>document.getElementById(id);
+  const rows=[
+    {id:'a',source:{date:'10/02/2026',treatment_date:'12/02/2026',days:'2',code:'10',city:'Caicó',name:'Loja',complaint:'Atraso'},treatment_date:'12/02/2026',treatment:'Contato',status:'Tratando'},
+    {id:'b',source:{date:'01/03/2026',treatment_date:'11/03/2026',days:'10',code:'2',city:'Natal',name:'Mercado',complaint:'Produto'},treatment_date:'11/03/2026',treatment:'Retorno',status:'Resolvido'},
+    {id:'c',source:{date:'inválida',days:'',code:'',city:'',complaint:'Outra'},treatment_date:'',treatment:'',status:''}
+  ];
+  const saved=JSON.stringify(rows);
+  const client={from:()=>({select:()=>({order:()=>({range:async()=>({data:rows,error:null})})})})};
+  const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const api=complaints.create({getElement:get,context:()=>({client}),escapeHtml});
+  api.bind();await api.enter();
+  const order=()=>[...get('complaintRows').querySelectorAll('[data-complaint-edit]')].map(button=>button.dataset.complaintEdit);
+  const sort=field=>document.querySelector(`[data-complaint-sort="${field}"]`);
+  assert.equal(document.querySelectorAll('[data-complaint-sort]').length,13);
+  const summary=get('complaintSummary').textContent;
+  sort('date').click();assert.deepEqual(order(),['a','b','c']);assert.equal(sort('date').closest('th').getAttribute('aria-sort'),'ascending');
+  sort('date').click();assert.deepEqual(order(),['b','a','c']);assert.equal(sort('date').closest('th').getAttribute('aria-sort'),'descending');
+  sort('days').click();assert.deepEqual(order(),['a','b','c']);
+  sort('days').click();assert.deepEqual(order(),['b','a','c']);
+  sort('code').click();assert.deepEqual(order(),['b','a','c']);
+  get('complaintSearch').value='caico contato';get('complaintSearch').dispatchEvent(new window.Event('input'));
+  assert.deepEqual(order(),['a']);assert.match(get('complaintRecordCount').textContent,/1 de 3/);
+  assert.equal(get('complaintSummary').textContent,summary);
+  get('complaintSearch').value='inexistente';get('complaintSearch').dispatchEvent(new window.Event('input'));
+  assert.match(get('complaintRows').textContent,/Nenhum registro encontrado/);
+  get('complaintClearSearch').click();assert.deepEqual(order(),['b','a','c']);
+  assert.equal(JSON.stringify(rows),saved);
+});
+
 test('seções preservam rascunhos e registros existentes, incluindo ao cadastrar e atualizar tratativa',async()=>{
   const {document,window}=parseHTML(readFileSync(new URL('../index.html',import.meta.url),'utf8'));
   const get=id=>document.getElementById(id);
-  const source={date:'01/02/2026',treatment_date:'',days:'',code:'1',unit:'Matriz',city:'Caicó',name:'Loja',seller:'Ana',channel:'',type:'Entrega',complaint:'Atraso',treatment:'',status:'Sem resposta'};
-  const store=[{id:'id0',source,revision:1,treatment_date:'',treatment:'',status:'Sem resposta'}];
+  const source={date:'01/02/2026',treatment_date:'02/02/2026',days:'1',code:'1',unit:'Matriz',city:'Caicó',name:'Loja',seller:'Ana',channel:'WhatsApp',type:'Pedido',complaint:'Atraso',treatment:'Resposta original',status:'Sem resposta'};
+  const store=[{id:'id0',source,revision:1,treatment_date:'02/02/2026',treatment:'Resposta original',status:'Sem resposta'}];
   const client={
     from:()=>({select:()=>({order:()=>({range:async()=>({data:store.map(row=>({...row})),error:null})})})}),
     rpc:async(name,args)=>{
@@ -114,8 +145,13 @@ test('seções preservam rascunhos e registros existentes, incluindo ao cadastra
   assert.equal(store[1].source.date,'2026-03-04');
   assert.equal(store.length,2);
   tab('records').click();
+  assert.deepEqual([...get('complaintRecordsPanel').querySelectorAll('thead th')].map(th=>th.textContent),
+    ['Data da queixa','Data da tratativa','Dias para responder','Cód.','Unidade','Cidade','Fantasia','Vendedor','Canal','Tipo','Queixa','Tratativa','Status','Ação']);
+  const cells=()=>[...get('complaintRows').querySelector('tr').querySelectorAll('td')].slice(0,13).map(td=>td.textContent);
+  assert.deepEqual(cells(),['01/02/2026','02/02/2026','1','1','Matriz','Caicó','Loja','Ana','WhatsApp','Pedido','Atraso','Resposta original','Sem resposta']);
   const original=JSON.stringify(store[0].source);
   get('complaintRows').querySelector('[data-complaint-edit="id0"]').dispatchEvent(new window.Event('click',{bubbles:true}));
+  assert.match(get('complaintEditor').querySelector('details').textContent,/Resposta original/);
   get('complaintEditDate').value='03/02/2026';
   const select=get('complaintEditStatus');
   assert.deepEqual([...select.querySelectorAll('option')].map(option=>option.value),['','Tratando','Resolvido','Sem resposta']);
@@ -125,6 +161,8 @@ test('seções preservam rascunhos e registros existentes, incluindo ao cadastra
   await new Promise(resolve=>setTimeout(resolve,0));
   assert.equal(JSON.stringify(store[0].source),original);
   assert.equal(store[0].status,'Resolvido');
+  assert.deepEqual(cells().slice(0,3),['01/02/2026','03/02/2026','2']);
+  assert.deepEqual(cells().slice(11),['Retorno','Resolvido']);
   assert.match(get('complaintSummary').textContent,/2 dias/);
   store[0].status='RESOLVIDO';
   await api.enter();
