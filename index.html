@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="src/estoque/stock-validity.css?v=1.7.41">
   <link rel="stylesheet" href="src/vendas/sales-pricing.css?v=1.7.52">
   <link rel="stylesheet" href="src/ratings/rating.css?v=1.8.1-rating-filters">
-  <link rel="stylesheet" href="src/queixas/queixas.css?v=3">
+  <link rel="stylesheet" href="src/queixas/queixas.css?v=5">
   <link rel="stylesheet" href="src/forms/forms.css?v=1.8.1">
   <link rel="stylesheet" href="src/escala/escala.css?v=1.8.1">
   <link rel="stylesheet" href="src/estoque/refugo.css?v=1.7.16">
@@ -643,9 +643,9 @@
           </form>
         </div>
         <div id="complaintRecordsPanel" class="card complaint-panel" hidden>
-          <div class="complaint-section-heading"><div><h2>Registros</h2><p>Os dados originais são preservados; a tratativa e o status podem ser atualizados separadamente.</p></div></div>
+          <div class="complaint-section-heading"><div><h2>Registros</h2><p>Tratativa e status mostram os valores atuais. Os dados originais ficam disponíveis em Atualizar tratativa.</p></div></div>
           <div id="complaintEditor"></div>
-          <div class="rating-table-wrap complaint-table-wrap"><table class="rating-table"><thead><tr><th>Data</th><th>Cód.</th><th>Unidade</th><th>Cidade</th><th>Fantasia</th><th>Vendedor</th><th>Canal</th><th>Tipo</th><th>Queixa</th><th>Data tratativa original</th><th>Dias originais</th><th>Tratativa original</th><th>Status original</th><th>Data tratativa atual</th><th>Tratativa atual</th><th>Status atual</th><th>Ação</th></tr></thead><tbody id="complaintRows"></tbody></table></div>
+          <div class="rating-table-wrap complaint-table-wrap"><table class="rating-table"><thead><tr><th>Data da queixa</th><th>Data da tratativa</th><th>Dias para responder</th><th>Cód.</th><th>Unidade</th><th>Cidade</th><th>Fantasia</th><th>Vendedor</th><th>Canal</th><th>Tipo</th><th>Queixa</th><th>Tratativa</th><th>Status</th><th>Ação</th></tr></thead><tbody id="complaintRows"></tbody></table></div>
         </div>
       </section>
 
@@ -1128,7 +1128,7 @@
   <script src="src/estoque/stock-validity.js?v=1.7.41"></script>
   <script src="src/vendas/sales-pricing.js?v=1.7.52"></script>
   <script src="src/ratings/rating.js?v=1.8.1-rating-filters"></script>
-  <script src="src/queixas/queixas.js?v=4"></script>
+  <script src="src/queixas/queixas.js?v=5"></script>
   <script src="src/shared/asset-conversion.js?v=1.7.49"></script>
   <script src="src/conferencia/conference.js?v=1.7.60"></script>
   <script src="src/forms/forms.js?v=1.8.1"></script>

@@ -35,6 +35,18 @@
     return (Date.parse(`${end}T00:00:00Z`)-Date.parse(`${start}T00:00:00Z`))/86400000;
   }
 
+  function displayDate(value) {
+    const date=parseDate(value);
+    return date ? `${date.slice(8,10)}/${date.slice(5,7)}/${date.slice(0,4)}` : clean(value);
+  }
+
+  function displayDays(row) {
+    const source=row.source || {};
+    if (clean(row.treatment_date) === clean(source.treatment_date) && clean(source.days)) return clean(source.days);
+    const days=responseDays(row);
+    return days === null ? '' : String(days).replace('.',',');
+  }
+
   function counts(rows, field) {
     const map=new Map();
     for (const row of rows) {
@@ -128,9 +140,9 @@
     function render() {
       $('complaintRows').innerHTML=rows.length ? rows.map(row=>{
         const s=row.source || {};
-        const values=[s.date,s.code,s.unit,s.city,s.name,s.seller,s.channel,s.type,s.complaint,s.treatment_date,s.days,s.treatment,s.status,row.treatment_date,row.treatment,row.status];
-        return `<tr>${values.map(value=>`<td>${esc(clean(value)||'—')}</td>`).join('')}<td><button type="button" class="mini-btn" data-complaint-edit="${esc(row.id)}">Atualizar tratativa</button></td></tr>`;
-      }).join('') : '<tr><td colspan="17">Nenhum registro salvo.</td></tr>';
+        const values=[displayDate(s.date),displayDate(row.treatment_date),displayDays(row),s.code,s.unit,s.city,s.name,s.seller,s.channel,s.type,s.complaint,row.treatment,row.status];
+        return `<tr>${values.map(value=>`<td>${esc(clean(value) ? String(value) : '—')}</td>`).join('')}<td><button type="button" class="mini-btn" data-complaint-edit="${esc(row.id)}">Atualizar tratativa</button></td></tr>`;
+      }).join('') : '<tr><td colspan="14">Nenhum registro salvo.</td></tr>';
       renderDashboard();
     }
     async function enter() {
@@ -195,11 +207,13 @@
         const row=rows.find(item=>item.id===button.dataset.complaintEdit);
         if (!row) return;
         const selectedStatus=statusSelection(row.status);
+        const original=row.source || {};
         $('complaintEditor').innerHTML=`<form id="complaintEditForm" class="complaint-editor"><h3>Atualizar tratativa</h3><div class="grid grid-3">
           <div class="field"><label for="complaintEditDate">Data da tratativa</label><input id="complaintEditDate" value="${esc(row.treatment_date)}" placeholder="dd/mm/aaaa"></div>
           <div class="field"><label for="complaintEditStatus">Status</label><select id="complaintEditStatus"><option value="" disabled ${selectedStatus ? '' : 'selected'}>${row.status ? `Valor atual: ${esc(row.status)}` : 'Não informado'}</option>${statusOptions.map(status=>`<option value="${status}" ${status===selectedStatus ? 'selected' : ''}>${status}</option>`).join('')}</select></div>
           <div class="field"><label for="complaintEditText">Tratativa</label><textarea id="complaintEditText">${esc(row.treatment)}</textarea></div></div>
-          <div class="actions"><button type="submit" class="btn primary">Salvar atualização</button><button type="button" class="btn secondary" id="complaintEditCancel">Cancelar</button></div></form>`;
+          <div class="actions"><button type="submit" class="btn primary">Salvar atualização</button><button type="button" class="btn secondary" id="complaintEditCancel">Cancelar</button></div>
+          <details class="complaint-original"><summary>Ver dados originais</summary><dl><dt>Data da tratativa</dt><dd>${esc(displayDate(original.treatment_date)||'—')}</dd><dt>Dias para responder</dt><dd>${esc(clean(original.days)||'—')}</dd><dt>Tratativa</dt><dd>${esc(clean(original.treatment) ? original.treatment : '—')}</dd><dt>Status</dt><dd>${esc(clean(original.status)||'—')}</dd></dl></details></form>`;
         $('complaintEditCancel').addEventListener('click',()=>{ $('complaintEditor').innerHTML=''; });
         $('complaintEditForm').addEventListener('submit',async event=>{
           event.preventDefault();
