@@ -1,20 +1,21 @@
 import {useState} from 'react';
 import type {EscalaState,PlanDay} from './model';
 import {weekday} from './engine';
-import {dailyPeople,personRole} from './person-policy';
+import {dailyPeople} from './person-policy';
+import {DailyRole} from './daily-role';
 import {availabilityKind,availabilityKinds,availabilityLabels} from './rest-status';
 import type {RestBoard} from './use-rest-board';
 const names=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const normalize=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR');
 export function DailyCard({date,day,data,search,preview=false,local=false,loading=false,outside=false,compact=false,board,onOpen}:{date:string;day?:PlanDay;data:EscalaState;search:string;preview?:boolean;local?:boolean;loading?:boolean;outside?:boolean;compact?:boolean;board?:RestBoard;onOpen():void}){
- const [open,setOpen]=useState(true),[drivers,setDrivers]=useState(false),[helpers,setHelpers]=useState(false);
+ const [open,setOpen]=useState(true);
  const assignments=(day?dailyPeople(day):[]).filter(d=>normalize(d.person.name+' '+d.person.job).includes(normalize(search))).sort((a,b)=>a.person.name.localeCompare(b.person.name,'pt-BR'));
  const label=names[weekday(date)]+', '+date.slice(8)+'/'+date.slice(5,7);
  return <article className={'escala-daily-card'+(weekday(date)===0?' sunday':'')+(board?.target===date?' rest-drop-target':'')} data-date={date} {...board?.dayProps(date)}><details className="escala-day-details" open={open} onToggle={e=>setOpen(e.currentTarget.open)}><summary aria-label={(open?'Ocultar':'Abrir')+' '+label}><span className="escala-day-chevron" aria-hidden="true">›</span><h2>{label}</h2></summary><div className="escala-daily-content">
   {preview?<small className="escala-day-origin">Prévia · não salva</small>:local?<small className="escala-day-origin">Rascunho neste aparelho</small>:outside&&day?<small className="escala-day-origin">Escala do mês vizinho</small>:null}
   {day?<><button className="escala-view-day" onClick={onOpen}>{outside?'Abrir mês':'Ver dia'}</button>
    {compact?<div className="escala-day-totals">{availabilityKinds.map(kind=>{const count=assignments.filter(p=>availabilityKind(data,day,p.mode)===kind).length;return count?<span className={kind} key={kind}>{count} {kind==='available'?'disponíveis':kind==='rest'?'de folga':kind==='holiday-rest'?'feriado':'indisponíveis'}</span>:null;})}</div>:null}
-   {(['DRIVER','HELPER'] as const).map(role=>{const people=assignments.filter(p=>personRole(p.person.job)===role),available=people.filter(p=>availabilityKind(data,day,p.mode)==='available').length,expanded=role==='DRIVER'?drivers:helpers,setExpanded=role==='DRIVER'?setDrivers:setHelpers,title=role==='DRIVER'?'Motoristas':'Ajudantes';return <details className="escala-role-details" data-role={role} key={role} open={expanded} onToggle={e=>setExpanded(e.currentTarget.open)}><summary aria-label={(expanded?'Ocultar':'Abrir')+' '+title.toLowerCase()+' de '+date+' · '+available+' disponíveis'}><span className="escala-day-chevron" aria-hidden="true">›</span><strong>{title}</strong><span className="escala-role-count" title={available+' '+title.toLowerCase()+' disponíveis'}>{available}</span></summary>{expanded?<div className="escala-role-content">{availabilityKinds.map(kind=>{const group=people.filter(p=>availabilityKind(data,day,p.mode)===kind);return group.length?<section className={'escala-person-group '+kind} key={kind}><h3>{kind==='available'?'Disponíveis':kind==='rest'?'De folga':availabilityLabels[kind]} <span>{group.length}</span></h3><ul>{group.map(p=>{const movable=board?.canDrag(date,p)||false;return <li key={p.person.id} data-role={role} data-swap-person={movable?p.person.id:undefined}>{movable?<button className="escala-rest-person" aria-label={'Mover '+(p.mode==='REST'?'folga':'dia escalado')+' de '+p.person.name} {...board!.personProps(date,p)}><span className="escala-person-grip" aria-hidden="true">⠿</span><strong>{p.person.name}</strong></button>:<strong>{p.person.name}</strong>}</li>;})}</ul></section>:null;})}{!people.length?<p className="escala-day-empty">Nenhum {role==='DRIVER'?'motorista':'ajudante'} com os filtros escolhidos.</p>:null}</div>:null}</details>;})}
+   {(['DRIVER','HELPER'] as const).map(role=><DailyRole key={role} role={role} assignments={assignments} data={data} day={day} board={board}/>)}
   </>:<p className="escala-day-empty">{loading?'Carregando este dia…':'Sem escala registrada para esta data.'}</p>}
  </div></details></article>;
 }

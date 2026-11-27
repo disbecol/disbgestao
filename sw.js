@@ -1,5 +1,5 @@
 // Áreas dinâmicas e resultados privados por colaborador.
-const CACHE='disb-gestao-v1.8.1-daily-available-counts';
+const CACHE='disb-gestao-v1.8.1-direct-assignment';
 const IMAGE_CACHE=`${CACHE}-images`;
 const IMAGE_CACHE_LIMIT=200;
 const STATIC=['src/estoque/refugo.js?v=1.8.1-refugo-module','src/estoque/fefo-completed-edits.js?v=1.7.110-fefo-edits','src/puxada/pull-cycle-delete.js?v=1.7.110-pull-cycle-delete','./','index.html','styles.css?v=1.8.1-invoice-lots','src/conferencia/conference.css?v=1.7.60','src/shared/visual-refresh.css?v=1.7.1-visual','src/puxada/pull-dashboard.css?v=1.7.1-pull-dashboard','src/avarias/damage-geofence.css?v=2','src/estoque/refugo.css?v=1.7.16','src/vendas/sales-pricing.css?v=1.7.52','src/vendas/sales-pricing.js?v=1.7.52','src/ratings/rating.css?v=1.8.1-rating-filters','src/ratings/rating.js?v=1.8.1-rating-filters','src/shared/share-reports.js?v=1.7.60','src/puxada/pull-report.js?v=2','src/puxada/invoice-note.js?v=1.7.31-keg-liters','src/puxada/pull-camera.js?v=1.7.32-pull-camera','src/shared/asset-conversion.js?v=1.7.49','src/conferencia/conference.js?v=1.7.60','vendor/supabase.js','vendor/leaflet.js','vendor/leaflet.css','vendor/images/layers.png','vendor/images/layers-2x.png','vendor/images/marker-icon.png','vendor/images/marker-icon-2x.png','vendor/images/marker-shadow.png','vendor/pdf-lib.min.js','vendor/pdfjs.min.js','vendor/pdfjs.worker.min.js','src/shared/receipt-validation.js?v=1.8.1','src/shared/table-scroll-dock.js?v=1.8.1','app.js?v=1.8.1-rating','config.js?v=1.7.0','manifest.webmanifest','assets/icon-192.png','assets/icon-512.png'];
@@ -38,7 +38,7 @@ STATIC.push('src/shared/screen-design.js?v=1.8.1','src/shared/screen-design.css?
 STATIC.push('src/estoque/fefo-reports.js?v=1.8.1-fefo-reports');
 // BEGIN GENERATED FRONTEND ASSETS
 STATIC.push(...[
-  "src/gestao-app/forms-react.js?v=1.8.1-f7eb18076603"
+  "src/gestao-app/forms-react.js?v=1.8.1-183e88bfdb0e"
 ]);
 // END GENERATED FRONTEND ASSETS
 const STATIC_URLS=new Set(STATIC.map(path=>new URL(path,self.registration.scope).href));
